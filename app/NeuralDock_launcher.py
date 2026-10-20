@@ -132,8 +132,10 @@ _config = {}
 
 def load_config():
     global _config
-    # Try launcher directory first, then legacy C:\Heretic location
-    for cfg_path in [CONFIG_FILE, _BACKUP_FILE]:
+    # Try launcher directory first, then legacy C:\Heretic location. Never the
+    # legacy one on Philibert: that is the HOST's config, and loading it would copy
+    # this computer's settings onto the drive.
+    for cfg_path in ([CONFIG_FILE] if PORTABLE else [CONFIG_FILE, _BACKUP_FILE]):
         if cfg_path.exists():
             try:
                 _config = json.loads(cfg_path.read_text(encoding="utf-8"))
@@ -171,6 +173,27 @@ def internet_on():
     return (not PORTABLE) or bool(_config.get("online", False))
 
 
+def philibert_prompt():
+    """Who Philibert is, and - while the Internet switch is off - an override of
+    the base prompt's "use web_search whenever you do not know something".
+
+    Measured 2026-10-20 on the drive's qwen3.5:4b: following that rule offline,
+    "what is the capital of California?" called web_search, was refused, and then
+    answered that California has no capital."""
+    out = ("\n\nYOU ARE PHILIBERT by Esteef.Ai, a private assistant for musicians - gigs, "
+           "venues, tours, merch, budget, bills and reminders - plus files, folders and simple "
+           "coding. You run from the user's drive on their own computer.\n")
+    if not internet_on():
+        out += ("THE INTERNET IS OFF (the user's INTERNET switch). This overrides every "
+                "instruction above about searching the web: web_search and web_fetch do not "
+                "exist right now. Answer from your own knowledge. Ordinary facts - capitals, "
+                "history, definitions, music theory, how-to - answer directly and correctly, "
+                "without mentioning the Internet. Only when the answer needs live information "
+                "(today's news, current prices, a venue's current calendar) say that you would "
+                "need the Internet, and that the user can turn on the INTERNET switch at the top.\n")
+    return out
+
+
 def network_refusal(name, a):
     """'' when the call may go ahead, else the message the model gets."""
     if name not in NETWORK_TOOLS or internet_on():
@@ -179,9 +202,9 @@ def network_refusal(name, a):
         u = str((a or {}).get("url") or "").strip().lower()
         if re.match(r"^(file:|https?://(localhost|127\.0\.0\.1)(:|/|$))", u):
             return ""
-    return ("[OFFLINE] " + PRODUCT + " is offline - the Internet switch is OFF, so "
-            f"{name} is not available. Tell the user what you would look up, and that "
-            "they can turn the Internet switch on in the toolbar (INTERNET: OFF) to allow it.")
+    return ("[OFFLINE] The Internet switch is OFF, so " + name + " cannot run. Answer now from "
+            "your own knowledge - most questions do not need the web. Only if this one truly "
+            "needs live information, say so and mention the INTERNET switch at the top.")
 
 
 def save_config():
@@ -12292,6 +12315,8 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
         # long since been compacted out of the transcript.
         system_content += ("\n\nTHE TASK YOU ARE CONTINUING (the user's original "
                            "request — all of it still applies):\n" + _orig_task + "\n")
+    if PORTABLE:
+        system_content += philibert_prompt()
     if routing:
         system_content += roster_prompt()
     if not agent_mode:
