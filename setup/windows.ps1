@@ -21,6 +21,11 @@ $OL_VER = "v0.40.4"
 $OL_URL = "https://github.com/ollama/ollama/releases/download/$OL_VER/ollama-windows-amd64.zip"
 $PKGS   = @("psutil==7.2.2", "websockets==15.0.1", "pywebview==6.2.1")
 
+# Windows' own tools by full path: with Git's tools on the PATH, "tar" can be GNU
+# tar, which reads "J:\..." as a remote host and fails.
+$TAR  = Join-Path $env:SystemRoot "System32	ar.exe"
+$CURL = Join-Path $env:SystemRoot "System32\curl.exe"
+
 function Step($m) { Write-Host ""; Write-Host "== $m" -ForegroundColor Cyan }
 function Fail($m) {
     Write-Host ""; Write-Host "!! $m" -ForegroundColor Red
@@ -28,7 +33,7 @@ function Fail($m) {
 }
 function Fetch($url, $out) {
     # curl.exe ships with Windows 10 and 11; it resumes (-C -) if a download was cut off.
-    & curl.exe -L --fail -C - -o $out $url
+    & $CURL -L --fail -C - -o $out $url
     if ($LASTEXITCODE -ne 0) {
         Fail "Could not download $([IO.Path]::GetFileName($out)). The first start needs the Internet - connect and run this again."
     }
@@ -41,7 +46,7 @@ if (-not (Test-Path $py)) {
     Step "First start: getting Python for this drive (about 30 MB)"
     New-Item -ItemType Directory -Force $dl, $rt | Out-Null
     Fetch $PY_URL "$dl\python.tar.gz"
-    & tar.exe -xzf "$dl\python.tar.gz" -C $rt          # -> runtime\win-x64\python
+    & $TAR -xzf "$dl\python.tar.gz" -C $rt          # -> runtime\win-x64\python
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $py)) { Fail "Could not unpack Python." }
     Remove-Item "$dl\python.tar.gz" -ErrorAction SilentlyContinue
 }
@@ -63,7 +68,7 @@ if (-not (Test-Path $ol) -or $olOld) {
     Step "First start: getting Ollama, which runs the AI models (about 1.5 GB)"
     New-Item -ItemType Directory -Force $dl, (Join-Path $rt "ollama") | Out-Null
     Fetch $OL_URL "$dl\ollama.zip"
-    & tar.exe -xf "$dl\ollama.zip" -C (Join-Path $rt "ollama")
+    & $TAR -xf "$dl\ollama.zip" -C (Join-Path $rt "ollama")
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $ol)) { Fail "Could not unpack Ollama." }
     Set-Content -Path $olStamp -Value $OL_VER -Encoding ascii
     Remove-Item "$dl\ollama.zip" -ErrorAction SilentlyContinue
