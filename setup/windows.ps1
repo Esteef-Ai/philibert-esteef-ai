@@ -23,7 +23,7 @@ $PKGS   = @("psutil==7.2.2", "websockets==15.0.1", "pywebview==6.2.1")
 
 # Windows' own tools by full path: with Git's tools on the PATH, "tar" can be GNU
 # tar, which reads "J:\..." as a remote host and fails.
-$TAR  = Join-Path $env:SystemRoot "System32	ar.exe"
+$TAR  = Join-Path $env:SystemRoot "System32\tar.exe"
 $CURL = Join-Path $env:SystemRoot "System32\curl.exe"
 
 function Step($m) { Write-Host ""; Write-Host "== $m" -ForegroundColor Cyan }
