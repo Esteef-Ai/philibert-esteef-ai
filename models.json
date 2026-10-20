@@ -1,0 +1,16 @@
+{
+  "about": "The models Philibert offers. Add one here and push: every drive's dropdown lists it after its next Update, and downloads it the first time someone picks it. 'tag' is what `ollama pull` takes - a name from ollama.com/library, or hf.co/<user>/<repo>:<quant> for a GGUF on Hugging Face. 'min_gpu_gb' is the GPU memory it needs to run at full speed; 'auto' lets first-run setup choose it for a machine with that much.",
+  "models": [
+    {"tag": "qwen3.5:4b", "label": "Qwen3.5 4B", "tier": "4B", "size_gb": 3.3, "min_gpu_gb": 0, "auto": true,
+     "note": "Fast on any computer, even without a graphics card."},
+    {"tag": "qwen3:8b", "label": "Qwen3 8B", "tier": "8B", "size_gb": 5.2, "min_gpu_gb": 6, "auto": true,
+     "note": "The everyday tier for a 6-8 GB graphics card."},
+    {"tag": "qwen3:14b", "label": "Qwen3 14B", "tier": "14B", "size_gb": 9.3, "min_gpu_gb": 10, "auto": true,
+     "note": "Sharper answers; wants a 12-16 GB graphics card."},
+    {"tag": "hf.co/tooltd/Qwen3.8-27B-IQ4-XS-16GB-VRAM-GGUF:ZB4.00-MIN-v5.1-IQ4_XS", "label": "Qwen3.8 27B", "tier": "27B",
+     "size_gb": 13.7, "min_gpu_gb": 16, "auto": false,
+     "note": "The strongest, for a 16 GB card. Slow to start from a USB drive; never picked automatically."},
+    {"tag": "nomic-embed-text", "label": "nomic-embed-text", "kind": "embed", "size_gb": 0.3, "required": true,
+     "note": "Lets Philibert search its own notes. Downloaded on first run."}
+  ]
+}

@@ -1,0 +1,10 @@
+# What each drive makes for itself - never in the repo.
+/runtime/
+/models/
+/data/
+/secrets/
+/VERSION
+__pycache__/
+*.pyc
+.DS_Store
+._*

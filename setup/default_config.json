@@ -1,0 +1,6 @@
+{
+  "online": false,
+  "agent_autonomy": "trusted",
+  "suite_revert_newtest_ok": true,
+  "obsidian_enabled": true
+}

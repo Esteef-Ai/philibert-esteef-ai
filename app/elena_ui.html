@@ -1,0 +1,2126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elena</title>
+<!-- The emblem, redrawn as vector. One continuous path: it enters low, loops
+     once without quite closing, and terminates in a filled dot — her sentence,
+     literally. The raster it replaces was a painterly guess at this and turned
+     to mud below 64px. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%231e1e2f'/%3E%3Cpath d='M12 48 C 12 24, 30 14, 42 22 C 52 29, 44 44, 32 41 C 24 39, 22 31, 29 27' fill='none' stroke='%233090d8' stroke-width='4' stroke-linecap='round'/%3E%3Ccircle cx='29' cy='27' r='4' fill='%2300f5ff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Lato:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* ── Elena's brief, verbatim ────────────────────────────────────────────────
+   "A single, unbroken flow - no menus, no toolbars, just a content area that
+   adapts to the task. It feels like a conversation, not an app."
+
+   She refused hover effects outright, then on seeing the study written back
+   asked for "subtle visual cues for interactivity". Both are honoured: nothing
+   decorative moves, but anything actionable acknowledges the pointer. Where she
+   contradicted herself the later instruction wins — it was the considered one.
+   ────────────────────────────────────────────────────────────────────────── */
+:root{
+  --s:#1e1e2f; --ink:#f0f0f0; --bl:#3090d8; --rd:#d84830; --cy:#00f5ff;
+  --gr:#4fd08a; --vi:#c86ae0; --dim:#8a8aa0; --s2:#252539;
+}
+*{box-sizing:border-box}
+/* The `hidden` attribute only sets display:none from the UA stylesheet, so any
+   id rule with a display of its own silently beats it. #convo{display:flex} did
+   exactly that: the conversation overlay was open from page load, covering the
+   composer. That is why the mode button could not be found and why the wake
+   word never fired — the mode was never actually running. */
+[hidden]{display:none !important}
+html,body{height:100%}
+body{margin:0; background:var(--s); color:var(--ink);
+  font-family:Lato,system-ui,-apple-system,sans-serif; font-size:15px; line-height:1.62;
+  -webkit-font-smoothing:antialiased; display:flex; flex-direction:column;}
+h1,h2,h3{font-family:Inter,system-ui,sans-serif; letter-spacing:-.01em;}
+
+main{flex:1; overflow-y:auto; overflow-x:hidden;}
+.wrap{max-width:760px; margin:0 auto; padding:30px 26px 20px; position:relative;}
+
+.head{display:flex; align-items:center; gap:13px; margin-bottom:12px;}
+.head .glyph{width:34px; height:34px; display:block; flex:0 0 auto;}
+.head .nm{font-family:Inter,sans-serif; font-weight:600; font-size:19px;}
+.head .st{font-size:12px; color:var(--dim); font-family:"IBM Plex Mono",monospace;}
+.head .st b{font-weight:400; color:var(--bl);}
+.head .back{margin-left:auto; font-family:"IBM Plex Mono",monospace; font-size:11px;
+  color:var(--dim); text-decoration:none; padding:5px 9px; border-radius:6px;
+  transition:color .12s ease, background .12s ease; flex:0 0 auto; align-self:flex-start;}
+.head .back:hover{color:var(--ink); background:var(--s2);}
+.head .back:focus-visible{outline:2px solid var(--cy); outline-offset:2px}
+/* Model chooser + Internet switch, top right beside the back link. */
+.head .tools{margin-left:auto; display:flex; gap:8px; align-items:center; flex:0 0 auto;
+  align-self:flex-start;}
+.head .tools .back{margin-left:0}
+.head select, .head .net{font-family:"IBM Plex Mono",monospace; font-size:11px;
+  color:var(--ink); background:var(--s2); border:1px solid var(--line, #2a3340);
+  border-radius:6px; padding:4px 7px; max-width:220px;}
+.head .net, .head .upd{cursor:pointer}
+.head .upd{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--dim);
+  background:var(--s2); border:1px solid var(--line, #2a3340); border-radius:6px; padding:4px 7px;}
+.head .upd:hover{color:var(--ink)}
+.head .upd:disabled{opacity:.6; cursor:progress}
+.head .net[data-on="1"]{color:#4fd08a; border-color:#4fd08a}
+.head .net:not([data-on="1"]){color:#e0b040; border-color:#e0b040}
+.head select:focus-visible, .head .net:focus-visible{outline:2px solid var(--cy); outline-offset:2px}
+@media (max-width:600px){ .head{flex-wrap:wrap} .head .tools{margin-left:0; width:100%} }
+
+/* The mark rides the live end of the thread. position:sticky pins it near the
+   bottom of the viewport once the transcript is taller than the screen, so it
+   is always in view without freezing a header in place — and while work is
+   running it sits exactly where the line is being drawn. */
+/* The mark lives in the gutter, stacked above its own label, so it never
+   crosses into the transcript. Sticky keeps it at the live end of the line. */
+.tip{position:sticky; bottom:16px; z-index:5; pointer-events:none;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  width:60px; margin:2px 0 4px -80px;}
+.tip canvas{width:60px; height:60px; display:block;}
+.tip .lbl{font-family:"IBM Plex Mono",monospace; font-size:9px; letter-spacing:.06em;
+  color:var(--dim); transition:color .25s ease; white-space:nowrap;}
+/* Off wandering. Fixed to the viewport, dimmed, and never eats a click. */
+.tip.roaming{position:fixed; left:0; top:0; margin:0; z-index:40; opacity:.62;
+  transition:opacity .5s ease;}
+.tip.roaming .lbl{opacity:0}
+/* How to read the mark. A legend, not decoration — every state is entered
+   because the agent entered it, so this key is load-bearing. */
+.key{display:flex; flex-wrap:wrap; gap:5px 15px; margin:0 0 22px 50px;
+  font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--dim);}
+.key span{display:flex; align-items:center; gap:6px; opacity:.55;
+  transition:opacity .2s ease, color .2s ease;}
+.key span.on{opacity:1; color:var(--ink);}
+.key i{width:14px; height:2px; border-radius:1px; display:block;}
+
+.thread{position:relative; padding-left:78px;}
+.thread::before{content:""; position:absolute; left:32px; top:8px; bottom:0;
+  width:2px; background:var(--bl); border-radius:1px;}
+.thread.live::after{content:""; position:absolute; left:32px; bottom:-2px; width:2px;
+  height:26px; background:linear-gradient(var(--cy), transparent);}
+
+.node{position:relative; padding:0 0 22px;}
+.node .dot{position:absolute; left:-50px; top:7px; width:9px; height:9px;
+  border-radius:50%; background:var(--dim); box-shadow:0 0 0 4px var(--s);}
+.node.el .dot{background:var(--bl)} .node.tool .dot{background:var(--cy)}
+.node.err .dot{background:var(--rd)}
+.who{font-family:Inter,sans-serif; font-size:10.5px; font-weight:600; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--dim); display:block; margin-bottom:3px;}
+.node.el .who{color:var(--bl)} .node.err .who{color:var(--rd)}
+.node.tool .who{font-family:"IBM Plex Mono",monospace; text-transform:none;
+  letter-spacing:0; font-size:12px; color:var(--cy); font-weight:500;}
+.body{white-space:pre-wrap; word-wrap:break-word;}
+/* What that answer cost. Attached to the reply it describes rather than shown
+   in a status bar, because the numbers differ per turn. */
+.node.el[data-stats]{cursor:help}
+.node.el[data-stats]:hover::after{
+  content:attr(data-stats); position:absolute; left:0; top:-8px;
+  transform:translateY(-100%); z-index:20; white-space:pre;
+  font-family:"IBM Plex Mono",monospace; font-size:11px; line-height:1.75;
+  color:var(--ink); background:var(--s2); border:1px solid #33334d;
+  border-radius:8px; padding:8px 12px; box-shadow:0 6px 22px rgba(0,0,0,.45);}
+.body.flowing::after{content:""; display:inline-block; width:2px; height:1em;
+  background:var(--cy); margin-left:2px; vertical-align:-2px;
+  animation:blink 1.05s step-end infinite;}
+@keyframes blink{50%{opacity:0}}
+@media (prefers-reduced-motion:reduce){ .body.flowing::after{animation:none} }
+.node.you .body{color:var(--dim)}
+.node.tool .body{font-family:"IBM Plex Mono",monospace; font-size:12.5px; color:var(--dim);}
+.node.err .body{color:var(--rd)}
+
+.stage{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--cy);
+  letter-spacing:.05em; padding-bottom:22px; position:relative;}
+.stage .dot{position:absolute; left:-50px; top:5px; width:9px; height:9px;
+  border-radius:50%; background:var(--cy); box-shadow:0 0 0 4px var(--s);}
+.empty{color:var(--dim); font-size:14px;}
+.empty b{display:block; font-family:Inter,sans-serif; font-weight:500; color:var(--ink);
+  font-size:16px; margin-bottom:5px;}
+
+.node.img .body{display:flex; flex-direction:column; align-items:flex-start; gap:7px;}
+.shot{display:block; line-height:0; border-radius:10px; overflow:hidden;
+  border:1px solid var(--s2); max-width:420px;}
+.shot img{display:block; width:100%; height:auto;}
+.shot:focus-visible{outline:2px solid var(--cy); outline-offset:3px}
+.gal{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--bl);
+  text-decoration:none; border-bottom:1px dotted var(--bl); padding-bottom:1px;}
+.gal:hover{color:var(--cy); border-bottom-color:var(--cy)}
+
+/* The composer was a bare line and people could not find it. Now it is a real
+   field with an edge, and it lights up when focused. */
+.composer{flex:0 0 auto; border-top:1px solid var(--s2); background:var(--s);}
+.cin{max-width:760px; margin:0 auto; padding:14px 26px 8px; display:flex;
+  align-items:flex-end; gap:10px; background:var(--s2); border:1px solid #35354f;
+  border-radius:12px; padding:10px 12px 10px 16px; margin-top:14px;
+  transition:border-color .15s ease, box-shadow .15s ease;}
+.cin.focus{border-color:var(--bl); box-shadow:0 0 0 3px rgba(48,144,216,.16);}
+textarea{flex:1; resize:none; background:transparent; border:0; outline:0; color:var(--ink);
+  font-family:Lato,sans-serif; font-size:15px; line-height:1.6; padding:6px 0;
+  max-height:180px; min-height:34px;}
+textarea::placeholder{color:#6f6f8a}
+.icon{flex:0 0 auto; width:34px; height:34px; padding:0; display:grid;
+  place-items:center; border-radius:8px; font-size:15px;}
+.icon.rec{border-color:var(--rd); color:var(--rd);}
+.icon.rec:hover:not(:disabled){background:var(--rd); color:var(--s)}
+.icon.on{background:var(--bl); color:var(--s)}
+.split{display:flex; align-items:stretch; gap:0; flex:0 0 auto;}
+.split .icon{border-radius:8px 0 0 8px;}
+.split .caret{width:18px; border-left:0; border-radius:0 8px 8px 0; font-size:10px;
+  color:var(--dim);}
+.split .caret:hover:not(:disabled){background:var(--s2); color:var(--ink)}
+
+/* Device picker. Anchored above the composer rather than floating mid-screen:
+   it belongs to the mic button it came from. */
+/* ── conversation mode ───────────────────────────────────────────────────
+   The transcript is dimmed rather than hidden: covering it entirely would make
+   the mode feel like a different application instead of the same conversation
+   seen from closer up. */
+#convo{position:fixed; inset:0; z-index:70; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:14px;
+  background:rgba(30,30,47,.90); backdrop-filter:blur(7px);}
+#bigmark{width:300px; height:300px; display:block;}
+#convostate{font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--bl); margin:0; transition:color .3s ease;}
+#convoheard{font-family:Lato,sans-serif; font-size:19px; color:var(--ink); margin:0;
+  max-width:min(680px,86vw); text-align:center; line-height:1.5; min-height:1.5em;}
+#convohint{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--dim);
+  margin:6px 0 0;}
+#convo:focus{outline:none}
+#youwrap{display:flex; flex-direction:column; align-items:center; gap:2px;
+  margin-top:10px;}
+#youmark{width:190px; height:70px; display:block;}
+#youlbl{font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.12em;
+  text-transform:uppercase; color:#6a6a85; margin:0; transition:color .25s ease;}
+#youlbl.live{color:#f5a742}
+
+/* Composer meter: raw level, with the gate drawn where it actually sits. */
+#lvlwrap{position:relative; flex:0 0 auto; width:52px; height:6px; border-radius:3px;
+  background:#2e2e46; overflow:hidden; align-self:center;}
+#lvlbar{position:absolute; left:0; top:0; bottom:0; width:0%;
+  background:linear-gradient(90deg,#f5a742,#ffd08a); transition:width .06s linear;}
+#lvlgate{position:absolute; top:-1px; bottom:-1px; width:1px; background:#8a8aa0;
+  left:37%;}
+#lvlpeak{position:absolute; top:0; bottom:0; width:2px; background:#fff; left:0;
+  opacity:.75; transition:left .25s ease-out;}
+
+#convobar{display:flex; gap:10px; margin-top:18px;}
+#convobar button{background:transparent; color:var(--dim); border:1px solid #3a3a55;
+  border-radius:8px; padding:7px 14px; font-family:"IBM Plex Mono",monospace;
+  font-size:11px; cursor:pointer; transition:color .12s ease, border-color .12s ease;}
+#convobar button:hover{color:var(--ink); border-color:var(--bl);}
+#convobar button:focus-visible{outline:2px solid var(--cy); outline-offset:2px}
+#convomode.open{color:var(--cy); border-color:var(--cy)}
+#shush{color:#f5a742}
+#shush:hover{color:#fff; background:#f5a742}
+#convomute.on{color:#f5a742; border-color:#f5a742}
+#convoact.on{color:#f5a742; border-color:#f5a742}
+#convohint .warn{color:#f5a742}
+.stopbtn{display:block; margin-top:10px; padding:6px 14px; cursor:pointer;
+  font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.08em;
+  text-transform:uppercase; color:#d84830; background:transparent;
+  border:1px solid #d84830; border-radius:4px;}
+.stopbtn:hover{background:#d84830; color:#fff}
+.stopbtn.go{color:var(--cy); border-color:var(--cy)}
+.node.perm .who{color:#c86ae0}
+.permrow{margin:0 0 12px}
+.permtool{font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.1em;
+  text-transform:uppercase; color:#8a8aa0; margin-bottom:5px}
+.permarg{margin:0; padding:9px 11px; border-radius:5px; background:#1b1b2a;
+  border:1px solid #2e2e46; color:#d8d8e8; font-family:"IBM Plex Mono",monospace;
+  font-size:12px; white-space:pre-wrap; word-break:break-word; overflow-x:auto}
+.permwarn{margin-top:6px; color:#d84830; font-size:12px}
+.permbar{display:flex; gap:10px; margin-top:12px}
+.permbar .stopbtn{margin-top:0}
+.stopbtn.go:hover{background:var(--cy); color:#12121c}
+.node.ask .who{color:#4a9fd8}
+.askq{font-size:14px; color:#e8e8f2; margin:0 0 12px; line-height:1.4}
+.askopt{display:block; width:100%; text-align:left; margin:0 0 8px; padding:10px 12px;
+  border-radius:7px; background:#1b1b2a; border:1px solid #2e2e46; color:#d8d8e8;
+  cursor:pointer; transition:border-color .12s, background .12s}
+.askopt:hover{border-color:#4a9fd8; background:#1f2236}
+.askn{display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px;
+  margin-right:9px; border-radius:50%; background:#2e2e46; color:#9fc6e8; font-size:10px;
+  font-family:"IBM Plex Mono",monospace; vertical-align:middle}
+.askl{font-size:13px; color:#f0f0f5; vertical-align:middle}
+.askd{display:block; margin:5px 0 0 27px; font-size:11px; color:#9a9ab0; line-height:1.35}
+.askc{display:block; margin:3px 0 0 27px; font-size:10px; color:#6fae6f; letter-spacing:.02em}
+.askfree{display:flex; gap:8px; margin-top:10px}
+.askfree input{flex:1; padding:9px 11px; border-radius:6px; background:#15151f;
+  border:1px solid #2e2e46; color:#e8e8f2; font-size:13px; font-family:inherit}
+.askfree input:focus{outline:none; border-color:#4a9fd8}
+.askfree .stopbtn{margin-top:0}
+#castpane{position:fixed; right:16px; bottom:92px; width:340px; z-index:60;
+  background:#12121c; border:1px solid #2e2e46; border-radius:10px; overflow:hidden;
+  box-shadow:0 12px 40px rgba(0,0,0,.55)}
+#casthead{display:flex; align-items:center; gap:8px; padding:7px 10px;
+  background:#1b1b2a; border-bottom:1px solid #2e2e46; font-size:11px; letter-spacing:.08em;
+  text-transform:uppercase; color:#8a8aa0}
+#castttl::before{content:"● "; color:#4a9fd8}
+.caststub{background:transparent; border:1px solid #2e2e46; color:#9a9ab0; font-size:10px;
+  padding:3px 8px; border-radius:5px; cursor:pointer; text-transform:none; letter-spacing:0}
+.caststub:hover{border-color:#4a9fd8; color:#e8e8f2}
+#castbody{position:relative; background:#0c0c14; min-height:120px}
+#castimg{display:block; width:100%; height:auto}
+#castwait{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  color:#6a6a80; font-size:12px}
+#watchbtn.on{color:#4a9fd8}
+.stopbtn.inline{display:inline-block; margin:0 0 0 12px; padding:2px 10px;
+  font-size:10px; vertical-align:middle;}
+#convohint b{color:var(--cy); font-weight:400;}
+#convobtn.on{background:var(--cy); color:var(--s); border-color:var(--cy)}
+@media (max-width:620px){ #bigmark{width:210px;height:210px} }
+
+#micpanel{position:fixed; z-index:90; width:290px; max-width:calc(100vw - 32px);
+  background:var(--s2); border:1px solid #35354f; border-radius:12px;
+  padding:12px 14px; box-shadow:0 14px 40px rgba(0,0,0,.55);}
+.mp-h{font-family:Inter,sans-serif; font-size:12px; font-weight:600; margin:0 0 8px;
+  color:var(--ink); letter-spacing:.02em;}
+.mp-i{display:flex; align-items:flex-start; gap:9px; padding:7px 8px; border-radius:8px;
+  cursor:pointer; font-size:13px; color:var(--ink); line-height:1.4;
+  transition:background .12s ease;}
+.mp-i:hover{background:rgba(255,255,255,.05)}
+.mp-i.sel{background:rgba(48,144,216,.16)}
+.mp-i b{display:block; font-weight:400}
+.mp-i .tick{color:var(--cy); font-size:12px; width:12px; flex:0 0 auto; padding-top:1px}
+.mp-f{font-family:"IBM Plex Mono",monospace; font-size:10px; color:var(--dim);
+  margin:8px 0 0; line-height:1.55;}
+.mp-f button{font-size:11px; padding:4px 9px; margin-top:6px;}
+button{flex:0 0 auto; background:transparent; color:var(--bl); border:1px solid var(--bl);
+  border-radius:7px; padding:7px 15px; font-family:Inter,sans-serif; font-size:13px;
+  font-weight:500; cursor:pointer; transition:background .12s ease, color .12s ease;}
+button:hover:not(:disabled){background:var(--bl); color:var(--s)}
+button:focus-visible{outline:2px solid var(--cy); outline-offset:2px}
+button:disabled{color:var(--dim); border-color:var(--s2); cursor:default}
+.hint{max-width:760px; margin:0 auto; padding:0 26px 12px;
+  font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--dim);}
+.hint .off{color:var(--rd)}
+@media (max-width:620px){ .key{margin-left:0} .tip{margin-left:-34px}
+  .tip canvas{width:46px;height:46px} }
+</style>
+</head>
+<body>
+
+<main>
+  <div class="wrap">
+    <div class="head">
+      <svg class="glyph" viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M12 48 C 12 24, 30 14, 42 22 C 52 29, 44 44, 32 41 C 24 39, 22 31, 29 27"
+              fill="none" stroke="#3090d8" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="29" cy="27" r="4" fill="#00f5ff"/>
+      </svg>
+      <div>
+        <div class="nm">Elena</div>
+        <div class="st" id="st">connecting&hellip;</div>
+      </div>
+      <div class="tools">
+        <select id="modelsel" title="Which model answers" aria-label="Model"></select>
+        <button id="netbtn" class="net" type="button" hidden
+                title="Let the assistant use the Internet (web search, web pages, browser)">INTERNET: OFF</button>
+        <button id="updbtn" class="upd" type="button" hidden title="Get the newest version of Philibert">UPDATE</button>
+        <a class="back" id="backlink" href="/" title="Back to the main NeuralDock interface">&larr; NeuralDock</a>
+      </div>
+    </div>
+
+    <div class="key" id="key">
+      <span data-k="idle"><i style="background:#3090d8"></i>online</span>
+      <span data-k="think"><i style="background:#00f5ff"></i>thinking</span>
+      <span data-k="answer"><i style="background:#f0f0f0"></i>answering</span>
+      <span data-k="code"><i style="background:#4fd08a"></i>coding</span>
+      <span data-k="media"><i style="background:#c86ae0"></i>image / video</span>
+      <span data-k="error"><i style="background:#d84830"></i>trouble</span>
+    </div>
+
+    <div class="thread" id="thread">
+      <div class="tip" id="tip">
+        <canvas id="mark" aria-label="Elena's mark: one line whose motion shows what the agent is doing"></canvas>
+        <span class="lbl" id="lbl">online</span>
+      </div>
+      <div class="empty" id="empty"><b>A single, unbroken flow.</b>
+        Everything in this session hangs off one line. Ask for something &mdash;
+        and watch the mark. It is showing you what is actually happening, not a
+        spinner running on a timer.</div>
+    </div>
+  </div>
+</main>
+
+<!-- Conversation mode. The mark becomes the interface; the transcript stays
+     behind it, dimmed but readable, because you should still be able to see
+     what was said. -->
+<div id="convo" hidden tabindex="-1">
+  <canvas id="bigmark" aria-label="Elena, listening"></canvas>
+  <p id="convostate">listening</p>
+  <p id="convoheard"></p>
+  <p id="convohint">Say <b>Elena</b> to start</p>
+  <div id="youwrap">
+    <canvas id="youmark" aria-label="Your microphone level"></canvas>
+    <p id="youlbl">your microphone</p>
+  </div>
+  <div id="convobar">
+    <button id="convomode" type="button" title="Switch between waiting for your name and taking everything you say">mode</button>
+    <button id="convoact" type="button">talk only</button>
+    <button id="convomute" type="button" title="Turn her replies being read aloud on or off">voice on</button>
+    <button id="convomic" type="button">&#127908; Microphone</button>
+    <button id="convoexit" type="button">Leave &middot; Esc</button>
+  </div>
+</div>
+
+<div id="micpanel" hidden role="dialog" aria-label="Choose microphone">
+  <p class="mp-h">Microphone</p>
+  <div id="mplist"></div>
+  <p class="mp-f" id="mpfoot"></p>
+</div>
+
+<div class="composer">
+  <div class="cin">
+    <button id="convobtn" class="icon" title="Conversation mode — always listening"
+            aria-label="Conversation mode">&#9673;</button>
+    <textarea id="ta" rows="1" placeholder="Ask Elena&hellip;"></textarea>
+    <span class="split">
+      <button id="mic" class="icon" title="Click to start, click again to stop"
+              aria-label="Record voice">&#127908;</button>
+      <button id="micsel" class="icon caret" title="Choose microphone"
+              aria-label="Choose microphone" aria-haspopup="true"
+              aria-expanded="false">&#9662;</button>
+    </span>
+    <span id="lvlwrap" hidden title="Microphone level. The tick is the wake-word threshold.">
+      <span id="lvlbar"></span><span id="lvlgate"></span><span id="lvlpeak"></span>
+    </span>
+    <button id="shush" class="icon" hidden title="Stop reading this reply aloud"
+            aria-label="Stop speaking">&#9209;</button>
+    <button id="spk" class="icon" title="Read replies aloud"
+            aria-label="Toggle speech">&#128266;</button>
+    <button id="watchbtn" class="icon" title="Watch NeuralDock's browser"
+            aria-label="Watch the managed browser">&#128065;</button>
+    <button id="send" disabled>Send</button>
+  </div>
+  <div class="hint" id="hint"></div>
+</div>
+
+<!-- The managed browser, streamed. Off-screen by default so nothing moves on
+     your screen; open this to watch it work, or bring it on-screen to sign in. -->
+<div id="castpane" hidden>
+  <div id="casthead">
+    <span id="castttl">managed browser</span>
+    <span style="flex:1"></span>
+    <button id="castshow" class="caststub" title="Bring the real window onto your screen">on screen</button>
+    <button id="castclose" class="caststub" title="Stop watching">close</button>
+  </div>
+  <div id="castbody"><img id="castimg" alt="managed browser view"><div id="castwait">waiting for the browser…</div></div>
+</div>
+
+<script src="/elena_mark.js"></script>
+<script>
+const ND = "";
+function tok(){ try{ return localStorage.getItem("nd_token"); }catch(e){ return null; } }
+const $ = (id) => document.getElementById(id);
+const thread = $("thread"), ta = $("ta"), send = $("send");
+let live = false, busy = false, mark = null, MODEL = "", VOICE_MODEL = "";
+let RID = null;            // the turn in flight, so it can be stopped
+let STOPPED = null;        // ...and the one the user has given up on
+/* The running conversation. Sent in full on every turn, exactly as the main UI
+   does. Without this Elena answered each message as if it were the first thing
+   ever said to her — which is why she lost the thread on a follow-up. Trimmed
+   from the front so a long session cannot outgrow the context window. */
+let history = [];
+const HISTORY_CHARS = 24000;
+function pushHistory(role, content){
+  if(!content) return;
+  history.push({role, content});
+  let total = history.reduce((n,m) => n + (m.content||"").length, 0);
+  while(history.length > 2 && total > HISTORY_CHARS){
+    total -= (history.shift().content||"").length;
+  }
+}
+
+/* Which tool means which state. The mark changes because a specific tool ran,
+   not on a timer. That is the whole point of it. */
+const TOOL_STATE = {
+  edit_file:"code", write_file:"code", read_file:"code", search_files:"code",
+  run_script:"code", run_shell:"code", design_review:"code", list_dir:"code",
+  generate_image:"media", generate_video:"media", screen_capture:"media",
+  web_search:"think", web_fetch:"think", delegate:"think", update_plan:"think"
+};
+
+const LABEL = {idle:"online", think:"thinking", answer:"answering",
+               code:"coding", media:"image / video", error:"trouble"};
+/* The gutter is 60px wide, so the travelling label gets short forms. The full
+   words stay in the legend at the top where there is room for them. */
+const SHORT = {idle:"", think:"think", answer:"answer", code:"code",
+               media:"render", error:"trouble", curious:"?", roam:""};
+function setState(s, rounds){
+  if(mark) mark.set(s, rounds);
+  document.querySelectorAll("#key span").forEach(el =>
+    el.classList.toggle("on", el.dataset.k === s));
+  const l = $("lbl");
+  if(l){
+    const short = (s in SHORT) ? SHORT[s] : (LABEL[s] || s);
+    l.textContent = short;
+    l.style.color = (window.ElenaMark && ElenaMark.COLOURS[s]) || "var(--dim)";
+    l.hidden = !short;             // quiet while you are reading
+  }
+}
+
+/* generate_image hands back "[IMAGE job=xxxx]" in tool_results; the picture
+   itself lives behind /api/job_status. Showing the path instead of the image
+   makes you go hunting in a folder for a thing you just asked to see. */
+let GALLERY = "";
+let CPU_NOW = [];          // models ND moved to the CPU because the GPU would not start them
+async function showImages(res){
+  for(const r of (res.tool_results || [])){
+    const m = String(r.result || "").match(/^\[IMAGE job=([a-z0-9]+)\]/i);
+    if(!m) continue;
+    try{
+      const j = await api("/api/job_status", {job_id: m[1]});
+      if(!j || j.status !== "done" || !j.result) continue;
+      const src = "data:" + (j.mime || "image/png") + ";base64," + j.result;
+      const d = document.createElement("div");
+      d.className = "node tool img";
+      d.innerHTML = '<span class="dot"></span><span class="who">generate_image</span>'
+        + '<div class="body"><a class="shot" href="' + src + '" target="_blank" '
+        + 'title="Open the full-size image"><img src="' + src + '" alt="generated image"></a>'
+        + (GALLERY ? '<a class="gal" href="#" data-folder="' + GALLERY.split(String.fromCharCode(92)).join("/")
+             + '" title="' + GALLERY + '">Gallery</a>' : "") + '</div>';
+      thread.appendChild(d);
+      tipLast();
+      d.scrollIntoView({block:"end", behavior:"smooth"});
+    }catch(e){ /* an image that will not load is not worth breaking the turn */ }
+  }
+}
+
+/* Keep the mark as the LAST child of the thread. It is the drawing head of the
+   line, so anything appended has to go above it, not after. */
+function tipLast(){ const t = $("tip"); if(t) thread.appendChild(t); }
+
+function esc(s){ return (s||"").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+
+function node(kind, who, body){
+  $("empty")?.remove();
+  const d = document.createElement("div");
+  d.className = "node " + kind;
+  d.innerHTML = '<span class="dot"></span><span class="who">' + esc(who) +
+                '</span><div class="body">' + esc(body) + "</div>";
+  thread.appendChild(d);
+  tipLast();
+  d.scrollIntoView({block:"end", behavior:"smooth"});
+  return d;
+}
+function stage(text){
+  let s = $("stg");
+  if(!s){ s = document.createElement("div"); s.id="stg"; s.className="stage";
+          s.innerHTML = '<span class="dot"></span><span id="stgt"></span>';
+          /* Stop belongs on every running turn, not only on a stalled one. The
+             case that actually strands you is an agent making steady progress
+             in a direction you did not ask for, and that never stalls. */
+          const b = document.createElement("button");
+          b.type = "button"; b.className = "stopbtn inline";
+          b.textContent = "Stop";
+          b.addEventListener("click", () => stopTurn(null));
+          s.appendChild(b);
+          thread.appendChild(s); }
+  tipLast();
+  $("stgt").textContent = text;
+  s.scrollIntoView({block:"end", behavior:"smooth"});
+}
+function clearStage(){ $("stg")?.remove(); thread.classList.remove("live"); }
+
+/* No progress for this long means stuck, not thinking. 45 s is comfortably past
+   a slow first token on a model that fits, and far short of the minutes a
+   spilling model burns before its first character. */
+const STALL_MS = 45000;
+/* Wall time, not silence. A turn can progress steadily for ten minutes and
+   still be the wrong thing; at this point you should be told and offered a way
+   out, whatever it is busy doing. */
+const LONG_MS = 60000;
+function clearLong(){ $("longrun")?.remove(); }
+function showLong(rid, model, secs, round, what){
+  let d = $("longrun");
+  if(!d){
+    d = document.createElement("div");
+    d.id = "longrun"; d.className = "node tool";
+    d.innerHTML = '<span class="who">still working</span><div class="body"></div>';
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "stopbtn"; b.textContent = "Stop this turn";
+    b.addEventListener("click", () => stopTurn(rid));
+    d.appendChild(b);
+    thread.appendChild(d);
+    d.scrollIntoView({block:"end", behavior:"smooth"});
+  }
+  // Update in place: a long turn should be one informative line, not a pile.
+  d.querySelector(".body").textContent =
+    String(model || "").split("/").pop() + " has been working for " + secs
+    + "s, now on round " + round + (what ? " (" + what + ")" : "")
+    + ". Agent mode keeps calling tools until it is satisfied.";
+}
+function clearStall(){ $("stall")?.remove(); }
+function showStall(rid, model, secs){
+  clearStall();
+  const short = String(model || "").split("/").pop();
+  const d = document.createElement("div");
+  d.id = "stall"; d.className = "node err";
+  d.innerHTML = '<span class="who">no progress for '
+    + Math.round(STALL_MS / 1000) + 's</span><div class="body"></div>';
+  d.querySelector(".body").textContent = short
+    + " has produced nothing for a while (" + secs + "s so far). A model larger "
+    + "than the card runs partly on the CPU and can take minutes.";
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "stopbtn"; b.textContent = "Stop this turn";
+  b.addEventListener("click", () => { stopTurn(rid); });
+  d.querySelector(".body").appendChild(b);
+  thread.appendChild(d);
+  d.scrollIntoView({block:"end", behavior:"smooth"});
+  if(convoOn){
+    if(bigMark) bigMark.set("error");
+    convoSay("still working", "#d84830", short + " is slow to answer");
+  }
+}
+async function stopTurn(rid){
+  const id = rid || RID;
+  // Stop watching FIRST. Cancelling server-side is cooperative and takes until
+  // the end of the current round; until then the poll loop would happily
+  // re-raise the very notices this click just dismissed.
+  STOPPED = id;
+  try{ await api("/api/chat_cancel", {job_id: id}); }catch(e){}
+  clearStall(); clearLong(); clearStage(); clearPermission(); clearQuestion();
+  node("tool", "stopped", "cancelled at your request");
+  if(convoOn){
+    if(bigMark) bigMark.set("listen");
+    convoSay("listening", "#4a9fd8", "");
+  }
+}
+
+/* Real text, smoothed presentation.
+ *
+ * ND hands back only what is new since `stream_from`, so the characters here
+ * are genuinely the ones the model just produced, in order. What is smoothed is
+ * the PACING: arrivals land in lumps every few hundred ms, and a lump appearing
+ * whole reads as a dump. So arriving text queues and drains at a steady rate.
+ *
+ * The drain is adaptive — the fuller the queue, the faster it empties — so the
+ * reveal can never fall behind the model and start showing a stale picture of
+ * where generation actually is. It only ever lags by a few frames, and it never
+ * shows a character that has not arrived. That is the line I did not want to
+ * cross: this is generation you are watching, not an animation of one. */
+const flow = { queue:"", shown:"", node:null, on:false };
+
+function flowReset(){ flow.queue = ""; flow.shown = ""; flow.node = null; flow.on = false; }
+function flowPush(txt){ if(txt){ flow.queue += txt; flow.on = true; } }
+
+function flowDrain(){
+  if(flow.queue){
+    if(!flow.node){ flow.node = node("el", BRAND, ""); }
+    const n = Math.max(3, Math.ceil(flow.queue.length / 6));
+    flow.shown += flow.queue.slice(0, n);
+    flow.queue = flow.queue.slice(n);
+    const b = flow.node.querySelector(".body");
+    b.textContent = flow.shown;
+    b.classList.add("flowing");
+    flow.node.scrollIntoView({block:"end", behavior:"auto"});
+  }
+  requestAnimationFrame(flowDrain);
+}
+requestAnimationFrame(flowDrain);
+
+/* Finish: show everything that arrived, drop the caret. If the final reply
+   differs from what streamed (ND post-processes some replies), the final text
+   wins — the transcript must match what was actually returned. */
+function flowFinish(finalText, stats){
+  if(!flow.on && !finalText) return null;
+  if(!flow.node) flow.node = node("el", BRAND, "");
+  const b = flow.node.querySelector(".body");
+  b.textContent = (finalText || (flow.shown + flow.queue)).trim();
+  b.classList.remove("flowing");
+  if(stats) flow.node.setAttribute("data-stats", stats);
+  const n = flow.node; flowReset(); return n;
+}
+
+/* Every figure here is measured, not estimated: elapsed_sec is ND's own timing
+   of the job, rounds is the agent loop's count, and the model is the one the
+   request actually named. */
+function statsFor(res, seen, t0, chars){
+  const secs = (typeof res.elapsed_sec === "number")
+    ? res.elapsed_sec : (Date.now() - t0) / 1000;
+  const tools = (res.tool_calls || []).length;
+  const names = [...new Set((res.tool_calls || []).map(c => c.tool).filter(Boolean))];
+  return [
+    "model    " + ((res.model || MODEL || "?").split("/").pop()),
+    "run time " + secs.toFixed(1) + "s",
+    "rounds   " + (res.rounds || seen || 1),
+    "tools    " + tools + (names.length ? "  (" + names.slice(0,4).join(", ") + ")" : ""),
+    "reply    " + chars.toLocaleString() + " chars",
+    "status   " + (res.status || "?")
+  ].join(String.fromCharCode(10));
+}
+
+async function api(path, body){
+  const h = {"Content-Type":"application/json"};
+  const t = tok(); if(t) h["X-ND-Token"] = t;
+  const r = await fetch(ND + path, {method:"POST", headers:h, body:JSON.stringify(body)});
+  if(r.status === 401) throw new Error("not paired — open this from NeuralDock's Devices tab");
+  if(!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+
+/* ── model chooser ───────────────────────────────────────────────────────── */
+function chosenModel(){ try{ return localStorage.getItem("elena_model") || ""; }catch(e){ return ""; } }
+function fillModels(ms, fit){
+  const sel = $("modelsel");
+  const want = ms.join("|");
+  if(sel.dataset.list === want) return;      // probe re-runs; keep the open list still
+  sel.dataset.list = want;
+  sel.innerHTML = "";
+  // Smallest first, so the list reads as the tiers it is: 4B, 8B, 14B, 27B.
+  const need = (m) => (fit[m] && fit[m].need_gb) || 0;
+  [...ms].sort((a, b) => need(a) - need(b)).forEach(m => {
+    const o = document.createElement("option");
+    const f = fit[m] || {};
+    let label = m.split("/").pop();
+    if(label.length > 24) label = label.split(/[-:]/).slice(0, 2).join(" ");
+    o.value = m; o.title = m;
+    o.textContent = label
+      + (f.need_gb ? "  ·  " + f.need_gb.toFixed(1) + " GB" : "")
+      + (f.fits === false ? "  ·  slow here" : "");
+    sel.appendChild(o);
+  });
+}
+/* Philibert: the list is models.json from the drive's repo, so a model pushed
+ * there shows up after the next Update - with a download arrow until it is on
+ * this drive. Picking one downloads it (asked first: it is gigabytes). */
+let PCAT = null;
+async function loadCatalog(fit){
+  try{ PCAT = await api("/api/philibert/models", {}); }catch(e){ PCAT = null; return false; }
+  const chat = (PCAT.models || []).filter(m => (m.kind || "chat") === "chat");
+  const sel = $("modelsel");
+  const want = JSON.stringify(chat.map(m => [m.tag, m.installed, m.pull && m.pull.status]));
+  if(sel.dataset.list === want) return true;
+  sel.dataset.list = want;
+  sel.innerHTML = "";
+  chat.sort((a, b) => (a.size_gb || 0) - (b.size_gb || 0)).forEach(m => {
+    const o = document.createElement("option");
+    const lab = m.label || m.tag.split("/").pop();
+    const busy = m.pull && !["done", "error"].includes(m.pull.status);
+    o.value = m.tag; o.title = (m.note ? m.note + " - " : "") + m.tag;
+    if(m.installed){
+      o.textContent = lab + (m.size_gb ? "  \u00b7  " + m.size_gb + " GB" : "")
+        + ((fit[m.tag] || {}).fits === false ? "  \u00b7  slow here" : "");
+    } else {
+      o.dataset.dl = "1";
+      o.textContent = "\u2b07 " + lab + "  \u00b7  " + (busy ? "downloading\u2026" : "download " + (m.size_gb || "?") + " GB");
+    }
+    sel.appendChild(o);
+  });
+  return true;
+}
+function watchPull(tag, lab){
+  const t = setInterval(async () => {
+    let d; try{ d = await api("/api/philibert/models", {}); }catch(e){ return; }
+    const m = (d.models || []).find(x => x.tag === tag) || {};
+    const p = m.pull || {};
+    $("st").textContent = "downloading " + lab + " \u00b7 "
+      + (p.total ? Math.round(100 * p.done / p.total) + "% of " + (p.total / 1e9).toFixed(1) + " GB" : (p.status || "starting"));
+    if(m.installed || p.status === "done" || p.status === "error"){
+      clearInterval(t);
+      if(p.status === "error"){ $("st").textContent = "download failed: " + (p.error || "unknown"); return; }
+      try{ localStorage.setItem("elena_model", tag); }catch(e){}
+      $("modelsel").dataset.list = "";
+      probe();
+    }
+  }, 2000);
+}
+$("updbtn").addEventListener("click", async () => {
+  const b = $("updbtn");
+  if(!confirm("Check for a newer version of " + BRAND + " and install it?\n\nThis uses the Internet. Your chats, notes and models are not touched.")) return;
+  b.disabled = true; b.textContent = "UPDATING\u2026";
+  let r;
+  try{ r = await api("/api/philibert/update", {}); }catch(e){ r = {ok: false, message: String(e)}; }
+  b.disabled = false; b.textContent = "UPDATE";
+  alert(r.message || (r.ok ? "Done." : "Update failed."));
+  $("modelsel").dataset.list = "";       // a new models.json may list new models
+  probe();
+});
+
+$("modelsel").addEventListener("change", async (e) => {
+  const o = e.target.selectedOptions[0];
+  if(o && o.dataset.dl){
+    const m = ((PCAT && PCAT.models) || []).find(x => x.tag === o.value) || {};
+    const lab = m.label || o.value.split("/").pop();
+    e.target.value = MODEL;               // keep answering with the current one meanwhile
+    if(!confirm("Download " + lab + " (" + (m.size_gb || "?") + " GB) from the Internet onto this drive?"
+                + (m.note ? "\n\n" + m.note : ""))) return;
+    try{ await api("/api/philibert/pull", {tag: o.value}); }catch(err){ alert("Could not start the download: " + err); return; }
+    watchPull(o.value, lab);
+    return;
+  }
+  MODEL = VOICE_MODEL = e.target.value;
+  try{ localStorage.setItem("elena_model", MODEL); }catch(err){}
+  probe();
+});
+
+/* ── Philibert branding ─────────────────────────────────────────────────────
+ * The same page is ND's Elena and the portable drive's Philibert. ND says which
+ * in /api/status; everything that names the assistant follows it. */
+let BRAND = "Elena", HOST = "NeuralDock";
+function applyBrand(d){
+  const nb = $("netbtn");
+  if(d.portable){
+    nb.hidden = false;
+    $("updbtn").hidden = false;
+    nb.textContent = "INTERNET: " + (d.online ? "ON" : "OFF");
+    nb.dataset.on = d.online ? "1" : "";
+  }
+  if(!d.portable || BRAND !== "Elena") return;
+  BRAND = d.product || "Philibert"; HOST = BRAND;
+  api("/api/philibert/version", {}).then(v => {
+    $("updbtn").title = "Get the newest version of " + BRAND + "  (this drive: " + (v.version || "?") + ")";
+  }).catch(() => {});
+  document.title = BRAND + " // Esteef.Ai";
+  document.querySelector(".head .nm").textContent = BRAND;
+  ta.placeholder = "Ask " + BRAND + "\u2026";
+  const bl = $("backlink");
+  bl.href = "/full"; bl.textContent = "Full view \u2192";
+  bl.title = "Open the full " + BRAND + " interface";
+  const media = document.querySelector('#key [data-k="media"]');
+  if(media) media.hidden = true;             // no image / video on the drive
+  $("mark").setAttribute("aria-label", BRAND + "'s mark: one line whose motion shows what the agent is doing");
+  $("bigmark").setAttribute("aria-label", BRAND + ", listening");
+  WAKE.length = 0;
+  WAKE.push("philibert", "philbert", "filbert", "filibert", "phillibert", "philiburt",
+            "philibear", "fillibert", "phil bert", "philip bert");
+  applyMode();
+}
+$("netbtn").addEventListener("click", async () => {
+  const on = !$("netbtn").dataset.on;
+  try{ await api("/api/set_config", {online: on}); }catch(e){}
+  probe();
+});
+
+async function probe(){
+  try{
+    const h = {}; const t = tok(); if(t) h["X-ND-Token"] = t;
+    const r = await fetch(ND + "/api/status", {method:"GET", headers:h});
+    live = r.ok;
+    if(live){
+      /* Choose the model explicitly rather than sending "" and letting ND
+         resolve it: sanitize_model_name("") records an empty string, so the
+         per-answer stats would have had nothing true to report. Preference is
+         the benchmarked primary, then anything that is not an embedder. */
+      const d = await r.clone().json().catch(() => ({}));
+      const ms = (d.models || []).filter(m => !/embed/i.test(m));
+      MODEL = ms.find(m => m.startsWith("qwen3-coder")) || ms[0] || "";
+
+      /* Spoken turns need a model that FITS, and among those the FASTEST.
+         ND reports the arithmetic it already does for its own "slow model"
+         warning, so this follows the roster instead of hardcoding a name that
+         goes stale. Smallest-that-fits, not largest: measured on this card,
+         asking the same question three times,
+
+             qwen3:8b   4.87 GB   4.5s cold, 1.0s warm to the first character
+             ZB 27B    12.74 GB  24.8s cold, 6.6s warm, one turn took 43s
+
+         both fit, and only one of them is a conversation. In speech the wait
+         before anything happens is the whole experience, so latency wins over
+         capability here -- typed turns still get the capable model. Vision
+         models are skipped: they are for looking at pictures, not talking. */
+      const fit = d.model_fit || {};
+      const talkable = ms.filter(m => !/vl:|vision/i.test(m));
+      const fits = talkable.filter(m => fit[m] && fit[m].fits === true);
+      fits.sort((a, b) => (fit[a].need_gb || 0) - (fit[b].need_gb || 0));
+      // If nothing reports a size, keep the old behaviour rather than guessing.
+      VOICE_MODEL = fits[0] || MODEL;
+      GALLERY = d.cfg_gallery || "";
+      CPU_NOW = d.cpu_fallback || [];
+      if(d.portable){
+        /* Philibert: the default is the biggest model that FITS the card without
+           being one that makes a reply wait half a minute - so the 14B tier on a
+           16 GB card, the 8B on 8-12 GB, the 4B on anything smaller. */
+        const quick = fits.filter(m => (fit[m].need_gb || 0) <= 11);
+        if(quick.length) MODEL = quick[quick.length - 1];
+        else if(fits.length) MODEL = fits[0];
+        VOICE_MODEL = fits[0] || MODEL;
+      }
+      applyBrand(d);
+      // Ollama's list lands in ND's cache a few seconds after start; ask again.
+      if(!ms.length) setTimeout(probe, 3000);
+      let have = ms;
+      if(d.portable && await loadCatalog(fit)){
+        // The drive's catalog (models.json) drives the list; Ollama says what is here.
+        have = PCAT.models.filter(m => m.installed && (m.kind || "chat") === "chat").map(m => m.tag);
+        if(PCAT.default && have.includes(PCAT.default)) MODEL = PCAT.default;
+        else if(!have.includes(MODEL)) MODEL = have[have.length - 1] || MODEL;
+      } else {
+        fillModels(ms, fit);
+      }
+      const picked = chosenModel();
+      if(picked && have.includes(picked)){ MODEL = picked; VOICE_MODEL = picked; }
+      $("modelsel").value = MODEL;
+    }
+  }catch(e){ live = false; }
+  $("st").innerHTML = live ? 'agent mode &middot; <b>connected</b>' : "not connected";
+  $("hint").innerHTML = live
+    ? ("Enter to send &middot; Shift+Enter for a newline &middot; hover a reply for its stats"
+       + (MODEL ? " &middot; typed: " + MODEL.split("/").pop() : "")
+       + (VOICE_MODEL && VOICE_MODEL !== MODEL
+          ? " &middot; voice: " + VOICE_MODEL.split("/").pop() : "")
+       + (CPU_NOW.length ? ' &middot; <span class="off">GPU busy - '
+          + CPU_NOW.map(m => m.split("/").pop()).join(", ") + " running on the CPU (slower)</span>" : ""))
+    : (HOST === "NeuralDock"
+       ? '<span class="off">NeuralDock is not answering.</span> Open this at /elena on a running NeuralDock.'
+       : '<span class="off">' + HOST + ' is not answering.</span> Close this window and start it again from the drive.');
+  send.disabled = !live;
+  setState(live ? "idle" : "error");
+}
+
+/* ── permission ───────────────────────────────────────────────────────────
+ * A parked turn publishes awaiting_permission on chat_status and waits on
+ * /api/chat_permit. Rendering it is the whole of the contract. */
+function clearPermission(){ $("perm")?.remove(); }
+function showPermission(rid, needs){
+  if($("perm")) return;                      // already asking
+  const d = document.createElement("div");
+  d.id = "perm"; d.className = "node perm";
+  d.innerHTML = '<span class="who">may I?</span><div class="body"></div>';
+  const body = d.querySelector(".body");
+  for(const n of needs){
+    const row = document.createElement("div");
+    row.className = "permrow";
+    const h = document.createElement("div");
+    h.className = "permtool";
+    h.textContent = n.tool + (n.tier === "red" ? "  ·  this exact call only"
+                                               : "  ·  remembered for this chat");
+    const pre = document.createElement("pre");
+    pre.className = "permarg";
+    pre.textContent = n.arg || "(no detail given)";
+    row.appendChild(h); row.appendChild(pre);
+    if(n.warning){
+      const w = document.createElement("div");
+      w.className = "permwarn"; w.textContent = n.warning;
+      row.appendChild(w);
+    }
+    body.appendChild(row);
+  }
+  const bar = document.createElement("div");
+  bar.className = "permbar";
+  const yes = document.createElement("button");
+  yes.type = "button"; yes.className = "stopbtn go"; yes.textContent = "Approve";
+  const no = document.createElement("button");
+  no.type = "button"; no.className = "stopbtn"; no.textContent = "Deny";
+  const answer = async (approved) => {
+    yes.disabled = no.disabled = true;
+    const keys = needs.map(n => n.key).filter(Boolean);
+    try{
+      await api("/api/chat_permit", {job_id: rid,
+                                     approved: approved ? keys : [],
+                                     denied: approved ? [] : keys});
+    }catch(e){}
+    clearPermission();
+    node("tool", approved ? "approved" : "denied",
+         needs.map(n => n.tool).join(", "));
+  };
+  yes.addEventListener("click", () => answer(true));
+  no.addEventListener("click", () => answer(false));
+  bar.appendChild(yes); bar.appendChild(no);
+  body.appendChild(bar);
+  thread.appendChild(d);
+  d.scrollIntoView({block:"end", behavior:"smooth"});
+  if(convoOn){
+    if(bigMark) bigMark.set("media");
+    convoSay("may I?", "#c86ae0",
+             needs.map(n => n.tool).join(", ") + " - approve on screen");
+    /* Said aloud so you know it is waiting, but NOT approvable by voice. A
+       spoken yes running a shell command is the failure this all started with. */
+    say("I need your permission to " + needs.map(n => n.tool).join(" and ")
+        + ". Please approve it on screen.");
+  }
+}
+
+/* ── ask_user ──────────────────────────────────────────────────────────────
+ * A parked turn can publish awaiting_question instead of awaiting_permission:
+ * not "may I run this" but "which way do you want this done". Unlike a
+ * permission — which is click-only because a spoken yes to a shell command is
+ * the failure that started all of this — a question is about INTENT, so it can
+ * be answered by voice. The red action it leads to still hits the approval gate.
+ */
+let PENDQ = null;                       // {rid, q} while a question is open
+function clearQuestion(){ $("eq")?.remove(); PENDQ = null; }
+async function answerQuestion(rid, optionId, freeText){
+  try{
+    await api("/api/chat_answer", {job_id: rid, option_id: optionId || "",
+                                   answer: freeText || ""});
+  }catch(e){}
+  clearQuestion();
+  node("you", "Steve", freeText || optionId || "(answered)");
+}
+function showQuestion(rid, q){
+  if($("eq")){ PENDQ = {rid, q}; return; }   // already asking
+  const opts = (q && q.options) || [];
+  const free = !q || q.allow_free_text !== false;
+  const d = document.createElement("div");
+  d.id = "eq"; d.className = "node ask";
+  d.innerHTML = '<span class="who">a question</span><div class="body"></div>';
+  const body = d.querySelector(".body");
+  const qp = document.createElement("div");
+  qp.className = "askq"; qp.textContent = (q && q.question) || "Which way?";
+  body.appendChild(qp);
+  opts.forEach((o, i) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "askopt";
+    let h = '<span class="askn">' + (i + 1) + '</span><span class="askl">'
+          + esc(o.label || ("Option " + (i + 1))) + '</span>';
+    if(o.detail) h += '<span class="askd">' + esc(o.detail) + '</span>';
+    if(o.cost)   h += '<span class="askc">' + esc(o.cost) + '</span>';
+    b.innerHTML = h;
+    b.addEventListener("click", () => answerQuestion(rid, o.id || ("opt" + (i + 1)), o.label || ""));
+    body.appendChild(b);
+  });
+  if(free){
+    const row = document.createElement("div");
+    row.className = "askfree";
+    const inp = document.createElement("input");
+    inp.type = "text"; inp.placeholder = opts.length ? "…or type your own answer" : "Type your answer";
+    const snd = document.createElement("button");
+    snd.type = "button"; snd.className = "stopbtn go"; snd.textContent = "Send";
+    const go = () => { const v = inp.value.trim(); if(v) answerQuestion(rid, "", v); };
+    snd.addEventListener("click", go);
+    inp.addEventListener("keydown", (e) => { if(e.key === "Enter"){ e.preventDefault(); go(); } });
+    row.appendChild(inp); row.appendChild(snd);
+    body.appendChild(row);
+  }
+  thread.appendChild(d);
+  d.scrollIntoView({block:"end", behavior:"smooth"});
+  PENDQ = {rid, q};
+  if(convoOn){
+    if(bigMark) bigMark.set("hear");
+    let line = (q && q.question) || "Which way?";
+    if(opts.length){
+      line += " You can say " + opts.map((o, i) =>
+        (i === opts.length - 1 && opts.length > 1 ? "or " : "") + o.label).join(", ") + ".";
+    }
+    say(line);
+    /* Listen for the spoken answer. A question is about intent, so picking one
+       by voice is fine — the action it leads to still needs a tap. */
+    engaged = true; spoken = []; turnStartedAt = Date.now(); lastVoiceAt = Date.now();
+  }
+}
+/* Match a spoken answer to one of the options, else send it as free text. */
+function answerByVoice(said){
+  if(!PENDQ) return false;
+  const q = PENDQ.q || {}, opts = q.options || [], rid = PENDQ.rid;
+  const s = said.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+  const ORD = {"one":1,"first":1,"number one":1,"two":2,"second":2,"number two":2,
+               "three":3,"third":3,"four":4,"fourth":4,"five":5,"fifth":5};
+  let pick = -1;
+  for(const k in ORD){ if(s === k || s.startsWith(k + " ") || s === ("option " + ORD[k])){ pick = ORD[k] - 1; break; } }
+  if(pick < 0){ const m = s.match(/^(?:option\s*)?([1-5])\b/); if(m) pick = parseInt(m[1],10) - 1; }
+  if(pick < 0){
+    for(let i = 0; i < opts.length; i++){
+      const lbl = String(opts[i].label || "").toLowerCase();
+      if(lbl && (s.includes(lbl) || lbl.includes(s)) && s.length > 1){ pick = i; break; }
+    }
+  }
+  if(pick >= 0 && opts[pick]){
+    answerQuestion(rid, opts[pick].id || ("opt" + (pick + 1)), opts[pick].label || "");
+    return true;
+  }
+  if(q.allow_free_text !== false){ answerQuestion(rid, "", said); return true; }
+  say("I didn't catch which one. Say the number, or tap it on screen.");
+  return true;
+}
+
+/* ── managed-browser viewer ────────────────────────────────────────────────
+ * The managed browser runs off-screen. This streams it into Elena when you
+ * want to watch — polling /api/browser_frame — and can bring the real window
+ * on-screen (to sign in, say). It opens itself the first time a browser tool
+ * runs in a turn, so "do it in the background and show me" is the default. */
+let CAST = false, castTimer = null;
+function castPoll(){
+  if(!CAST) return;
+  api("/api/browser_frame", {}).then(d => {
+    if(!CAST) return;
+    if(d && d.frame){
+      $("castimg").src = "data:" + (d.mime || "image/jpeg") + ";base64," + d.frame;
+      $("castwait").hidden = true;
+    }
+  }).catch(() => {});
+  castTimer = setTimeout(castPoll, 600);
+}
+function castShow(){
+  if(CAST) return;
+  CAST = true;
+  $("castpane").hidden = false; $("castwait").hidden = false;
+  $("watchbtn").classList.add("on");
+  api("/api/browser_cast", {action: "start"}).catch(() => {});
+  castPoll();
+}
+function castHide(){
+  CAST = false;
+  if(castTimer){ clearTimeout(castTimer); castTimer = null; }
+  $("castpane").hidden = true;
+  $("watchbtn").classList.remove("on");
+  api("/api/browser_cast", {action: "stop"}).catch(() => {});
+}
+$("watchbtn").addEventListener("click", () => { if(CAST) castHide(); else castShow(); });
+$("castclose").addEventListener("click", castHide);
+$("castshow").addEventListener("click", async () => {
+  const b = $("castshow"), showing = b.dataset.on === "1";
+  try{ await api("/api/browser_cast", {action: showing ? "hide" : "show"}); }catch(e){}
+  b.dataset.on = showing ? "0" : "1";
+  b.textContent = showing ? "on screen" : "hide it";
+});
+
+const NEEDS = "[NEEDS TOOLS]";
+function stripNeeds(t){
+  return String(t || "").replace(/^\s*\[NEEDS TOOLS\]\s*/i, "").trim();
+}
+/* The reply said it needs a tool that is switched off. Offer the one click that
+   fixes it, carrying the original question so it does not have to be repeated. */
+function offerTools(question){
+  if($("needtools")) $("needtools").remove();
+  const d = document.createElement("div");
+  d.id = "needtools"; d.className = "node tool";
+  d.innerHTML = '<span class="who">tools are off</span><div class="body"></div>';
+  d.querySelector(".body").textContent =
+    "That needs the tools that let her start programs, click things and read the "
+    + "screen. They are off for spoken requests by default.";
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "stopbtn go";
+  b.textContent = "Turn tools on and try again";
+  b.addEventListener("click", () => {
+    d.remove();
+    if(!ACT) $("convoact").click();          // one place decides what ACT means
+    ask(question, {model: MODEL, agent: true});
+  });
+  d.querySelector(".body").appendChild(b);
+  thread.appendChild(d);
+  d.scrollIntoView({block:"end", behavior:"smooth"});
+}
+
+async function ask(text, opts){
+  busy = true; send.disabled = true;
+  node("you", "Steve", text);
+  thread.classList.add("live");
+  setState("think", 0);
+  flowReset();
+  pushHistory("user", text);
+  const tStart = Date.now();
+  const rid = "ui_" + Math.random().toString(16).slice(2,10);
+  RID = rid;
+  const useModel = (opts && opts.model) || MODEL;
+  // Plain chat unless tools were asked for. Typed turns keep agent mode.
+  const useAgent = (opts && "agent" in opts) ? !!opts.agent : true;
+  const shown = new Set();
+  /* Progress, not elapsed time, is what separates thinking from hanging. A turn
+     that is streaming or changing rounds is alive however long it takes; one
+     that has done neither for STALL_MS is stuck and must say so. */
+  let lastMove = Date.now(), stalled = false, longSaid = false;
+  const moved = () => { lastMove = Date.now();
+                        if(stalled){ stalled = false; clearStall(); } };
+  try{
+    await api("/api/chat", {model:useModel, req_id:rid, session_id:"elena_ui", workspace:"",
+                            agent_mode:useAgent, messages:history.slice(),
+                            allow_all:false, approved_tools:[]});
+    let seen = 0, cursor = 0, tick = 0;
+    for(;;){
+      /* Status is polled fast so text arrives in small pieces; the result call
+         is slower because it is only asking "are we finished yet". */
+      await new Promise(r => setTimeout(r, 320));
+      if(STOPPED === rid) break;
+      tick++;
+      let st = {};
+      try{ st = await api("/api/chat_status", {req_id:rid, stream_from:cursor}); }catch(e){}
+      if(typeof st.stream === "string" && st.stream){
+        // stream_at is the absolute index of the first character handed back,
+        // so the cursor tracks the model rather than counting our own reads.
+        cursor = (typeof st.stream_at === "number" ? st.stream_at : cursor) + st.stream.length;
+        flowPush(st.stream);
+        moved();
+      }
+      if(st.round && st.round > seen){ seen = st.round; moved(); }
+
+      /* Waiting for a person is not being stuck. Show the question, and hold
+         the watchdogs off while it stands. */
+      const parked = st.awaiting_permission;
+      if(parked && parked.length){
+        showPermission(rid, parked);
+        moved();
+        stage("waiting for you");
+        continue;
+      }
+      if($("perm")) clearPermission();
+
+      const question = st.awaiting_question;
+      if(question && question.question){
+        showQuestion(rid, question);
+        moved();
+        stage("your call");
+        continue;
+      }
+      if($("eq")) clearQuestion();
+
+      if(Date.now() - lastMove > STALL_MS && !stalled && STOPPED !== rid){
+        stalled = true;
+        showStall(rid, useModel, Math.round((Date.now() - tStart) / 1000));
+      }
+      const elapsed = Date.now() - tStart;
+      if(elapsed > LONG_MS && STOPPED !== rid){
+        showLong(rid, useModel, Math.round(elapsed / 1000), seen || 1,
+                 String(st.tool || st.last_tool || st.stage || ""));
+        if(convoOn && !longSaid){
+          longSaid = true;
+          convoSay("still working", "#c86ae0",
+                   "this is taking a while - say stop, or press Stop");
+        }
+      }
+
+      const t = String(st.tool || st.last_tool || "").toLowerCase();
+      if(t.indexOf("browser") === 0 && !CAST) castShow();   // show the work as it happens
+      const stg = String(st.stage || "").toLowerCase();
+      let s2 = "think";
+      if(TOOL_STATE[t]) s2 = TOOL_STATE[t];
+      else if(stg.includes("tool")) s2 = "code";
+      else if(stg.includes("think")) s2 = "think";
+      else if(stg.includes("generat") || flow.on) s2 = "answer";
+      setState(s2, seen);
+      stage("round " + (seen||1) + (st.stage ? " · " + st.stage : ""));
+
+      if(tick % 4) continue;
+      const res = await api("/api/chat_result", {job_id:rid});
+      if(!["running","unknown","queued"].includes(res.status)){
+        clearStage(); clearStall(); clearLong(); clearPermission(); clearQuestion();
+        for(const c of (res.tool_calls || [])){
+          const nm = c.tool || "tool";
+          const key = nm + (c.summary || "");
+          if(shown.has(key)) continue;
+          shown.add(key);
+          node("tool", nm, (c.summary || c.detail || "").slice(0,300));
+        }
+        if(res.reply || flow.on){
+          setState("answer", seen);
+          let finalText = (res.reply || flow.shown || "").trim();
+          const wantsTools = finalText.toUpperCase().startsWith(NEEDS);
+          // The marker is protocol. Never show it, never read it aloud.
+          if(wantsTools) finalText = stripNeeds(finalText);
+          pushHistory("assistant", finalText);
+          say(finalText);
+          flowFinish(wantsTools ? finalText : res.reply,
+                     statsFor(res, seen, tStart, finalText.length));
+          showImages(res);
+          if(wantsTools && !useAgent) offerTools(text);
+        }
+        if(res.status !== "done"){ setState("error", seen);
+          node("err", res.status || "error", res.why || ""); }
+        break;
+      }
+    }
+  }catch(e){
+    clearStage(); clearStall(); clearLong(); setState("error");
+    flowFinish(null);
+    node("err", "not sent", String(e.message || e));
+  }
+  clearStage(); clearStall(); clearLong(); clearPermission(); clearQuestion();
+  if(STOPPED === rid){ STOPPED = null; setState(live ? "idle" : "error"); }
+  RID = null;
+  busy = false; send.disabled = !live;
+  setTimeout(() => { if(!busy) setState(live ? "idle" : "error"); }, 2600);
+  ta.focus();
+}
+
+function fire(){
+  if(busy || !live || !ta.value.trim()) return;
+  const v = ta.value.trim(); ta.value = ""; ta.style.height = "auto"; ask(v);
+}
+ta.addEventListener("input", () => {
+  ta.style.height = "auto";
+  ta.style.height = Math.min(ta.scrollHeight, 180) + "px";
+});
+ta.addEventListener("keydown", (e) => {
+  if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); fire(); }
+});
+const cin = document.querySelector(".cin");
+ta.addEventListener("focus", () => cin.classList.add("focus"));
+ta.addEventListener("blur",  () => cin.classList.remove("focus"));
+send.addEventListener("click", fire);
+
+mark = new ElenaMark($("mark"), { trail: 110 });
+tipLast();
+
+/* ── behaviours ───────────────────────────────────────────────────────────
+ * Three reactions, all of them yielding to real work: whatever the mark is
+ * doing for fun, an actual agent state overrides it, and any interaction
+ * recalls it home immediately. Entertainment must never be in the way. */
+const tip = $("tip");
+let lastPoke = Date.now(), typingT = null, roamT = null, escapeT = null, roaming = false;
+
+function uiState(){ return busy ? null : (live ? "idle" : "error"); }
+function poke(){
+  lastPoke = Date.now();
+  if(roaming) comeHome();
+  scheduleEscape();
+}
+
+/* 1. click — the line recoils from where you clicked. */
+addEventListener("pointerdown", (e) => {
+  if(mark) mark.pulse(e.clientX, e.clientY);
+  poke();
+}, {passive:true});
+
+/* 2. typing — it leans in and watches the composer. Reverts a beat after you
+      stop, and never while the agent is actually working. */
+ta.addEventListener("input", () => {
+  poke();
+  if(busy) return;
+  setState("curious");
+  clearTimeout(typingT);
+  typingT = setTimeout(() => { if(!busy) setState(uiState() || "idle"); }, 1400);
+});
+
+/* 3. idle escapades — after two quiet minutes it wanders off, then again at
+      random 1.2–2.3 minute intervals. Five routes, picked at random, each with
+      its own duration, so it does not become a loop you learn to ignore. */
+const ROUTES = ["drift","orbit","plunge","wander","sweep"];
+function scheduleEscape(){
+  clearTimeout(escapeT);
+  const quiet = Date.now() - lastPoke;
+  const wait = quiet >= 120000 ? (72000 + Math.random()*66000) : (120000 - quiet);
+  escapeT = setTimeout(() => {
+    if(busy || Date.now() - lastPoke < 120000){ scheduleEscape(); return; }
+    escape(ROUTES[Math.floor(Math.random()*ROUTES.length)]);
+  }, wait);
+}
+
+function comeHome(){
+  roaming = false;
+  cancelAnimationFrame(roamT);
+  tip.classList.remove("roaming");
+  tip.style.transform = "";
+  setState(uiState() || "idle");
+  tipLast();
+}
+
+function escape(route){
+  const r = tip.getBoundingClientRect();
+  const W = innerWidth, H = innerHeight, pad = 70;
+  roaming = true;
+  tip.classList.add("roaming");
+  tip.style.left = r.left + "px";
+  tip.style.top  = r.top + "px";
+  setState("roam");
+  const dur = 5200 + Math.random()*4200;
+  const t0 = performance.now();
+  const seedA = Math.random()*Math.PI*2, seedB = 0.6 + Math.random()*0.8;
+  const dir = Math.random() < 0.5 ? 1 : -1;
+
+  function step(now){
+    const k = Math.min(1, (now - t0) / dur);
+    // ease in and out so it never snaps at either end
+    const e = k < .5 ? 2*k*k : 1 - Math.pow(-2*k+2, 2)/2;
+    let dx = 0, dy = 0;
+    if(route === "drift"){
+      dx = Math.sin(e*Math.PI) * (W - r.left - pad*2) * 0.82 * dir;
+      dy = -Math.sin(e*Math.PI*0.9) * Math.min(260, r.top - pad);
+    }else if(route === "orbit"){
+      const a = seedA + e*Math.PI*2*dir;
+      dx = Math.cos(a)*(W*0.34) - Math.cos(seedA)*(W*0.34);
+      dy = Math.sin(a)*(H*0.28) - Math.sin(seedA)*(H*0.28);
+    }else if(route === "plunge"){
+      const up = Math.sin(e*Math.PI);
+      dx = up * (W*0.55) * dir;
+      dy = -up * Math.min(H*0.5, r.top - pad) - Math.sin(e*Math.PI*3)*22;
+    }else if(route === "wander"){
+      dx = (Math.sin(e*7.1*seedB + seedA) + Math.sin(e*3.3)) * W*0.18 * dir;
+      dy = (Math.cos(e*5.4*seedB) + Math.sin(e*2.2)) * -Math.min(150, r.top-pad) * 0.7;
+    }else{ // sweep
+      const s2 = Math.sin(e*Math.PI);
+      dx = s2 * (W - pad*2 - r.left) * dir;
+      dy = -s2 * 40;
+    }
+    // Never leave the viewport, and never sit under the composer.
+    const nx = Math.max(pad-r.left, Math.min(W-pad-r.left-60, dx));
+    const ny = Math.max(pad-r.top,  Math.min(H-150-r.top,     dy));
+    tip.style.transform = "translate(" + nx + "px," + ny + "px)";
+    if(k < 1 && roaming){ roamT = requestAnimationFrame(step); }
+    else if(roaming){ comeHome(); scheduleEscape(); }
+  }
+  roamT = requestAnimationFrame(step);
+}
+
+/* A small handle on the moving parts. Everything here is already reachable
+   through the UI; exposing it just makes the behaviours testable without
+   sitting through a two-minute idle timer. */
+window.elena = {
+  mark, tip, ROUTES,
+  escape, comeHome, setState,
+  model: () => MODEL,
+  history: () => history.slice(),
+  push: pushHistory,
+  state: () => mark && mark.state,
+  roaming: () => roaming,
+  convoStart, convoStop, heardWake, stripWake,
+  convoOn: () => convoOn, engaged: () => engaged, WAKE: () => WAKE,
+  mode: () => MODE, looksComplete, maybeFinish,
+  voiceModel: () => VOICE_MODEL, stopTurn, STALL_MS, act: () => ACT,
+  stopSpeaking, speaking: () => speaking, mute: () => MUTE,
+  stripNeeds, offerTools, NEEDS, showPermission, clearPermission,
+  showQuestion, clearQuestion, answerQuestion, answerByVoice, pendingQuestion: () => PENDQ,
+  castShow, castHide, casting: () => CAST,
+  BARGE_GATE: () => BARGE_GATE, BARGE_MS: () => BARGE_MS, bargeCheck,
+  bargeGate, echoFloor: () => echoFloor,
+  setBargeGate: (n) => { BARGE_GATE = Math.max(1, Math.min(127, n | 0));
+    try{ localStorage.setItem("elena_barge_gate", String(BARGE_GATE)); }catch(e){}
+    echoFloor = 0; return BARGE_GATE; },
+  _barge: (o) => { if(o.speaking !== undefined) speaking = o.speaking;
+                   if(o.startedAt !== undefined) speakStartedAt = o.startedAt;
+                   if(o.bargeAt !== undefined) bargeAt = o.bargeAt;
+                   return {speaking:!!speaking, speakStartedAt, bargeAt}; },
+  meterAttach, meterDetach, PEAK_GATE: () => PEAK_GATE
+};
+
+/* ── voice ────────────────────────────────────────────────────────────────
+ * Both halves already existed in ND and were simply not wired up here:
+ * /api/transcribe takes base64 audio, /api/tts returns base64 audio. The mic
+ * uses MediaRecorder, which needs a secure context — on plain http that means
+ * localhost only, so a paired phone over the network will not get a mic and is
+ * told so rather than silently failing. */
+const mic = $("mic"), spk = $("spk");
+let rec = null, chunks = [], speaking = null;
+/* Barge-in. A higher bar than the wake gate and a sustained one, so her own
+   voice leaking into the microphone cannot stop her mid-sentence. */
+/* 34 was too low: she heard herself and stopped mid-sentence. Tunable at
+   runtime because a number I picked is exactly what failed the first time --
+   window.elena.setBargeGate(n), remembered across reloads. */
+let BARGE_GATE = 52;
+try{ BARGE_GATE = parseInt(localStorage.getItem("elena_barge_gate"), 10) || 52; }catch(e){}
+const BARGE_MS = 220, BARGE_GRACE_MS = 400;
+/* Whatever she leaks back into the microphone while you are NOT talking is, by
+   definition, under the gate -- so it is measurable. The effective threshold
+   rides above it, which means a loud reply raises its own bar instead of
+   tripping the old fixed one. */
+const ECHO_MARGIN = 10;
+let echoFloor = 0;
+let speakStartedAt = 0, bargeAt = 0;
+let SPEAK = false;
+try{ SPEAK = localStorage.getItem("elena_speak") === "1"; }catch(e){}
+// Conversation mode speaks by default; this is how you tell it not to.
+let MUTE = false;
+try{ MUTE = localStorage.getItem("elena_mute") === "1"; }catch(e){}
+spk.classList.toggle("on", SPEAK);
+
+spk.addEventListener("click", () => {
+  SPEAK = !SPEAK;
+  spk.classList.toggle("on", SPEAK);
+  try{ localStorage.setItem("elena_speak", SPEAK ? "1" : "0"); }catch(e){}
+  if(!SPEAK) stopSpeaking("button");
+  poke();
+});
+
+/* Every way of interrupting ends here, so they cannot drift apart. Returns
+   whether there was actually anything to stop. */
+function stopSpeaking(why){
+  if(!speaking) return false;
+  bargeAt = 0;
+  try{ speaking.pause(); }catch(e){}
+  speaking = null;
+  shushShow(false);
+  if(convoOn && bigMark && !busy){
+    bigMark.set("listen");
+    convoSay("listening", "#4a9fd8", "");
+  }
+  if(why === "voice") blip(420, 70, 0.03);
+  return true;
+}
+function shushShow(on){
+  const b = $("shush");
+  if(b) b.hidden = !on;
+}
+
+async function say(text){
+  if(!SPEAK || !text) return;
+  try{
+    if(speaking){ speaking.pause(); speaking = null; shushShow(false); }
+    const d = await api("/api/tts", {text: String(text).slice(0, 4000)});
+    if(!d || !d.ok || !d.audio) return;
+    speaking = new Audio("data:" + (d.mime || "audio/wav") + ";base64," + d.audio);
+    // Nothing to interrupt once it has finished on its own.
+    speaking.addEventListener("ended", () => { shushShow(false); bargeAt = 0; });
+    // The grace window starts when audio does, not when the request was made.
+    speakStartedAt = Date.now(); bargeAt = 0;
+    echoFloor = Math.round(echoFloor * 0.6);   // forget most of the last reply
+    shushShow(true);
+    speaking.play().catch(() => {});
+  }catch(e){ /* speech is a courtesy, never a failure worth surfacing */ }
+}
+
+function micOK(){ return !!(navigator.mediaDevices && window.MediaRecorder); }
+
+/* Chrome turns echo cancellation ON for a bare {audio:true} and OFF once you
+   name a deviceId, which is the moment it matters most: with a chosen
+   microphone and no AEC, her own voice comes back in loudly enough to trigger
+   the barge-in on every single reply. Ask for it by name in both cases. */
+function micConstraints(){
+  const c = {echoCancellation: true, noiseSuppression: true,
+             autoGainControl: true};
+  if(MICID) c.deviceId = {exact: MICID};
+  return c;
+}
+
+/* ── microphone selection ─────────────────────────────────────────────────
+ * Browsers withhold device LABELS until the page has been granted microphone
+ * access at least once, so an unprimed list is a row of blank names. Rather
+ * than showing that and looking broken, the panel says so and offers to ask.
+ * The chosen deviceId is remembered; if that device later disappears the code
+ * falls back to the default instead of failing to record. */
+const panel = $("micpanel"), mplist = $("mplist"), mpfoot = $("mpfoot"), micsel = $("micsel");
+let MICID = "";
+try{ MICID = localStorage.getItem("elena_mic") || ""; }catch(e){}
+
+async function listMics(){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return [];
+  try{
+    const all = await navigator.mediaDevices.enumerateDevices();
+    return all.filter(d => d.kind === "audioinput");
+  }catch(e){ return []; }
+}
+
+async function primeLabels(){
+  try{
+    const st = await navigator.mediaDevices.getUserMedia({audio:true});
+    st.getTracks().forEach(t => t.stop());
+    return true;
+  }catch(e){ return false; }
+}
+
+function renderMics(mics){
+  mplist.textContent = "";
+  const seen = new Set();
+  const rows = [];
+  for(const m of [{deviceId:"", label:"System default"}].concat(mics)){
+    const id = (m.deviceId === "default") ? "" : (m.deviceId || "");
+    if(seen.has(id)) continue;          // the platform default is not two devices
+    seen.add(id);
+    rows.push({deviceId:id, label:m.label});
+  }
+  const named = mics.some(m => m.label);
+  rows.forEach((m) => {
+    const row = document.createElement("div");
+    row.className = "mp-i" + (m.deviceId === MICID ? " sel" : "");
+    row.setAttribute("role", "button");
+    row.tabIndex = 0;
+    const name = m.label || (m.deviceId ? "Microphone " + m.deviceId.slice(0,6) : "System default");
+    row.innerHTML = '<span class="tick">' + (m.deviceId === MICID ? "&#10003;" : "") +
+                    '</span><b></b>';
+    row.querySelector("b").textContent = name;
+    const pick = () => {
+      MICID = m.deviceId;
+      try{ localStorage.setItem("elena_mic", MICID); }catch(e){}
+      renderMics(mics);
+      placeMicPanel();
+      poke();
+    };
+    row.addEventListener("click", pick);
+    row.addEventListener("keydown", (e) => {
+      if(e.key === "Enter" || e.key === " "){ e.preventDefault(); pick(); }
+    });
+    mplist.appendChild(row);
+  });
+  if(!micOK()){
+    mpfoot.textContent = "This browser will not record here. MediaRecorder needs a "
+      + "secure context, so use 127.0.0.1 rather than the network address.";
+  }else if(!named){
+    mpfoot.textContent = "Device names are hidden until microphone access is granted once.";
+    const b = document.createElement("button");
+    b.textContent = "Show device names";
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      const ok = await primeLabels();
+      renderMics(await listMics());
+      if(!ok) mpfoot.textContent = "Access was refused, so names stay hidden.";
+      placeMicPanel();
+    });
+    mpfoot.appendChild(document.createElement("br"));
+    mpfoot.appendChild(b);
+  }else{
+    mpfoot.textContent = mics.length + " input" + (mics.length === 1 ? "" : "s")
+      + " found. The choice is remembered.";
+  }
+}
+
+async function openMicPanel(){
+  panel.hidden = false;
+  micsel.setAttribute("aria-expanded", "true");
+  renderMics(await listMics());        // fill it BEFORE measuring it
+  placeMicPanel();
+}
+
+function placeMicPanel(){
+  const r = (micAnchor || micsel).getBoundingClientRect();
+  const pr = panel.getBoundingClientRect();
+  const left = Math.max(12, Math.min(innerWidth - pr.width - 12, r.right - pr.width));
+  // Prefer above the button; drop below only if there is genuinely more room
+  // there, and clamp either way so it cannot leave the window.
+  const above = r.top - pr.height - 10;
+  const below = r.bottom + 10;
+  const top = above >= 12 ? above
+            : (innerHeight - below > pr.height + 12 ? below
+               : Math.max(12, innerHeight - pr.height - 12));
+  panel.style.left = left + "px";
+  panel.style.top = top + "px";
+}
+function closeMicPanel(){
+  panel.hidden = true;
+  micsel.setAttribute("aria-expanded", "false");
+}
+
+micsel.addEventListener("click", (e) => {
+  e.stopPropagation();
+  micAnchor = micsel;
+  panel.hidden ? openMicPanel() : closeMicPanel();
+  poke();
+});
+addEventListener("click", (e) => {
+  if(panel.hidden) return;
+  if(panel.contains(e.target) || e.target === micsel || e.target === $("convomic")) return;
+  closeMicPanel();
+});
+panel.addEventListener("click", (e) => e.stopPropagation());
+addEventListener("keydown", (e) => { if(e.key === "Escape") closeMicPanel(); });
+if(navigator.mediaDevices && navigator.mediaDevices.addEventListener){
+  navigator.mediaDevices.addEventListener("devicechange", async () => {
+    if(!panel.hidden) renderMics(await listMics());
+  });
+}
+
+async function startRec(){
+  if(!micOK()){
+    node("err", "no microphone",
+         "MediaRecorder needs a secure context. Open this at 127.0.0.1 rather than over the network.");
+    return;
+  }
+  try{
+    let stream;
+    const want = {audio: micConstraints()};
+    try{
+      stream = await navigator.mediaDevices.getUserMedia(want);
+    }catch(err){
+      // The remembered device is gone or busy. Fall back rather than refuse.
+      if(!MICID) throw err;
+      node("err", "microphone unavailable",
+           "The chosen input could not be opened, so the system default was used.");
+      stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    }
+    chunks = [];
+    meterAttach(stream);
+    rec = new MediaRecorder(stream);
+    rec.ondataavailable = (e) => { if(e.data.size) chunks.push(e.data); };
+    rec.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      meterDetach();
+      mic.classList.remove("rec");
+      const blob = new Blob(chunks, {type: rec.mimeType || "audio/webm"});
+      if(blob.size < 1200) return;                       // a stray click, not speech
+      const b64 = await new Promise(res => {
+        const fr = new FileReader();
+        fr.onloadend = () => res(String(fr.result).split(",")[1]);
+        fr.readAsDataURL(blob);
+      });
+      mic.disabled = true;
+      try{
+        const d = await api("/api/transcribe", {audio:b64, mime:blob.type});
+        const said = (d && (d.text || d.transcript || "")).trim();
+        if(said){ ta.value = said; ta.dispatchEvent(new Event("input")); ta.focus(); }
+        else node("err", "heard nothing", "The recording came back empty.");
+      }catch(e){ node("err", "transcribe failed", String(e.message || e)); }
+      mic.disabled = false;
+      rec = null;
+    };
+    rec.start();
+    mic.classList.add("rec");
+    poke();
+  }catch(e){
+    node("err", "microphone blocked", String(e.message || e));
+  }
+}
+function stopRec(){ if(rec && rec.state !== "inactive") rec.stop(); }
+
+mic.addEventListener("click", () => { rec ? stopRec() : startRec(); });
+// Hold-to-talk as well, for anyone who prefers it.
+mic.addEventListener("pointerdown", (e) => { e.preventDefault(); });
+
+/* file:// from an http page is blocked by every browser, so the link asks the
+   server to open the folder instead. */
+addEventListener("click", async (e) => {
+  const a = e.target.closest && e.target.closest("a.gal");
+  if(!a) return;
+  e.preventDefault();
+  try{
+    const d = await api("/api/open_folder", {path: a.dataset.folder || GALLERY});
+    if(!d || !d.ok) node("err", "could not open", (d && d.msg) || "unknown");
+  }catch(err){ node("err", "could not open", String(err.message || err)); }
+});
+
+/* == CONVERSATION MODE ====================================================
+ * Always listening, both directions, nothing to click.
+ *
+ * The loop is the one ND's main UI already proved: rolling audio slices, each
+ * transcribed locally. Two details in that design are what make it viable and
+ * both are kept. A level gate means a quiet room costs nothing -- silence is
+ * never sent to Whisper. And armed slices use the small fast model because they
+ * only have to spot one word, switching to the full model once you are actually
+ * being listened to, when the words start mattering.
+ *
+ * Whisper renders the name several ways depending on how it is said, so the
+ * near-misses are accepted too; requiring a clean "Elena" makes it feel deaf.
+ */
+const convo = $("convo"), convoBtn = $("convobtn"),
+      convoState = $("convostate"), convoHeard = $("convoheard");
+const WAKE = ["elena","alena","alina","elaina","elaine","helena","alaina",
+              "elina","aleena","elenna","lena"];
+/* Armed slices are short so the wake word is noticed quickly; engaged slices
+   are longer because accuracy matters more than latency once you are talking.
+   The level gate keeps a quiet room free either way. */
+const SLICE_MS = 1400, ENGAGED_SLICE_MS = 2200, PEAK_GATE = 22;
+/* End of turn. 5s was far longer than the pause that actually ends a sentence,
+   and it is why a question could stay open until the room went quiet. */
+const SILENCE_MS = 1400;        // ordinary trailing pause
+const END_SILENCE_MS = 800;     // shorter when the text already looks finished
+const MAX_UTTERANCE_MS = 20000; // a monologue must still end somewhere
+let MODE = "monitor";           // "monitor" needs the wake word; "open" does not
+try{ MODE = localStorage.getItem("elena_mode") || "monitor"; }catch(e){}
+/* Tool use by voice, off by default and deliberately NOT remembered. Speech can
+   be triggered by a television or a misheard word; that must not be able to
+   quietly inherit permission to run shell commands from a previous session. */
+let ACT = false;
+
+let convoOn = false, engaged = false, wakeRec = null, wakeStream = null;
+let wakeChunks = [], wakeBusy = false, slicePeak = 0, lastVoiceAt = 0;
+let spoken = [], actx = null, analyser = null, meterRaf = null, bigMark = null;
+let turnStartedAt = 0, endTimer = null, prevArmed = "";
+let youMark = null, peakHold = 0, peakAt = 0, sttWarned = false;
+const lvlwrap = $("lvlwrap"), lvlbar = $("lvlbar"), lvlpeak = $("lvlpeak"),
+      lvlgate = $("lvlgate"), youlbl = $("youlbl");
+// Draw the gate where it really is, so the bar can be read against it.
+lvlgate.style.left = ((PEAK_GATE / 128) * 100).toFixed(1) + "%";
+
+function heardWake(t){
+  const c = (t || "").toLowerCase().replace(/[^a-z\s]/g, " ");
+  return WAKE.some(w => new RegExp("(^|\\s)" + w + "($|\\s)").test(c));
+}
+function stripWake(t){
+  let out = t || "";
+  WAKE.forEach(w => {
+    out = out.replace(new RegExp("(^|\\s)" + w + "[,.!?]*", "gi"), " ");
+  });
+  return out.replace(/\s+/g, " ").trim();
+}
+
+/* Audio cues: two short sine blips, deliberately quiet. A tone on waking says
+   "I heard my name" faster than any words could, and a lower one on release
+   says "I have stopped listening and started thinking". */
+function blip(freq, ms, vol){
+  try{
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = "sine"; o.frequency.value = freq;
+    g.gain.value = 0;
+    o.connect(g); g.connect(actx.destination);
+    const now = actx.currentTime;
+    g.gain.linearRampToValueAtTime(vol || 0.05, now + 0.015);
+    g.gain.linearRampToValueAtTime(0, now + (ms || 120) / 1000);
+    o.start(now); o.stop(now + (ms || 120) / 1000 + 0.02);
+  }catch(e){}
+}
+
+function convoSay(state, colour, heard){
+  convoState.textContent = state;
+  convoState.style.color = colour;
+  if(heard !== undefined) convoHeard.textContent = heard;
+  // The wake prompt only makes sense while armed; showing it mid-turn told
+  // you to do something you had already done.
+  const h = $("convohint");
+  if(h) h.hidden = (state !== "listening");
+  if(state === "listening") applyMode();
+}
+
+/* Should this frame interrupt her? Three guards, and all three matter:
+
+     THRESHOLD  above BARGE_GATE, which is higher than the wake gate, because
+                her own voice leaking back in sits between the two;
+     DURATION   held for BARGE_MS, so a door or a keystroke is not an interruption;
+     GRACE      not in the first BARGE_GRACE_MS of playback, where echo
+                cancellation has least to work with.
+
+   Split out of meter() so it can be tested without making noise at a
+   microphone. Keeps its own state in bargeAt: the frame the run began. */
+function bargeGate(){
+  return Math.max(BARGE_GATE, echoFloor + ECHO_MARGIN);
+}
+function bargeCheck(peak, now){
+  if(!speaking || speaking.paused || speaking.ended){ bargeAt = 0; return false; }
+  if(now - speakStartedAt <= BARGE_GRACE_MS) return false;
+  const gate = bargeGate();
+  if(peak > gate){
+    if(!bargeAt) bargeAt = now;
+    if(now - bargeAt >= BARGE_MS){ bargeAt = 0; return true; }
+  }else{
+    /* Under the gate while she is talking: that is her, not you. Learn it, so
+       a louder-than-expected reply cannot trip the fixed threshold. */
+    if(peak > echoFloor) echoFloor = peak;
+    if(bargeAt && now - bargeAt > BARGE_MS * 2){
+      bargeAt = 0;                       // the spike did not hold; forget it
+    }
+  }
+  return false;
+}
+
+function meter(){
+  if(!analyser) return;
+  const buf = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteTimeDomainData(buf);
+  let peak = 0;
+  for(let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i] - 128));
+  slicePeak = Math.max(slicePeak, peak);
+  const lvl = Math.min(1, peak / 60);
+  if(bigMark) bigMark.setLevel(lvl);
+  if(mark) mark.setLevel(lvl);
+  if(youMark) youMark.setLevel(lvl);
+
+  // Composer meter. Scaled against the full 0..128 range rather than the
+  // display level, so the bar and the gate tick share one scale and can
+  // honestly be compared.
+  const pct = Math.min(100, (peak / 128) * 100);
+  lvlbar.style.width = pct.toFixed(1) + "%";
+  const now = Date.now();
+  if(pct >= peakHold || now - peakAt > 900){ peakHold = pct; peakAt = now; }
+  lvlpeak.style.left = peakHold.toFixed(1) + "%";
+  const over = peak > PEAK_GATE;
+  if(youlbl) youlbl.classList.toggle("live", over);
+
+  // Real audio, not slice timing, decides when you have stopped talking.
+  if(over) lastVoiceAt = now;
+
+  /* Talking over her stops her. Sustained, above a higher bar than the wake
+     gate, and not during the first moments of playback -- those three together
+     are what stop the speakers from interrupting the speaker. */
+  if(bargeCheck(peak, now)){
+    stopSpeaking("voice");
+    /* You cut in because you have something to say. Making you say her name
+       first would be a strange thing to ask of a conversation. */
+    if(convoOn && !busy){
+      engaged = true; spoken = []; turnStartedAt = now; lastVoiceAt = now;
+      if(bigMark) bigMark.set("hear");
+      convoSay("go ahead", "#00f5ff", "");
+    }
+  }
+  meterRaf = requestAnimationFrame(meter);
+}
+
+/* The meter runs whenever a stream is open, not only in conversation mode:
+   the plain mic button needs it just as much. */
+function meterAttach(stream){
+  try{
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const src = actx.createMediaStreamSource(stream);
+    analyser = actx.createAnalyser(); analyser.fftSize = 512;
+    src.connect(analyser);
+    lvlwrap.hidden = false;
+    cancelAnimationFrame(meterRaf);
+    meter();
+  }catch(e){}
+}
+function meterDetach(){
+  cancelAnimationFrame(meterRaf); analyser = null;
+  lvlwrap.hidden = true; lvlbar.style.width = "0%"; peakHold = 0;
+  if(youlbl) youlbl.classList.remove("live");
+  if(youMark) youMark.setLevel(0);
+  if(mark) mark.setLevel(0);
+}
+
+async function convoStart(){
+  if(convoOn) return;
+  if(!micOK()){
+    node("err", "conversation mode needs a microphone",
+         "MediaRecorder needs a secure context - open this at 127.0.0.1.");
+    return;
+  }
+  try{
+    const want = {audio: micConstraints()};
+    wakeStream = await navigator.mediaDevices.getUserMedia(want).catch(
+      () => navigator.mediaDevices.getUserMedia({audio:true}));
+  }catch(e){
+    node("err", "microphone blocked", String(e.message || e)); return;
+  }
+  convoOn = true; engaged = false; spoken = []; sttWarned = false; prevArmed = "";
+  convo.hidden = false;
+  convo.focus();                       // so Escape lands here, not on the host
+  convoBtn.classList.add("on");
+  if(!bigMark) bigMark = new ElenaMark($("bigmark"), {trail: 190});
+  if(!youMark){ youMark = new ElenaMark($("youmark"), {trail: 70}); }
+  youMark.set("you");
+  bigMark.set("listen");
+  convoSay("listening", "#4a9fd8", "");
+  meterAttach(wakeStream);
+  applyMode();
+  clearInterval(endTimer);
+  endTimer = setInterval(endpointTick, 200);
+  sliceLoop();
+  blip(660, 90, 0.04);
+}
+
+function convoStop(){
+  convoOn = false; engaged = false;
+  try{ if(wakeRec && wakeRec.state === "recording") wakeRec.stop(); }catch(e){}
+  wakeRec = null;
+  if(wakeStream){ wakeStream.getTracks().forEach(t => t.stop()); wakeStream = null; }
+  clearInterval(endTimer); endTimer = null;
+  turnStartedAt = 0;
+  meterDetach();
+  if(mark) setState(uiState() || "idle");
+  convo.hidden = true;
+  closeMicPanel();
+  convoBtn.classList.remove("on");
+  blip(420, 90, 0.035);
+}
+
+function sliceLoop(){
+  if(!convoOn || !wakeStream) return;
+  const mimes = ["audio/webm;codecs=opus", "audio/webm"];
+  const mime = window.MediaRecorder
+    ? mimes.find(m => MediaRecorder.isTypeSupported(m)) : "";
+  try{
+    wakeRec = mime ? new MediaRecorder(wakeStream, {mimeType:mime})
+                   : new MediaRecorder(wakeStream);
+  }catch(e){ convoStop(); return; }
+  wakeChunks = [];
+  wakeRec.ondataavailable = (e) => { if(e.data && e.data.size) wakeChunks.push(e.data); };
+  wakeRec.onstop = () => {
+    const blob = new Blob(wakeChunks, {type:(wakeRec && wakeRec.mimeType) || "audio/webm"});
+    handleSlice(blob);
+    if(convoOn) setTimeout(sliceLoop, 60);
+  };
+  wakeRec.start();
+  setTimeout(() => {
+    try{ if(wakeRec && wakeRec.state === "recording") wakeRec.stop(); }catch(e){}
+  }, engaged ? ENGAGED_SLICE_MS : SLICE_MS);
+}
+
+async function handleSlice(blob){
+  if(!convoOn || blob.size < 1500){ maybeFinish(); return; }
+  if(wakeBusy){ maybeFinish(); return; }        // never queue transcriptions
+  const peak = slicePeak; slicePeak = 0;
+  if(peak < PEAK_GATE && !engaged){ maybeFinish(); return; }   // silence is free
+  wakeBusy = true;
+  try{
+    const b64 = await new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(String(fr.result).split(",")[1]);
+      fr.onerror = rej; fr.readAsDataURL(blob);
+    });
+    const d = await api("/api/transcribe", {audio:b64, mime:blob.type, quick:!engaged});
+    const text = ((d && d.text) || "").trim();
+
+    /* A quiet slice is not a broken microphone. ND says "[No speech detected]"
+       whenever a slice held nothing worth transcribing, which at this slice
+       length is most of them. Only a real failure should be surfaced. */
+    const fatal = text.startsWith("[Transcription error") || text.startsWith("[Whisper:");
+    const empty = !text || text.startsWith("[No speech") || text.startsWith("[No response");
+
+    if(fatal){
+      if(!sttWarned){
+        sttWarned = true;
+        convoSay("cannot hear", "#d84830", text.replace(/^\[|\]$/g, ""));
+        node("err", "speech to text is not working", text);
+        if(bigMark) bigMark.set("error");
+      }
+      maybeFinish(); return;
+    }
+    if(empty){ maybeFinish(); return; }
+
+    // Something transcribed, so whatever went wrong before is over.
+    if(sttWarned){
+      sttWarned = false;
+      if(bigMark) bigMark.set(engaged ? "hear" : "listen");
+      convoSay(engaged ? "go ahead" : "listening", engaged ? "#00f5ff" : "#4a9fd8", "");
+    }
+
+    if(!engaged){
+      // Open mode takes any speech as the start of a turn. Monitor mode waits
+      // to hear its name first.
+      // Test the previous armed slice joined to this one as well: at 1.4s a
+      // boundary can fall inside "hey Elena" and neither half would match.
+      const joined = (prevArmed + " " + text).trim();
+      const wake = heardWake(text) || heardWake(joined);
+      prevArmed = text;
+      if(MODE === "open" || wake){
+        if(busy) return;                 // do not start a turn mid-answer
+        engaged = true; lastVoiceAt = Date.now(); spoken = [];
+        turnStartedAt = Date.now();
+        stopSpeaking("wake");   // barge-in, through the one shared path
+        blip(880, 110, 0.05);
+        bigMark.set("hear"); if(mark) mark.set("hear");
+        prevArmed = "";
+        const rest = wake ? stripWake(text) : text;
+        if(rest) spoken.push(rest);
+        convoSay("go ahead", "#00f5ff", spoken.join(" "));
+      }
+    }else{
+      spoken.push(text); lastVoiceAt = Date.now();
+      convoSay("go ahead", "#00f5ff", spoken.join(" "));
+    }
+  }catch(e){ /* a dropped slice is not worth surfacing */ }
+  finally{ wakeBusy = false; maybeFinish(); }
+}
+
+/* Does this look like a finished thought? A question mark or a full stop plus
+   a short pause is a much better end-of-turn signal than a long silence, and
+   it is what makes "what should I have for dinner?" answerable immediately
+   instead of whenever the room happens to go quiet. */
+function looksComplete(t){
+  return /[.?!]["')\]]?\s*$/.test((t || "").trim());
+}
+
+function maybeFinish(){
+  if(!engaged) return;
+  // While she is working, speech is NOT appended to the turn being answered.
+  // Doing so is what attached a later conversation to an earlier question.
+  // The one exception: a turn parked on an ask_user question IS busy, but the
+  // whole point is that your spoken answer resumes it — so capture it.
+  if(busy && !PENDQ) return;
+  const said = spoken.join(" ").trim();
+  const quiet = Date.now() - lastVoiceAt;
+  const tooLong = turnStartedAt && (Date.now() - turnStartedAt > MAX_UTTERANCE_MS);
+  const need = looksComplete(said) ? END_SILENCE_MS : SILENCE_MS;
+  if(!tooLong && quiet < need) return;
+
+  engaged = false; spoken = []; turnStartedAt = 0;
+  if(!said){
+    bigMark.set("listen");
+    convoSay("listening", "#4a9fd8", "");
+    return;
+  }
+  // A question is open: the utterance answers it and resumes the parked turn,
+  // rather than starting a competing one.
+  if(PENDQ){ bigMark.set("think"); convoSay("answering", "#00f5ff", said); answerByVoice(said); return; }
+  blip(520, 90, 0.04);
+  bigMark.set("think"); convoSay("thinking", "#00f5ff", said);
+  const prevSpeak = SPEAK;
+  SPEAK = !MUTE;                      // conversation mode answers aloud unless muted
+  askVoice(said).finally(() => { SPEAK = prevSpeak; });
+}
+
+/* Endpointing runs on its own clock. It used to run only when a slice finished
+   processing, so the moment you stopped talking went unnoticed until the next
+   transcription landed -- or never, if you kept talking about something else. */
+function endpointTick(){
+  if(convoOn && engaged && !busy) maybeFinish();
+}
+
+async function askVoice(said){
+  /* A spoken question goes to the model that fits, not to the one that spills,
+     and it is answered rather than acted upon. ACT is an explicit opt-in.  */
+  await ask(said, {model: ACT ? MODEL : VOICE_MODEL, agent: ACT});
+  if(!convoOn) return;
+  const last = [...document.querySelectorAll(".node.el .body")].pop();
+  bigMark.set("speak");
+  convoSay("speaking", "#f0f0f0", last ? last.textContent.slice(0, 300) : "");
+  const wait = () => {
+    if(!convoOn) return;
+    if(speaking && !speaking.paused && !speaking.ended){ setTimeout(wait, 250); return; }
+    bigMark.set("listen");
+    convoSay("listening", "#4a9fd8", "");
+  };
+  setTimeout(wait, 400);
+}
+
+function applyMode(){
+  const open = MODE === "open";
+  const b = $("convomode");
+  b.textContent = open ? "open · always on" : "monitor · say " + BRAND;
+  b.classList.toggle("open", open);
+  const a = $("convoact");
+  if(a){
+    a.textContent = ACT ? "tools ON" : "talk only";
+    a.classList.toggle("on", ACT);
+    a.title = ACT
+      ? "Spoken requests can run tools, including shell commands. Off at restart."
+      : "Spoken requests are answered, never acted on. Click to allow tools.";
+  }
+  const h = $("convohint");
+  if(h) h.innerHTML = (open
+    ? "Everything you say is a turn &middot; no wake word"
+    : "Say <b>" + BRAND + "</b> to start")
+    + (ACT ? ' &middot; <b class="warn">tools are on</b>' : "");
+}
+$("convomode").addEventListener("click", (e) => {
+  e.stopPropagation();
+  MODE = (MODE === "open") ? "monitor" : "open";
+  try{ localStorage.setItem("elena_mode", MODE); }catch(err){}
+  applyMode();
+  // Leaving open mode mid-turn should not strand a half-captured utterance.
+  if(MODE === "monitor" && engaged && !busy){ engaged = false; spoken = [];
+    bigMark.set("listen"); convoSay("listening", "#4a9fd8", ""); }
+  blip(MODE === "open" ? 760 : 560, 80, 0.035);
+});
+applyMode();
+
+$("shush").addEventListener("click", (e) => {
+  e.stopPropagation(); stopSpeaking("button");
+});
+
+/* Read-back can be turned off outright. Conversation mode forces speech on
+   because that is the point of it, so the switch has to live here too. */
+$("convomute").addEventListener("click", (e) => {
+  e.stopPropagation();
+  MUTE = !MUTE;
+  const b = $("convomute");
+  b.textContent = MUTE ? "voice off" : "voice on";
+  b.classList.toggle("on", MUTE);
+  try{ localStorage.setItem("elena_mute", MUTE ? "1" : "0"); }catch(err){}
+  if(MUTE) stopSpeaking("button");
+});
+
+$("convoact").addEventListener("click", (e) => {
+  e.stopPropagation();
+  ACT = !ACT;
+  applyMode();
+  blip(ACT ? 980 : 480, 90, 0.04);
+  if(ACT) node("tool", "tools enabled for speech",
+               "spoken requests can now run tools. This resets when ND restarts.");
+});
+
+convoBtn.addEventListener("click", () => { convoOn ? convoStop() : convoStart(); poke(); });
+$("convoexit").addEventListener("click", (e) => { e.stopPropagation(); convoStop(); });
+
+/* Three independent ways out. Escape is bound on the overlay as well as the
+   window because in the ND app this runs inside a WebView, and a host that
+   consumes the key would otherwise leave the mode with no exit at all. */
+convo.addEventListener("keydown", (e) => {
+  if(e.key === "Escape"){
+    e.preventDefault(); e.stopPropagation();
+    // One Escape shuts her up; a second one leaves. Leaving the mode because
+    // you wanted her to stop talking would be an over-reaction to a keypress.
+    if(!stopSpeaking("button")) convoStop();
+  }
+});
+addEventListener("keydown", (e) => { if(e.key === "Escape" && convoOn) convoStop(); }, true);
+convo.addEventListener("click", (e) => {
+  // Only the empty background dismisses; the controls and the mark do not.
+  if(e.target === convo) convoStop();
+});
+// The mark is the obvious thing to reach for to shut her up. Let it work.
+$("bigmark").addEventListener("click", (e) => {
+  e.stopPropagation();
+  stopSpeaking("button");
+});
+
+/* The device picker is reachable from inside the mode, which is where it
+   actually matters. It anchors to whichever control opened it. */
+let micAnchor = micsel;
+$("convomic").addEventListener("click", async (e) => {
+  e.stopPropagation();
+  micAnchor = e.currentTarget;
+  panel.hidden ? await openMicPanel() : closeMicPanel();
+});
+
+addEventListener("keydown", poke, {passive:true});
+addEventListener("wheel", poke, {passive:true});
+scheduleEscape();
+setState("idle");
+probe();
+</script>
+</body>
+</html>
