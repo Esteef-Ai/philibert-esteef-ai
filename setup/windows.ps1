@@ -36,7 +36,7 @@ function Fail($m) {
 }
 function Fetch($url, $out) {
     # curl.exe ships with Windows 10 and 11; it resumes (-C -) if a download was cut off.
-    & $CURL -L --fail -C - -o $out $url
+    & $CURL -L --fail --retry 10 --retry-all-errors --retry-delay 3 -C - -o $out $url
     if ($LASTEXITCODE -ne 0) {
         Fail "Could not download $([IO.Path]::GetFileName($out)). The first start needs the Internet - connect and run this again."
     }
@@ -54,6 +54,9 @@ if (-not (Test-Path $py)) {
     Remove-Item "$dl\python.tar.gz" -ErrorAction SilentlyContinue
 }
 $env:PYTHONNOUSERSITE = "1"     # never pick up this computer's own Python packages
+# pip unpacks through TEMP; keep even that on the drive.
+$env:TEMP = $env:TMP = Join-Path $root "runtime/_download/tmp"
+New-Item -ItemType Directory -Force $env:TEMP | Out-Null
 
 $stamp = Join-Path $rt "python\.philibert-packages"
 $want  = $PKGS -join " "

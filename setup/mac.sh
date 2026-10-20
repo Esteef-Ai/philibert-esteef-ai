@@ -29,7 +29,7 @@ PKGS="psutil==7.2.2 websockets==15.0.1 pywebview==6.2.1"
 step() { echo; echo "== $1"; }
 fail() { echo; echo "!! $1"; read -r -p "Press Enter to close. " _; exit 1; }
 fetch() {
-  curl -L --fail -C - -o "$2" "$1" \
+  curl -L --fail --retry 10 --retry-all-errors --retry-delay 3 -C - -o "$2" "$1" \
     || fail "Could not download $(basename "$2"). The first start needs the Internet - connect and run this again."
 }
 
@@ -44,6 +44,7 @@ if [ ! -x "$PY" ]; then
   rm -f "$DL/python.tar.gz"
 fi
 export PYTHONNOUSERSITE=1      # never pick up the Mac's own Python packages
+export TMPDIR="$ROOT/runtime/_download/tmp"; mkdir -p "$TMPDIR"   # keep even pip's scratch on the drive
 
 STAMP="$RT/python/.philibert-packages"
 if [ ! -f "$STAMP" ] || [ "$(cat "$STAMP")" != "$PKGS" ]; then
