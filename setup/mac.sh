@@ -36,12 +36,21 @@ fetch() {
 echo "Philibert by Esteef.Ai - $ROOT"
 
 # -- first run: Python -------------------------------------------------------
-if [ ! -x "$PY" ]; then
+# Unpack an archive, downloading it first if it is not already here. The stamp
+# files are written only after this succeeds, so a cut-off start resumes.
+# -m: exFAT rejects some of the times stored in the archive.
+unpack() {  # url file into expect
+  if [ -f "$2" ] && tar -xmzf "$2" -C "$3" 2>/dev/null && [ -f "$4" ]; then rm -f "$2"; return; fi
+  fetch "$1" "$2"
+  tar -xmzf "$2" -C "$3" && [ -f "$4" ] || fail "Could not unpack $(basename "$2")."
+  rm -f "$2"
+}
+
+if [ ! -f "$RT/python/.philibert-ready" ]; then
   step "First start: getting Python for this drive (about 20 MB)"
   mkdir -p "$DL" "$RT"
-  fetch "$PY_URL" "$DL/python.tar.gz"
-  tar -xzf "$DL/python.tar.gz" -C "$RT" || fail "Could not unpack Python."
-  rm -f "$DL/python.tar.gz"
+  unpack "$PY_URL" "$DL/python.tar.gz" "$RT" "$PY"
+  echo ok > "$RT/python/.philibert-ready"
 fi
 export PYTHONNOUSERSITE=1      # never pick up the Mac's own Python packages
 export TMPDIR="$ROOT/runtime/_download/tmp"; mkdir -p "$TMPDIR"   # keep even pip's scratch on the drive
@@ -57,14 +66,12 @@ fi
 
 # -- first run: Ollama -------------------------------------------------------
 OLSTAMP="$RT/ollama/.philibert-version"
-if [ ! -f "$OL" ] || { [ -f "$OLSTAMP" ] && [ "$(cat "$OLSTAMP")" != "$OL_VER" ]; }; then
+if [ ! -f "$OLSTAMP" ] || [ "$(cat "$OLSTAMP")" != "$OL_VER" ]; then
   step "First start: getting Ollama, which runs the AI models (about 170 MB)"
   mkdir -p "$DL" "$RT/ollama"
-  fetch "$OL_URL" "$DL/ollama.tgz"
-  tar -xzf "$DL/ollama.tgz" -C "$RT/ollama" || fail "Could not unpack Ollama."
+  unpack "$OL_URL" "$DL/ollama.tgz" "$RT/ollama" "$OL"
   chmod +x "$RT/ollama/ollama" "$RT/ollama/llama-server" 2>/dev/null
   printf '%s' "$OL_VER" > "$OLSTAMP"
-  rm -f "$DL/ollama.tgz"
 fi
 
 # -- data: created once, never overwritten -----------------------------------

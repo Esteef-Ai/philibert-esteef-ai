@@ -42,16 +42,36 @@ function Fetch($url, $out) {
     }
 }
 
+# Unpack an archive, downloading it first if it is not already here. The stamp
+# files above are written only after this succeeds, so a start that was cut off
+# halfway picks up where it stopped.
+function Untar($file, $into) {
+    # -m: exFAT rejects some of the times stored in the archive. Stderr is merged
+    # by hand because, under "Stop", PowerShell 5.1 turns a native tool's first
+    # stderr line into a fatal error.
+    $old = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    & $TAR -xmf $file -C $into 2>&1 | Out-Null
+    $code = $LASTEXITCODE; $ErrorActionPreference = $old
+    return $code
+}
+function Unpack($url, $file, $into, $expect) {
+    if (Test-Path $file) {
+        if ((Untar $file $into) -eq 0 -and (Test-Path $expect)) { Remove-Item $file; return }
+    }
+    Fetch $url $file
+    if ((Untar $file $into) -ne 0 -or -not (Test-Path $expect)) { Fail "Could not unpack $([IO.Path]::GetFileName($file))." }
+    Remove-Item $file -ErrorAction SilentlyContinue
+}
+
 Write-Host "Philibert by Esteef.Ai - $root"
 
 # -- first run: Python ---------------------------------------------------------
-if (-not (Test-Path $py)) {
+$pyStamp = Join-Path $rt "python\.philibert-ready"
+if (-not (Test-Path $pyStamp)) {
     Step "First start: getting Python for this drive (about 30 MB)"
     New-Item -ItemType Directory -Force $dl, $rt | Out-Null
-    Fetch $PY_URL "$dl\python.tar.gz"
-    & $TAR -xzf "$dl\python.tar.gz" -C $rt          # -> runtime\win-x64\python
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $py)) { Fail "Could not unpack Python." }
-    Remove-Item "$dl\python.tar.gz" -ErrorAction SilentlyContinue
+    Unpack $PY_URL "$dl\python.tar.gz" $rt $py           # -> runtime\win-x64\python
+    Set-Content -Path $pyStamp -Value "ok" -Encoding ascii
 }
 $env:PYTHONNOUSERSITE = "1"     # never pick up this computer's own Python packages
 # pip unpacks through TEMP; keep even that on the drive.
@@ -69,15 +89,11 @@ if (-not (Test-Path $stamp) -or (Get-Content $stamp -Raw).Trim() -ne $want) {
 
 # -- first run: Ollama ---------------------------------------------------------
 $olStamp = Join-Path $rt "ollama\.philibert-version"
-$olOld   = (Test-Path $olStamp) -and ((Get-Content $olStamp -Raw).Trim() -ne $OL_VER)
-if (-not (Test-Path $ol) -or $olOld) {
+if (-not (Test-Path $olStamp) -or (Get-Content $olStamp -Raw).Trim() -ne $OL_VER) {
     Step "First start: getting Ollama, which runs the AI models (about 1.5 GB)"
     New-Item -ItemType Directory -Force $dl, (Join-Path $rt "ollama") | Out-Null
-    Fetch $OL_URL "$dl\ollama.zip"
-    & $TAR -xf "$dl\ollama.zip" -C (Join-Path $rt "ollama")
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $ol)) { Fail "Could not unpack Ollama." }
+    Unpack $OL_URL "$dl\ollama.zip" (Join-Path $rt "ollama") $ol
     Set-Content -Path $olStamp -Value $OL_VER -Encoding ascii
-    Remove-Item "$dl\ollama.zip" -ErrorAction SilentlyContinue
 }
 
 # -- data: created once, never overwritten -------------------------------------
