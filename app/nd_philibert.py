@@ -26,6 +26,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -200,7 +201,10 @@ def _repo():
 def _git(*args, timeout=300):
     # exFAT keeps no owner, so git calls every checkout on it "dubious" and refuses.
     cmd = ["git", "-c", f"safe.directory={ROOT.as_posix()}", "-C", str(ROOT), *args]
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+    # No console to type a password into: fail rather than wait forever. Git's own
+    # sign-in window (Git Credential Manager on Windows) still appears if needed.
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env,
                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
 
@@ -239,6 +243,13 @@ def update(log=None):
         try:
             with urllib.request.urlopen(url, timeout=600) as r:
                 z = zipfile.ZipFile(io.BytesIO(r.read()))
+        except urllib.error.HTTPError as e:
+            if e.code == 404:     # what GitHub says about a private repo to a stranger
+                return {"ok": False, "message": "This drive was set up without git, and the Philibert repo is "
+                        "private, so it cannot update itself. Install git, then set the drive up again with "
+                        "git clone (see README) - or download the ZIP from GitHub again and unzip it over "
+                        "this folder. Your data/ and models/ folders are kept either way."}
+            return {"ok": False, "message": f"Could not download the update: {e}"}
         except Exception as e:
             return {"ok": False, "message": f"Could not download the update: {e}"}
         top = z.namelist()[0].split("/")[0]

@@ -11,18 +11,28 @@ You need: a USB drive formatted **exFAT** (works on Windows and Mac), with at le
 **25 GB** free (more if you want the bigger models), and an Internet connection for
 the first start.
 
+This repository is private. You need a GitHub account that has been invited to it
+(accept the invite from the email or github.com/notifications), and **git**:
+- **Windows**: install [Git for Windows](https://git-scm.com/download/win). The first
+  `git clone` opens a GitHub sign-in window; sign in once and updates work from then on.
+- **Mac**: run `git --version` in Terminal; if git is missing macOS offers to install
+  it. For the sign-in, install the [GitHub CLI](https://cli.github.com) and run
+  `gh auth login` once, then `gh auth setup-git`.
+
 1. Make a folder on the drive, e.g. `Philibert`.
 2. Put this repository in it - either:
    - **with git** (makes updating quickest): open a terminal in that folder and run
      ```
-     git clone https://github.com/sskrobe/philibert.git .
+     git clone https://github.com/sskrobe/philibert-esteef-ai.git .
      ```
      (the `.` at the end means "into this folder"; the folder must be empty).
      You never need git again after this - the **UPDATE** button does it. If you do
      run git yourself on Windows and it says *dubious ownership*, that is exFAT
      having no file owners; run `git config --global --add safe.directory "*"` once.
    - **without git**: on GitHub click **Code > Download ZIP**, and unzip it so that
-     `Start-Windows.bat` sits directly inside your folder.
+     `Start-Windows.bat` sits directly inside your folder. Note that such a drive
+     cannot update itself (the repository is private) - to update, download the ZIP
+     again and unzip it over the folder.
 3. Start it:
    - **Windows**: double-click `Start-Windows.bat`
    - **Mac**: double-click `Start-Mac.command`. If macOS says it cannot be opened,

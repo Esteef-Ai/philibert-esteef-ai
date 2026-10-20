@@ -11213,26 +11213,67 @@ window.addEventListener('error', function (e) {
   if (e && e.target && e.target !== window && (e.target.src || e.target.href)) {
     window.__ndErrs.push('failed to load ' + (e.target.src || e.target.href)); return;
   }
-  window.__ndErrs.push(String((e && (e.message || (e.error && e.error.message))) || e));
+  var msg = e && (e.message || (e.error && e.error.message));
+  if (!msg) {
+    var t = e && e.target;
+    msg = 'error event from ' + (t && t !== window ? (t.tagName || (t.constructor && t.constructor.name) || 'an object')
+                                                   : 'the window') + (t && t.url ? ' ' + t.url : '');
+  }
+  window.__ndErrs.push(String(msg) + (e && e.filename ? ' (' + e.filename + ':' + e.lineno + ')' : ''));
 }, true);
 window.addEventListener('unhandledrejection', function (e) {
   window.__ndErrs.push('unhandled rejection: ' + String(e && e.reason));
 });
+(function () {
+  // A bug inside fetch().then(...) that a .catch swallows never reaches the console.
+  function isBug(e) {
+    if (!e || typeof e !== 'object') return false;
+    if (e instanceof ReferenceError || e instanceof SyntaxError || e instanceof RangeError) return true;
+    return e instanceof TypeError && !/fetch|network|load failed|aborted/i.test(String(e.message));
+  }
+  function wrap(h) {
+    if (typeof h !== 'function') return h;
+    return function (e) {
+      if (isBug(e)) {
+        var at = String(e.stack || '').split('\n')[1] || '';
+        window.__ndErrs.push('hidden by a .catch: ' + e.name + ': ' + e.message + ' ' + at.trim());
+      }
+      return h.apply(this, arguments);
+    };
+  }
+  var then0 = Promise.prototype.then, catch0 = Promise.prototype['catch'];
+  Promise.prototype.then = function (ok, bad) { return then0.call(this, ok, wrap(bad)); };
+  Promise.prototype['catch'] = function (bad) { return catch0.call(this, wrap(bad)); };
+})();
 """
 _BROWSER_PROBE = r"""
 (function () {
   var out = {errors: (window.__ndErrs || []).slice(0, 8), canvases: []};
   Array.prototype.slice.call(document.querySelectorAll('canvas')).forEach(function (c) {
     var r = c.getBoundingClientRect();
+    var blank = null;
+    try {
+      // Only a canvas the page already draws on in 2d; never create a context.
+      var ctx = c.__ndCtx2d || (c.getContext && c.getContext('2d', {willReadFrequently: true}));
+      if (ctx && c.width > 0 && c.height > 0) {
+        var d = ctx.getImageData(0, 0, c.width, c.height).data, seen = {}, n = 0;
+        var step = Math.max(1, Math.floor((c.width * c.height) / 4000));
+        for (var p = 0; p < c.width * c.height && n < 2; p += step) {
+          var k = d[p * 4] + ',' + d[p * 4 + 1] + ',' + d[p * 4 + 2] + ',' + d[p * 4 + 3];
+          if (!seen[k]) { seen[k] = 1; n++; }
+        }
+        blank = n < 2;
+      }
+    } catch (err) { blank = null; }
     out.canvases.push({id: c.id || '', cls: c.className || '', w: Math.round(r.width), h: Math.round(r.height),
-                       bw: c.width, bh: c.height});
+                       bw: c.width, bh: c.height, blank: blank});
   });
   return out;
 })()
 """
 
 
-def browser_probe(url, settle=5.0):
+def browser_probe(url, settle=10.0):
     """Load `url` in a headless browser. {"errors": [...], "canvases": [...]} or {"why": str}."""
     try:
         sys.path.insert(0, str(Path(__file__).parent))
@@ -11272,14 +11313,23 @@ def serve_check(workspace, wait=20):
     s_ = socket.socket(); s_.bind(("127.0.0.1", 0)); port = s_.getsockname()[1]; s_.close()
     env = dict(os.environ, PORT=str(port), VIZ_PORT=str(port), APP_PORT=str(port),
                SERVER_PORT=str(port), HTTP_PORT=str(port), PYTHONUNBUFFERED="1")
+    # Ports that answer BEFORE the app starts belong to something else - ND itself
+    # among them (Elena Live's server names 7788 to read from ND; ND answered first
+    # and the browser check probed ND's own page instead of the app).
+    try:
+        _src0 = srv.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        _src0 = ""
+    taken = {int(x) for x in set(re.findall(r"\b(\d{4,5})\b", _src0))
+             if 1024 < int(x) < 65536 and _http_get(f"http://127.0.0.1:{int(x)}/", timeout=1)[0] is not None}
     out_file = tempfile.NamedTemporaryFile(prefix="nd_serve_", suffix=".log", delete=False)
-    proc = subprocess.Popen([_project_python(workspace), str(srv)], cwd=str(workspace), env=env,
+    proc = subprocess.Popen([_project_python(workspace), str(Path(srv).resolve())], cwd=str(workspace), env=env,
                             stdout=out_file, stderr=subprocess.STDOUT,
                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     try:
         src = srv.read_text(encoding="utf-8", errors="replace")
         ports = [port] + [int(x) for x in re.findall(r"\b(\d{4,5})\b", src)
-                          if 1024 < int(x) < 65536 and int(x) != port][:4]
+                          if 1024 < int(x) < 65536 and int(x) != port and int(x) not in taken][:4]
         base, t0 = None, time.time()
         while time.time() - t0 < wait and base is None:
             if proc.poll() is not None:
@@ -11289,7 +11339,7 @@ def serve_check(workspace, wait=20):
             except OSError:
                 logtxt = ""
             for m in re.findall(r"https?://(?:127\.0\.0\.1|localhost|0\.0\.0\.0):(\d{2,5})", logtxt):
-                if int(m) not in ports:
+                if int(m) not in ports and int(m) not in taken:
                     ports.append(int(m))
             for pt in ports:
                 code, _ = _http_get(f"http://127.0.0.1:{pt}/", timeout=2)
@@ -11320,7 +11370,7 @@ def serve_check(workspace, wait=20):
             pr = browser_probe(base)
             if pr.get("why"):
                 log(f"Browser check skipped: {pr['why']}", "info")
-            for e in pr.get("errors") or []:
+            for e in list(dict.fromkeys(pr.get("errors") or []))[:6]:
                 problems.append(("script error in the browser: " + str(e)[:200], "error"))
             for cv in pr.get("canvases") or []:
                 if (cv.get("w") or 0) == 0 or (cv.get("h") or 0) == 0:
@@ -11334,6 +11384,12 @@ def serve_check(workspace, wait=20):
                                      "is still the default 300x150 - the script never sized it (set "
                                      "canvas.width/height from its laid-out size times devicePixelRatio, "
                                      "on load and on resize) and never drew at that size", "never sized"))
+                elif cv.get("blank"):
+                    name = "#" + cv["id"] if cv.get("id") else ("canvas." + cv["cls"] if cv.get("cls") else "a canvas")
+                    problems.append((f"{name} is sized but still blank after the page ran - it draws "
+                                     "nothing. Either its draw code never runs, or the data it draws "
+                                     "never reaches the page (check that the server actually serves "
+                                     "or passes on what the script asks for)", "draws nothing"))
         return {"server": srv.name, "problems": problems, "why": "", "html": html}
     finally:
         try:
@@ -11346,6 +11402,93 @@ def serve_check(workspace, wait=20):
             pass
 
 
+_ERR_AT = re.compile(r"https?://[^/\s]+/([^\s:()]+\.m?js):(\d+)(?::\d+)?")
+_ROUTE_LINE = re.compile(r"""(?:path|self\.path|route|url)\s*(?:==|\.startswith\(|in\s)|@\w+\.(?:get|route|post)\(|["']/api/""")
+
+
+def _lines_around(text, line_no, before=12, after=18):
+    ls = text.splitlines()
+    a, b = max(0, line_no - 1 - before), min(len(ls), line_no + after)
+    return "\n".join(ls[a:b])
+
+
+def serve_repair_prompt(res, workspace, lines=None):
+    """The repair prompt for a serve/browser check result, carrying excerpts that
+    fit the problems (whole files overflowed a 32K window)."""
+    probs = res["problems"]
+    lines = lines or "\n".join(f"  {u} -> {c}" for u, c in probs)
+    kinds = {c for _, c in probs}
+    ws = Path(workspace)
+    parts, budget = [], 10000
+    # load / layout problems: the page is the evidence
+    if kinds & {404, 500, "zero size", "never sized"} or any(isinstance(c, int) for c in kinds):
+        page_html = res.get("html") or ""
+        parts.append("The page as the server sends it:\n-----\n" + page_html[:7000]
+                     + ("\n...(truncated)" if len(page_html) > 7000 else ""))
+    # script errors: the lines around where each one happened
+    seen = set()
+    for u, c in probs:
+        m = _ERR_AT.search(str(u))
+        if c != "error" or not m or m.group(0) in seen:
+            continue
+        seen.add(m.group(0))
+        cands = [p for p in ws.rglob(Path(m.group(1)).name) if ".nd_backups" not in p.parts]
+        if cands:
+            try:
+                txt = cands[0].read_text(encoding="utf-8", errors="replace")
+                parts.append(f"{cands[0].name} around line {m.group(2)}:\n-----\n"
+                             + _lines_around(txt, int(m.group(2))))
+            except OSError:
+                pass
+    # a canvas that draws nothing: where the script gets its data, and what the server serves
+    if "draws nothing" in kinds:
+        mod = build_plan_mod()
+        for src in _SCRIPT_SRC.findall(res.get("html") or "")[:4]:
+            if "elena_mark" in src or re.match(r"^[a-z]+://|^//", src, re.I):
+                continue
+            cands = [p for p in ws.rglob(Path(src).name) if ".nd_backups" not in p.parts]
+            if cands:
+                try:
+                    txt = cands[0].read_text(encoding="utf-8", errors="replace")
+                    blank_ids = [re.escape(m) for u, c in probs if c == "draws nothing"
+                                 for m in re.findall(r"#([\w-]+)", str(u))]
+                    data_anchor = re.compile(
+                        r"\bfetch\(|function\s+(?:poll|setState|ingest\w*|load\w*)\b|state\.\w+\.\w+"
+                        + "".join("|" + b for b in blank_ids))
+                    parts.append(f"{cands[0].name} (where it fetches and receives data):\n-----\n"
+                                 + script_excerpt(txt, budget=3500, before=2, after=14,
+                                                  anchor=data_anchor))
+                except OSError:
+                    pass
+        try:
+            srv_txt = (ws / res["server"]).read_text(encoding="utf-8", errors="replace")
+            routes = [l.rstrip() for l in srv_txt.splitlines() if _ROUTE_LINE.search(l)][:40]
+            if routes:
+                parts.append(f"{res['server']} - the lines that decide what it serves:\n-----\n"
+                             + "\n".join(routes))
+        except OSError:
+            pass
+    shown, used = [], 0
+    for p in parts:
+        if used + len(p) > budget:
+            p = p[:max(0, budget - used)] + "\n...(cut)"
+        shown.append(p); used += len(p)
+        if used >= budget:
+            break
+    return (f"ND started {res['server']} and loaded its page in a real browser. These are "
+            f"wrong:\n{lines}\n" + (f"\nServer output:\n{res['why']}\n" if res.get("why") else "")
+            + "\nFix it with the smallest change. A file that did not load: the page's path is "
+            "wrong (use the path the server serves) or the server does not serve it. A script "
+            "error (including one a .catch hides): fix the line it names. A canvas with no "
+            "size: give it or its container a real width and height in the page's CSS. A "
+            "canvas that draws nothing: find where its data should come from and make it "
+            "arrive - if the script asks the server for something it does not serve, add that "
+            "to " + res["server"] + ". Change only the page, its scripts, or " + res["server"] + "."
+            + ("\n\nWhat you need is below (no need to read these files first; edit with "
+               "edit_file, old_text copied exactly from these lines):\n\n" + "\n\n".join(shown)
+               if shown else ""))
+
+
 def repair_serving(model, workspace, req_id, session_id, allow_all, should_cancel, agent_mode):
     """Serve check, one repair step if the page cannot load what it asks for. Returns a note."""
     if not _config.get("agent_serve_check", True):
@@ -11356,17 +11499,7 @@ def repair_serving(model, workspace, req_id, session_id, allow_all, should_cance
     lines = "\n".join(f"  {u} -> {c}" for u, c in res["problems"])
     log(f"Serve check: {res['server']} - {len(res['problems'])} problem(s) - one repair step", "warn")
     agent_activity(req_id, "retry", "serve check", f"{len(res['problems'])} problem(s)", ok=False)
-    page_html = (res.get("html") or "")
-    shown = page_html if len(page_html) <= 16000 else page_html[:16000] + "\n...(truncated)"
-    prompt = (f"ND started {res['server']} and loaded its page in a real browser. These are "
-              f"wrong:\n{lines}\n" + (f"\nServer output:\n{res['why']}\n" if res["why"] else "")
-              + "\nFix it with the smallest change. A file that did not load: the page's path is "
-              "wrong (use the path the server serves) or the server does not serve it. A script "
-              "error: fix the script. A canvas with no size: give it or its container a real "
-              "width and height in the page's CSS. Change only the page, its script, or "
-              + res["server"] + "."
-              + ("\n\nThe page as the server sends it (no need to read it first):\n-----\n" + shown
-                 if shown else ""))
+    prompt = serve_repair_prompt(res, workspace, lines)
     try:
         process_ai_response_with_tools(
             model, [{"role": "user", "content": prompt}], workspace=workspace,
@@ -11416,13 +11549,13 @@ _JS_ANCHOR = re.compile(
     r"ingest\w*|on\w*State|tick)\b|(?:setState|poll|update\w*|ingest\w*)\s*[:=]\s*(?:async\s+)?function")
 
 
-def script_excerpt(js, budget=9000, before=4, after=30):
+def script_excerpt(js, budget=9000, before=4, after=30, anchor=None):
     """The parts of a script a wiring fix needs: its element lookups and where data
-    arrives. Whole lines, in order, gaps marked with '...'."""
+    arrives (or whatever `anchor` matches). Whole lines, in order, gaps marked '...'."""
     lines = js.splitlines()
     keep = set()
     for n, line in enumerate(lines):
-        if _JS_ANCHOR.search(line):
+        if (anchor or _JS_ANCHOR).search(line):
             span = after if not re.search(r"getElementById|querySelector", line) else 2
             keep.update(range(max(0, n - before), min(len(lines), n + span + 1)))
     out, last, size = [], -2, 0
