@@ -64,6 +64,7 @@ from a USB drive).
 | `models.json` | the models the list offers               | yes     |
 | `runtime/` | Python and Ollama, per type of computer     | no - downloaded on first start |
 | `models/`  | the downloaded AI models                    | no - downloaded when picked |
+| `speech/`  | listening (Whisper) and speaking (voices)   | no - downloaded on first start |
 | `data/`    | your settings, notes and chat history       | no - yours |
 | `secrets/` | passwords you add later (encrypted)         | no - yours |
 

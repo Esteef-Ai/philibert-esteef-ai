@@ -22,7 +22,10 @@ $OL_URL = "https://github.com/ollama/ollama/releases/download/$OL_VER/ollama-win
 # The whole tested set, dependencies included, so a new release cannot slip in.
 $PKGS   = @("psutil==7.2.2", "websockets==15.0.1", "pywebview==6.2.1", "pythonnet==3.1.0",
             "clr_loader==0.3.1", "cffi==2.1.1", "pycparser==3.0", "bottle==0.13.4",
-            "proxy_tools==0.1.0", "typing_extensions==4.15.0")
+            "proxy_tools==0.1.0", "typing_extensions==4.15.0",
+            # speech: Whisper (listening) and Piper (speaking), both on the CPU
+            "faster-whisper==1.2.1", "ctranslate2==4.8.1", "av==17.1.0", "tokenizers==0.22.2",
+            "huggingface_hub==1.20.1", "piper-tts==1.6.0", "onnxruntime==1.28.0", "numpy==2.4.4")
 
 # Windows' own tools by full path: with Git's tools on the PATH, "tar" can be GNU
 # tar, which reads "J:\..." as a remote host and fails.
@@ -110,6 +113,12 @@ $env:OLLAMA_KV_CACHE_TYPE   = "q8_0"
 $env:OLLAMA_NOPRUNE         = "1"     # never delete model files on start
 $env:OLLAMA_LOAD_TIMEOUT    = "30m"   # a USB hard drive can take minutes to load a big model
 
+# Speech models and voices live on the drive too (Whisper downloads through
+# Hugging Face's cache, which would otherwise land in the user's profile).
+$env:HF_HOME        = Join-Path $root "speech/hf"
+$env:ND_VOICES_DIR  = Join-Path $root "speech/voices"
+$env:HF_HUB_DISABLE_TELEMETRY = "1"
+
 $env:PHILIBERT_ROOT = $root
 $env:ND_PORTABLE    = "1"
 $env:ND_DATA_DIR    = $data
@@ -130,10 +139,11 @@ try {
     # A model that suits this computer, and the notes embedder - only if missing.
     & $py (Join-Path $root "app\nd_philibert.py") --first-run
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Some models could not be downloaded. Philibert will start anyway;"
+        Write-Host "Some models or speech files could not be downloaded. Philibert will start anyway;"
         Write-Host "connect to the Internet and pick a model in the list to download it."
     }
 
+    $env:HF_HUB_OFFLINE = "1"     # from here on, speech uses only what is on the drive
     & $py $app
 }
 finally {

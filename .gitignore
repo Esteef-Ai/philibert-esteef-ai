@@ -1,6 +1,7 @@
 # What each drive makes for itself - never in the repo.
 /runtime/
 /models/
+/speech/
 /data/
 /secrets/
 /VERSION

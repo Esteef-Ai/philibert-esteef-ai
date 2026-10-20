@@ -24,7 +24,9 @@ APP="$ROOT/app/NeuralDock_launcher.py"
 PY_URL="https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.11.17%2B20261003-$PYA-install_only.tar.gz"
 OL_VER="v0.40.4"
 OL_URL="https://github.com/ollama/ollama/releases/download/$OL_VER/ollama-darwin.tgz"
-PKGS="psutil==7.2.2 websockets==15.0.1 pywebview==6.2.1"
+# Speech (faster-whisper, piper-tts) as on Windows; onnxruntime is left to pip
+# because 1.28 has no Intel-Mac build.
+PKGS="psutil==7.2.2 websockets==15.0.1 pywebview==6.2.1 faster-whisper==1.2.1 ctranslate2==4.8.1 piper-tts==1.6.0"
 
 step() { echo; echo "== $1"; }
 fail() { echo; echo "!! $1"; read -r -p "Press Enter to close. " _; exit 1; }
@@ -87,6 +89,11 @@ export OLLAMA_KV_CACHE_TYPE=q8_0
 export OLLAMA_NOPRUNE=1          # never delete model files on start
 export OLLAMA_LOAD_TIMEOUT=30m   # a USB hard drive can take minutes to load a big model
 
+# Speech models and voices live on the drive too.
+export HF_HOME="$ROOT/speech/hf"
+export ND_VOICES_DIR="$ROOT/speech/voices"
+export HF_HUB_DISABLE_TELEMETRY=1
+
 export PHILIBERT_ROOT="$ROOT"
 export ND_PORTABLE=1
 export ND_DATA_DIR="$DATA"
@@ -106,8 +113,9 @@ for _ in $(seq 1 60); do
 done
 
 "$PY" "$ROOT/app/nd_philibert.py" --first-run || {
-  echo "Some models could not be downloaded. Philibert will start anyway;"
+  echo "Some models or speech files could not be downloaded. Philibert will start anyway;"
   echo "connect to the Internet and pick a model in the list to download it."
 }
 
+export HF_HUB_OFFLINE=1      # from here on, speech uses only what is on the drive
 "$PY" "$APP"

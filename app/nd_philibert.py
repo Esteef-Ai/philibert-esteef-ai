@@ -166,6 +166,97 @@ def _pull_run(tag, log):
         _say(log, f"Download of {tag} failed: {e}", "warn")
 
 
+# -- speech -------------------------------------------------------------------
+SPEECH = ROOT / "speech"            # HF_HOME (Whisper models) and voices/, set by setup
+VOICE = "en_US-amy-medium"
+VOICE_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/"
+WHISPER_MODELS = ("small.en", "base.en")     # requests / the wake word
+
+
+def speech_ready():
+    """Voice and both Whisper models already on the drive (checked without the
+    network, so an offline start stays quiet)."""
+    voices = Path(os.environ.get("ND_VOICES_DIR") or SPEECH / "voices")
+    hub = Path(os.environ.get("HF_HOME") or SPEECH / "hf") / "hub"
+    whisper = all(any((hub / f"models--Systran--faster-whisper-{m}" / "snapshots").glob("*/model.bin"))
+                  for m in WHISPER_MODELS)
+    return (voices / f"{VOICE}.onnx").exists() and (voices / f"{VOICE}.onnx.json").exists() and whisper
+
+
+def get_speech():
+    """Whisper models and one voice onto the drive, so listening and speaking work
+    offline. Returns a list of what failed."""
+    bad = []
+    voices = Path(os.environ.get("ND_VOICES_DIR") or SPEECH / "voices")
+    voices.mkdir(parents=True, exist_ok=True)
+    for ext in (".onnx", ".onnx.json"):
+        f = voices / (VOICE + ext)
+        if f.exists():
+            continue
+        print(f"Downloading the voice {f.name} ...", flush=True)
+        try:
+            tmp = f.with_suffix(f.suffix + ".part")
+            with urllib.request.urlopen(VOICE_URL + f.name, timeout=600) as r, open(tmp, "wb") as out:
+                shutil.copyfileobj(r, out)
+            tmp.replace(f)
+        except Exception as e:
+            bad.append(f"{f.name}: {e}")
+    try:
+        from faster_whisper.utils import download_model
+        for m in WHISPER_MODELS:
+            print(f"Getting the speech model {m} ...", flush=True)
+            download_model(m)            # cached under HF_HOME on the drive; a no-op once there
+    except Exception as e:
+        bad.append(f"whisper: {e}")
+    return bad
+
+
+# -- warm-up ------------------------------------------------------------------
+# A model loads off a USB drive at the drive's speed - 1-5 minutes on a hard
+# drive - and until it is in memory nothing visible happens. Loading the chosen
+# model the moment the window opens turns that into time spent reading the screen.
+_warming = {}             # tag -> started
+
+
+def loaded():
+    try:
+        with urllib.request.urlopen(OLLAMA_URL + "/api/ps", timeout=5) as r:
+            return [m["name"] for m in json.loads(r.read()).get("models", [])]
+    except Exception:
+        return []
+
+
+def preload(tag, log=None):
+    if not tag or any(_same(tag, m) for m in loaded()):
+        return {"ok": True, "loaded": True}
+    with _lock:
+        if tag in _warming:
+            return {"ok": True, "loading": True}
+        _warming[tag] = time.time()
+
+    def run():
+        t0 = time.time()
+        try:
+            req = urllib.request.Request(OLLAMA_URL + "/api/generate", method="POST",
+                                         data=json.dumps({"model": tag, "keep_alive": "60m"}).encode(),
+                                         headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=1800).read()
+            _say(log, f"{tag} is loaded ({time.time() - t0:.0f}s from the drive)", "ok")
+        except Exception as e:
+            _say(log, f"Warm-up of {tag} failed: {e} - it will load on the first question instead", "warn")
+        finally:
+            with _lock:
+                _warming.pop(tag, None)
+    threading.Thread(target=run, daemon=True).start()
+    return {"ok": True, "loading": True}
+
+
+def load_state():
+    with _lock:
+        w = {t: round(time.time() - s) for t, s in _warming.items()}
+    return {"loaded": loaded(), "loading": w}
+
+
 def first_run():
     """Called by the setup scripts: make sure the drive has the embedder and one chat
     model that suits this machine. Prints progress; returns non-zero on failure."""
@@ -179,14 +270,17 @@ def first_run():
             print(f"This computer's GPU has {gpu_gb()} GB - starting with {d}.", flush=True)
             need.append(d)
     todo = [t for t in need if not any(_same(t, h) for h in have)]
+    speech_bad = [] if speech_ready() else get_speech()
+    for b in speech_bad:
+        print(f"  !! {b}", flush=True)
     if not todo:
-        return 0
+        return 1 if speech_bad else 0
     for t in todo:
         pull(t, wait=True)
     bad = [t for t in todo if _pulls.get(t, {}).get("status") != "done"]
     for t in bad:
         print(f"  !! {t}: {_pulls[t].get('error')}", flush=True)
-    return 1 if bad else 0
+    return 1 if (bad or speech_bad) else 0
 
 
 # ── updates ──────────────────────────────────────────────────────────────────
@@ -284,6 +378,10 @@ def handle(path, body, log=None):
         return view()
     if name == "pull":
         return pull(str(body.get("tag", "")), log)
+    if name == "preload":
+        return preload(str(body.get("tag", "")), log)
+    if name == "load_state":
+        return load_state()
     if name == "version":
         return {"version": version(), "repo": _repo()[0]}
     if name == "update":

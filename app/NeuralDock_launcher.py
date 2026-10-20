@@ -157,6 +157,13 @@ def _portable_defaults():
     _config["obsidian_vault"] = "vault"
     (_CONFIG_DIR / "vault").mkdir(parents=True, exist_ok=True)
     _config.setdefault("online", False)
+    # Speech runs from the drive on the CPU, the same on every computer: no torch
+    # to probe, no CUDA libraries to ship. small.en answers a spoken sentence in a
+    # second or two; large-v3 would be 3 GB to download and slow on a CPU.
+    _config.setdefault("whisper_model", "small.en")
+    _config.setdefault("whisper_wake_model", "base.en")
+    _config.setdefault("whisper_device", "cpu")
+    _config.setdefault("agent_voice", "en_US-amy-medium")
 
 
 def internet_on():
@@ -2672,7 +2679,7 @@ def tts_speak(text):
     except: pass
 
 # ─── Voice: Piper TTS (local, customizable) ───────────────────────────────────
-VOICES_DIR = Path("G:/EsteefAi/Voices")
+VOICES_DIR = Path(os.environ.get("ND_VOICES_DIR") or "G:/EsteefAi/Voices")   # Philibert: <drive>/speech/voices
 _piper_cache = {}     # voice name -> loaded PiperVoice (loading takes ~1s, so cache)
 
 def list_voices():
@@ -2846,14 +2853,17 @@ def transcribe_audio(audio_path, model_override=None, quick=False):
     wav_path = audio_path.with_suffix(".stt.wav")
     made_wav = False
     # 16 kHz mono PCM is what Whisper wants; giving it anything else costs accuracy.
-    ok, _, _ = run(f'ffmpeg -y -i "{audio_path}" -ar 16000 -ac 1 -c:a pcm_s16le '
-                   f'-af "highpass=f=60,lowpass=f=7500,afftdn=nf=-22,dynaudnorm=f=200:g=5" '
-                   f'"{wav_path}" 2>nul')
+    ok = False
+    if shutil.which("ffmpeg"):     # absent on a Philibert host; PyAV decodes webm itself
+        ok, _, _ = run(f'ffmpeg -y -i "{audio_path}" -ar 16000 -ac 1 -c:a pcm_s16le '
+                       f'-af "highpass=f=60,lowpass=f=7500,afftdn=nf=-22,dynaudnorm=f=200:g=5" '
+                       f'"{wav_path}" 2>nul')
     if ok and wav_path.exists() and wav_path.stat().st_size > 200:
         made_wav = True
         src = wav_path
     else:
-        log("ffmpeg convert failed - handing the raw audio to Whisper", "warn")
+        if shutil.which("ffmpeg"):
+            log("ffmpeg convert failed - handing the raw audio to Whisper", "warn")
         src = audio_path
     try:
         s = _whisper_settings()
@@ -8817,6 +8827,64 @@ def _remember_original(req_id, path):
         _orig_by_req.setdefault(req_id, {}).setdefault(key, body)
 
 
+_FENCE = re.compile(r"```(python|py|javascript|js|mjs|typescript|ts|tsx|jsx|html|css)[ \t]*\n(.*?)```", re.S | re.I)
+_NAMED_FILE = re.compile(r"[`'\"(]?([\w./\\-]+\.(?:py|js|mjs|ts|tsx|jsx|html|htm|css|json|md|toml|ya?ml))\b")
+
+
+def _code_lines(text):
+    out = []
+    for l in (text or "").splitlines():
+        t = " ".join(l.split())
+        if (len(t) >= 12 and not t.startswith(("#", "//", "/*", "*", "...", "<!--"))
+                and t not in ("else:", "try:", "finally:")):
+            out.append(t)
+    return out
+
+
+def claimed_code_missing(reply, files, originals=None):
+    """[(block, [files checked])] for code blocks in the reply that are in none of
+    `files` now and were not in them before the turn either."""
+    texts, before = [], []
+    for f in files or []:
+        try:
+            texts.append(set(_code_lines(Path(f).read_text(encoding="utf-8", errors="replace"))))
+        except OSError:
+            pass
+    for body in (originals or {}).values():
+        before.append(set(_code_lines(body)))
+    if not texts:
+        return []
+    out = []
+    for m in _FENCE.finditer(reply or ""):
+        block = m.group(2)  # only blocks tagged as code: test output and logs are not claims
+        lines = _code_lines(block)
+        if len(lines) < 2:
+            continue
+        now_missing = [l for l in lines if not any(l in t for t in texts)]
+        was_there = [l for l in now_missing if any(l in b for b in before)]
+        new_missing = [l for l in now_missing if l not in was_there]
+        if len(new_missing) >= 2 and len(new_missing) >= 0.6 * len(lines):
+            out.append((block.strip("\n"), [str(f) for f in files]))
+    return out
+
+
+def claim_files(reply, workspace, written):
+    """Files written this turn plus workspace files the reply names."""
+    files = [Path(str(w).split(" (")[0]) for w in (written or [])]
+    if workspace:
+        ws = Path(workspace)
+        for name in set(m.group(1) for m in _NAMED_FILE.finditer(reply or "")):
+            q = Path(name)
+            cands = [q] if q.is_absolute() else [ws / q] + [p for p in ws.glob("*/" + q.name)]
+            files += [c for c in cands if c.is_file()]
+    seen, out = set(), []
+    for f in files:
+        k = str(f).lower()
+        if k not in seen and f.is_file():
+            seen.add(k); out.append(f)
+    return out[:8]
+
+
 def _originals_peek(req_id):
     """A run's originals, WITHOUT discarding them (the revert path takes them)."""
     if not req_id:
@@ -12448,8 +12516,9 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                     + (ROUTER_TOOL_SCHEMAS if routing else [])
                     + (DEVICE_TOOL_SCHEMAS if device_snapshot() else []))
     if PORTABLE:
+        _off = set() if internet_on() else {"web_search", "web_fetch"}
         active_tools = [t for t in active_tools
-                        if t.get("function", {}).get("name") not in PORTABLE_DROP_TOOLS]
+                        if t.get("function", {}).get("name") not in (PORTABLE_DROP_TOOLS | _off)]
     pending_images = []          # screen_capture output, attached to the next message
 
     def _tier(name):
@@ -13658,7 +13727,9 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
             # escalating, and never on a UI job (the design gate owns those) or a
             # question (which legitimately ends in prose). It sits BEFORE the
             # test gate: first make the change, then cover it with a test.
-            _edit_task = ((not _ui_job) and bool(workspace)
+            # UI jobs too: the design gate only acts on a page that was WRITTEN,
+            # so a UI fix that ends in prose had no gate (Elena Live polish_05).
+            _edit_task = (bool(workspace)
                           and _wants_code_change(_last_user or _orig_task))
             if (_edit_task and not made_any_edit(all_tool_calls)
                     and _edit_laps < _MAX_EDIT_LAPS and rnd < MAX_ROUNDS):
@@ -14556,6 +14627,41 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                   "ND never ran it. Ask again and say: \"use the write_file tool, one "
                   "file per message\".")
                if _as_text else ""))
+    # Claimed CODE must be on disk, like claimed files (polish_04: the dict edit
+    # failed, the reply showed it as done and "verified OK").
+    try:
+        if (allow_split and workspace and req_id and not stuck_stop and _written_now
+                and _config.get("agent_claim_check", True)):
+            _cfiles = claim_files(final, workspace, _written_now)
+            _claims = claimed_code_missing(final, _cfiles, _originals_peek(req_id))
+            if _claims:
+                log(f"Claim check: {len(_claims)} code block(s) in the reply are not in any file "
+                    "- one repair step", "warn")
+                agent_activity(req_id, "retry", "claimed code", "not on disk", ok=False)
+                _cp = ("Your reply shows this as done, but it is NOT in "
+                       + ", ".join(Path(f).name for f in _cfiles)
+                       + " - the edit that should have put it there did not happen (an "
+                         "edit_file whose old_text did not match changes nothing). Make the "
+                         "change now with edit_file: read the few lines you are replacing "
+                         "first so old_text matches exactly. Do not undo anything else.\n\n"
+                       + "\n\n".join("```\n" + b[:2500] + "\n```" for b, _ in _claims[:2]))
+                try:
+                    process_ai_response_with_tools(
+                        model, [{"role": "user", "content": _cp}], workspace=workspace,
+                        allow_all=allow_all, req_id=req_id, should_cancel=should_cancel,
+                        agent_mode=agent_mode, session_id=session_id, allow_split=False)
+                except Exception as _cre:
+                    log(f"claim repair failed: {_cre}", "error")
+                _left = claimed_code_missing(final, _cfiles, _originals_peek(req_id))
+                _gate_record(req_id, "claim_check", claims=len(_claims), still=len(_left))
+                final = (final or "").rstrip() + (
+                    NL + NL + ("CHECKED ON DISK: code the reply above shows as done was not in "
+                               "the files; one repair step put it there." if not _left else
+                               "CHECKED ON DISK: code the reply above shows as done is NOT in "
+                               + ", ".join(Path(f).name for f in _cfiles)
+                               + " - that change was not made."))
+    except Exception as _cce:
+        log(f"claim check skipped: {_cce}", "warn")
     # A page and its scripts must agree, however the page got written (pair 7:
     # the page came from the ordinary loop, so the build's check never ran).
     try:

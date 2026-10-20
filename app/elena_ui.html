@@ -708,6 +708,30 @@ async function loadCatalog(fit){
   });
   return true;
 }
+/* Warm-up. Off a USB drive a model takes minutes to load, and until it is in
+ * memory a question looks ignored. So the chosen model loads as soon as the page
+ * opens (or it is picked), and the status line says what is happening. */
+let WARM = "", warmTimer = null;
+function warm(tag){
+  if(!tag || WARM === tag) return;
+  WARM = tag;
+  const lab = tag.split("/").pop();
+  api("/api/philibert/preload", {tag}).catch(() => {});
+  clearInterval(warmTimer);
+  const tick = async () => {
+    let d; try{ d = await api("/api/philibert/load_state", {}); }catch(e){ return; }
+    if(WARM !== tag){ clearInterval(warmTimer); return; }
+    const secs = (d.loading || {})[tag];
+    if(secs !== undefined){
+      $("st").textContent = "loading " + lab + " from the drive… " + secs + "s (only the first time)";
+    } else if((d.loaded || []).some(m => m === tag || m === tag + ":latest")){
+      clearInterval(warmTimer);
+      $("st").innerHTML = 'agent mode &middot; <b>ready</b> &middot; ' + esc(lab) + " loaded";
+    }
+  };
+  warmTimer = setInterval(tick, 2000);
+  tick();
+}
 function watchPull(tag, lab){
   const t = setInterval(async () => {
     let d; try{ d = await api("/api/philibert/models", {}); }catch(e){ return; }
@@ -850,6 +874,7 @@ async function probe(){
       const picked = chosenModel();
       if(picked && have.includes(picked)){ MODEL = picked; VOICE_MODEL = picked; }
       $("modelsel").value = MODEL;
+      if(d.portable) warm(MODEL);
     }
   }catch(e){ live = false; }
   $("st").innerHTML = live ? 'agent mode &middot; <b>connected</b>' : "not connected";
