@@ -49,7 +49,7 @@ STAMP="$RT/python/.philibert-packages"
 if [ ! -f "$STAMP" ] || [ "$(cat "$STAMP")" != "$PKGS" ]; then
   step "Installing the app's Python packages onto the drive"
   # shellcheck disable=SC2086
-  "$PY" -m pip install --disable-pip-version-check --no-warn-script-location $PKGS \
+  "$PY" -m pip install --no-cache-dir --disable-pip-version-check --no-warn-script-location $PKGS \
     || fail "Could not install the Python packages. The first start needs the Internet."
   printf '%s' "$PKGS" > "$STAMP"
 fi

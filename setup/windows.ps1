@@ -19,7 +19,10 @@ $app  = Join-Path $root "app\NeuralDock_launcher.py"
 $PY_URL = "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.11.17%2B20261003-x86_64-pc-windows-msvc-install_only.tar.gz"
 $OL_VER = "v0.40.4"
 $OL_URL = "https://github.com/ollama/ollama/releases/download/$OL_VER/ollama-windows-amd64.zip"
-$PKGS   = @("psutil==7.2.2", "websockets==15.0.1", "pywebview==6.2.1")
+# The whole tested set, dependencies included, so a new release cannot slip in.
+$PKGS   = @("psutil==7.2.2", "websockets==15.0.1", "pywebview==6.2.1", "pythonnet==3.1.0",
+            "clr_loader==0.3.1", "cffi==2.1.1", "pycparser==3.0", "bottle==0.13.4",
+            "proxy_tools==0.1.0", "typing_extensions==4.15.0")
 
 # Windows' own tools by full path: with Git's tools on the PATH, "tar" can be GNU
 # tar, which reads "J:\..." as a remote host and fails.
@@ -56,7 +59,7 @@ $stamp = Join-Path $rt "python\.philibert-packages"
 $want  = $PKGS -join " "
 if (-not (Test-Path $stamp) -or (Get-Content $stamp -Raw).Trim() -ne $want) {
     Step "Installing the app's Python packages onto the drive"
-    & $py -m pip install --disable-pip-version-check --no-warn-script-location @PKGS
+    & $py -m pip install --no-cache-dir --disable-pip-version-check --no-warn-script-location @PKGS
     if ($LASTEXITCODE -ne 0) { Fail "Could not install the Python packages. The first start needs the Internet." }
     Set-Content -Path $stamp -Value $want -Encoding ascii
 }
