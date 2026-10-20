@@ -17,7 +17,10 @@ the first start.
      ```
      git clone https://github.com/sskrobe/philibert.git .
      ```
-     (the `.` at the end means "into this folder"; the folder must be empty)
+     (the `.` at the end means "into this folder"; the folder must be empty).
+     You never need git again after this - the **UPDATE** button does it. If you do
+     run git yourself on Windows and it says *dubious ownership*, that is exFAT
+     having no file owners; run `git config --global --add safe.directory "*"` once.
    - **without git**: on GitHub click **Code > Download ZIP**, and unzip it so that
      `Start-Windows.bat` sits directly inside your folder.
 3. Start it:
