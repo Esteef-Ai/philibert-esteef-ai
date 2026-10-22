@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Philibert Image Generation</title>
+<link href="/live/fonts/fonts.css" rel="stylesheet">
+<link rel="icon" href="/live/philibert-p1.svg">
+<style>
+  :root {
+    --navy: #0f172a; --navy-deep: #0a1120; --panel: #111d36; --raise: #162544; --line: #1e3054;
+    --cyan: #00f2fe; --violet: #7c3aed; --amber: #f59e0b; --green: #10b981; --pink: #ff2e88; --red: #ef4444;
+    --txt: #d7e3f4; --dim: #8ea3c4; --faint: #6f86a8;
+    --font: 'Inter', system-ui, sans-serif; --mono: 'JetBrains Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--navy); color: var(--txt); font: 14px var(--font); overflow: hidden; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  .app { display: grid; grid-template-rows: 54px 1fr; height: 100%; }
+  header { display: flex; align-items: center; gap: 14px; padding: 0 18px; background: linear-gradient(180deg, #101b33, #0d1729);
+           border-bottom: 1px solid var(--line); position: relative; }
+  header::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+                  background: linear-gradient(90deg, transparent, rgba(0,242,254,.5), transparent); }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand b { font: 800 15px Montserrat, var(--font); letter-spacing: .12em; color: #fff; }
+  .brand span { font: 10px var(--mono); letter-spacing: .2em; color: var(--cyan); }
+  .spacer { flex: 1; }
+  .btn { font: 11px var(--mono); letter-spacing: .1em; color: var(--dim); background: rgba(22,37,68,.5); border: 1px solid var(--line);
+         border-radius: 6px; padding: 7px 12px; cursor: pointer; white-space: nowrap; transition: color .15s, border-color .15s; text-decoration: none; }
+  .btn:hover { color: var(--cyan); border-color: rgba(0,242,254,.5); }
+  .btn.primary { color: #04131c; background: var(--cyan); border-color: var(--cyan); font-weight: 600; }
+  .btn.primary:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.danger:hover { color: var(--pink); border-color: rgba(255,46,136,.5); }
+  .btn.small { padding: 4px 8px; font-size: 10px; }
+  .main { display: grid; grid-template-columns: 340px 1fr; min-height: 0; }
+  aside { border-right: 1px solid var(--line); background: var(--navy-deep); padding: 18px; overflow: auto; }
+  section { overflow: auto; padding: 18px 22px 40px; min-height: 0; }
+  h1 { font-size: 20px; color: #fff; margin-bottom: 4px; }
+  h2 { font: 600 10.5px var(--font); letter-spacing: .18em; text-transform: uppercase; color: var(--dim); margin: 16px 0 8px; }
+  .lead { color: var(--dim); font-size: 13px; line-height: 1.5; }
+  textarea { width: 100%; min-height: 120px; background: rgba(8,15,30,.8); border: 1px solid var(--line); border-radius: 8px;
+             padding: 10px 12px; outline: none; resize: vertical; line-height: 1.45; }
+  textarea:focus, select:focus, input:focus { border-color: rgba(0,242,254,.6); }
+  select, input { width: 100%; background: rgba(8,15,30,.8); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px;
+                  outline: none; color-scheme: dark; }
+  .sizes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .size { border: 1px solid var(--line); border-radius: 8px; padding: 8px; cursor: pointer; background: rgba(22,37,68,.35);
+          display: flex; align-items: center; gap: 9px; font-size: 12.5px; }
+  .size.on { border-color: var(--cyan); background: rgba(0,242,254,.08); color: #fff; }
+  .size i { display: block; border: 1.5px solid currentColor; border-radius: 2px; flex: none; opacity: .8; }
+  .size small { display: block; color: var(--faint); font: 10px var(--mono); }
+  .go { width: 100%; margin-top: 14px; padding: 11px; font-size: 12px; }
+  .status { margin-top: 10px; font: 11.5px var(--mono); color: var(--cyan); min-height: 16px; }
+  .status.err { color: var(--pink); }
+  details { margin-top: 12px; } summary { cursor: pointer; color: var(--faint); font: 11px var(--mono); letter-spacing: .08em; }
+  .gal { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
+  .gal figure { position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--panel);
+                cursor: zoom-in; aspect-ratio: 1; }
+  .gal img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .gal figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 8px 6px; font-size: 11px; color: #fff;
+                    background: linear-gradient(transparent, rgba(0,0,0,.75)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gal .pending { display: grid; place-items: center; color: var(--cyan); font: 11px var(--mono); cursor: default;
+                  background: repeating-linear-gradient(45deg, var(--panel), var(--panel) 10px, var(--raise) 10px, var(--raise) 20px); }
+  .empty { color: var(--faint); font-size: 13px; padding: 30px 0; }
+  .setup { max-width: 620px; margin: 40px auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 26px 28px; }
+  .rating { display: inline-flex; align-items: center; gap: 8px; font: 11px var(--mono); letter-spacing: .1em; text-transform: uppercase;
+            padding: 4px 10px; border-radius: 12px; border: 1px solid; margin: 14px 0 6px; }
+  .rating.green { color: var(--green); border-color: rgba(16,185,129,.5); }
+  .rating.yellow { color: var(--amber); border-color: rgba(245,158,11,.5); }
+  .rating.red { color: var(--pink); border-color: rgba(255,46,136,.5); }
+  .rating::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .bar { height: 6px; border-radius: 3px; background: var(--raise); overflow: hidden; margin: 16px 0 6px; }
+  .bar div { height: 100%; width: 0; background: var(--cyan); transition: width .4s; }
+  .facts { margin: 14px 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 13px; }
+  .facts dt { color: var(--faint); } .facts dd { color: var(--txt); }
+  .lb { position: fixed; inset: 0; background: rgba(4,8,18,.92); display: none; z-index: 30; padding: 24px; gap: 20px; }
+  .lb.on { display: grid; grid-template-columns: 1fr 300px; }
+  .lb img { max-width: 100%; max-height: calc(100vh - 48px); margin: auto; display: block; border-radius: 6px; }
+  .lb .side { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+  .lb .side p { font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+  .lb .side .k { font: 10.5px var(--mono); color: var(--faint); }
+  .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(10px); z-index: 80; font: 12px var(--mono);
+           background: #102038; border: 1px solid rgba(0,242,254,.4); border-radius: 7px; padding: 9px 15px; opacity: 0;
+           transition: opacity .25s, transform .25s; pointer-events: none; }
+  .toast.on { opacity: 1; transform: translateX(-50%); }
+  @media (max-width: 860px) { .main { grid-template-columns: 1fr; } aside { border-right: none; border-bottom: 1px solid var(--line); }
+                              html, body { overflow: auto; } .lb.on { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand"><b>PHILIBERT</b><span>IMAGE GENERATION</span></div>
+    <div class="spacer"></div>
+    <button class="btn" id="editor" type="button" hidden title="ComfyUI's own node editor, for advanced work">OPEN COMFYUI (ADVANCED)</button>
+  </header>
+  <div id="body" style="min-height:0;overflow:auto"></div>
+</div>
+<div class="lb" id="lb">
+  <img id="lb-img" alt="">
+  <div class="side">
+    <div class="k">PROMPT</div><p id="lb-prompt"></p>
+    <div class="k" id="lb-meta"></div>
+    <button class="btn" id="lb-again" type="button">USE THIS PROMPT AGAIN</button>
+    <a class="btn" id="lb-save" download>SAVE A COPY</a>
+    <button class="btn danger" id="lb-del" type="button">DELETE</button>
+    <div class="spacer"></div>
+    <button class="btn" id="lb-close" type="button">CLOSE</button>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<script src="/live/images.js"></script>
+</body>
+</html>

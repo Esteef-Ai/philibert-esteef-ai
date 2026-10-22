@@ -418,6 +418,22 @@ class Installer:
             self.state["warnings"].append("Retro Vault's game players did not finish downloading; "
                                           "run Setup again with the Internet on.")
 
+    def step_imagegen(self):
+        """Image Generation (ComfyUI) for this computer: its own Python, torch for this
+        chip, ComfyUI, and one model. Other computers set it up from the desktop icon."""
+        py = self.dest / "runtime" / this_platform() / "python" / ("python.exe" if IS_WIN else "bin/python3")
+        env = {**os.environ, "PYTHONNOUSERSITE": "1", "PYTHONIOENCODING": "utf-8"}
+        frac = [0.0]
+
+        def on_line(line):
+            line = line.replace("imagegen: ", "").strip()
+            frac[0] = min(0.99, frac[0] + 0.004)
+            self.emit(frac[0], "Image Generation: " + line[:80])
+        code = self.run_lines([str(py), str(self.dest / "app" / "nd_imagegen.py"), "--install", str(self.dest)], on_line, env)
+        if code != 0:
+            self.state["warnings"].append("Image Generation did not finish setting up; open its icon on the desktop "
+                                          "to finish (it picks up where it stopped).")
+
     def step_shortcut(self):
         if not self.plan.get("shortcut") or not IS_WIN:
             return
@@ -443,6 +459,8 @@ class Installer:
         if self.plan.get("edition") == "full" and (self.plan.get("full") or {}).get("retro_vault", True) \
                 and here_pc in self.pcs:
             steps.append(("games", "Getting Retro Vault's game players", 3, self.step_games))
+        if self.plan.get("edition") == "full" and (self.plan.get("full") or {}).get("image_gen") and here_pc in self.pcs:
+            steps.append(("imagegen", "Setting up Image Generation", 60, self.step_imagegen))
         steps.append(("shortcut", "Finishing", 1, self.step_shortcut))
         self.state["steps"] = [{"id": i, "title": t, "weight": w} for i, t, w, _ in steps]
         self.log(f"---- install to {self.dest} ({', '.join(self.pcs)}, {self.plan.get('edition')}) ----")

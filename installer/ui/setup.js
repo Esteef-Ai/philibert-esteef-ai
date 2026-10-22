@@ -13,12 +13,12 @@
     { id: "os8", name: "Mac OS 8" }, { id: "os9", name: "Mac OS 9.2" }, { id: "macos", name: "macOS" },
     { id: "ios", name: "iOS" }, { id: "android", name: "Android" }, { id: "c64", name: "Commodore 64" }
   ];
-  var SIZE = { theme: 6, sounds: 3, wallpapers: 18, retro: 150 };     // MB, for the totals
+  var SIZE = { theme: 6, sounds: 3, wallpapers: 18, retro: 150, imagegen: 13000 };     // MB, for the totals
   var PC_GB = { windows: 2.5, mac: 0.8 };
 
   var state = {
     page: 0, info: null, places: [], catalog: [], pcs: "both", edition: "slim",
-    themes: {}, retro: true, dest: "", place: null, verdict: null, speed: null,
+    themes: {}, retro: true, imagegen: false, igrating: null, dest: "", place: null, verdict: null, speed: null,
     models: {}, checklist: [], checks: {}, installing: false, result: null
   };
   THEMES.forEach(function (t) { state.themes[t.id] = { on: true, sounds: true, wallpapers: true }; });
@@ -52,6 +52,7 @@
         m("nomic-embed-text", "nomic-embed-text", 0.3, 0.9, "green", "Runs fully on the graphics card - fast.", { required: true, locked: true, kind: "embed", note: "Searches your notes." })];
     },
     default_model: function () { return "qwen3:14b"; },
+    imagegen_rating: function () { return { rating: "green", backend: "cu130", why: "NVIDIA card with 16 GB: about 10-30 seconds a picture." }; },
     check_place: function (path, pcs) {
       var p = mock.places().filter(function (x) { return path.indexOf(x.path) === 0; })[0] || mock.places()[0];
       var ntfsMac = p.fs === "NTFS" && pcs.indexOf("mac") >= 0;
@@ -194,7 +195,7 @@
       var s = state.themes[t.id]; if (!s.on) return;
       mb += SIZE.theme + (s.sounds ? SIZE.sounds : 0) + (s.wallpapers ? SIZE.wallpapers : 0);
     });
-    return mb + (state.retro ? SIZE.retro : 0);
+    return mb + (state.retro ? SIZE.retro : 0) + (state.imagegen ? SIZE.imagegen : 0);
   }
   function modelsGB() {
     return state.catalog.reduce(function (a, m) { return a + (state.models[m.tag] ? m.size_gb : 0); }, 0);
@@ -215,7 +216,16 @@
       $("fastnote").innerHTML = i.fast_gb ? 'AI models run at full speed in <b class="good">' + gb(i.fast_gb) + "</b> on the " + esc(i.fast_kind) + "."
         : '<span class="warn">No graphics card the models can use - they will run on the processor, more slowly. The small models work well.</span>';
     },
-    3: function () { renderThemes(); },
+    3: function () {
+      renderThemes();
+      if (!state.igrating) api("imagegen_rating").then(function (r) {
+        state.igrating = r;
+        var c = { green: "var(--green)", yellow: "var(--amber)", red: "var(--pink)" }[r.rating] || "inherit";
+        $("igrate").innerHTML = '<br><b style="color:' + c + '">This computer: ' + r.rating + "</b> - " + esc(r.why) +
+          " Each other computer sets it up from the desktop icon.";
+        if (!r.backend) { $("imagegen").checked = false; $("imagegen").disabled = true; state.imagegen = false; renderThemes(); }
+      });
+    },
     4: function () { renderPlaces(); },
     5: function () { renderModels(); },
     6: function () { renderChecklist(); },
@@ -257,6 +267,7 @@
     renderThemes();
   });
   $("retro").addEventListener("change", function () { state.retro = $("retro").checked; renderThemes(); });
+  $("imagegen").addEventListener("change", function () { state.imagegen = $("imagegen").checked; renderThemes(); });
 
   /* where */
   function renderPlaces() {
@@ -355,7 +366,7 @@
     var themes = {};
     THEMES.forEach(function (t) { if (state.themes[t.id].on) themes[t.id] = { sounds: state.themes[t.id].sounds, wallpapers: state.themes[t.id].wallpapers }; });
     return { dest: state.dest, pcs: pcsList(), edition: state.edition,
-             full: state.edition === "full" ? { themes: themes, retro_vault: state.retro, default_theme: "win95",
+             full: state.edition === "full" ? { themes: themes, retro_vault: state.retro, image_gen: state.imagegen, default_theme: "win95",
                                               themes_offered: THEMES.map(function (t) { return t.id; }) } : {},
              models: state.catalog.filter(function (m) { return state.models[m.tag]; }).map(function (m) { return m.tag; }),
              shortcut: !!state.checks.shortcut };
@@ -365,7 +376,7 @@
     $("review").innerHTML =
       "<dt>Where</dt><dd>" + esc(p.dest) + "</dd>" +
       "<dt>For</dt><dd>" + (p.pcs.length === 2 ? "Windows and Mac" : p.pcs[0] === "mac" ? "Mac" : "Windows") + "</dd>" +
-      "<dt>Edition</dt><dd>" + (p.edition === "full" ? "Full - " + Object.keys(p.full.themes).length + " themes" + (p.full.retro_vault ? ", Retro Vault" : "") : "Slim") + "</dd>" +
+      "<dt>Edition</dt><dd>" + (p.edition === "full" ? "Full - " + Object.keys(p.full.themes).length + " themes" + (p.full.retro_vault ? ", Retro Vault" : "") + (p.full.image_gen ? ", Image Generation" : "") : "Slim") + "</dd>" +
       "<dt>Models</dt><dd>" + esc(names.join(", ")) + "</dd>" +
       "<dt>Download</dt><dd>about " + gb(needGB()) + "</dd>" +
       "<dt>On this computer</dt><dd>" + (p.shortcut ? "a desktop shortcut" : "nothing") + "</dd>";

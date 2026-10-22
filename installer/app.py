@@ -121,6 +121,14 @@ class Api:
             ok = [m for m in self.catalog() if m.get("auto")][:1]
         return max(ok, key=lambda m: m["size_gb"])["tag"] if ok else ""
 
+    def imagegen_rating(self):
+        """Image Generation on this computer: green / yellow / red, and why."""
+        try:
+            import nd_imagegen
+            return nd_imagegen.rating()
+        except Exception as e:
+            return {"rating": "red", "backend": None, "why": f"Could not check this computer ({e})."}
+
     def check_place(self, dest, pcs):
         dest = str(dest)
         mounts = sorted(core.places(), key=lambda p: len(p["path"]), reverse=True)

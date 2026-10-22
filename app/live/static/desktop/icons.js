@@ -45,6 +45,13 @@
       r(13, 10, 1, 1, YL) + r(16, 10, 1, 1, YL) + r(19, 10, 1, 1, YL) +
       p("M3 30l3-1 2-3 2 1-1 3-3 1z", MR, K) + p("M8 26l9-17", "none", K) + p("M15.5 8.5l3 -4 1 1-3 4", OL, K) +
       '<circle cx="6" cy="27" r="3.5" fill="' + RD + '" stroke="' + K + '"/>',
+    // Image Generation: a painter's palette with a brush across it
+    images:
+      p("M16 4.5c7 0 12.5 4.5 12.5 10 0 3-2.5 4-4.5 3.5s-3.5 1-2.5 3c1 2.5-1 5-5.5 5C9 26 3.5 21 3.5 15S9 4.5 16 4.5z", "#c08040", K) +
+      '<circle cx="9" cy="14" r="2" fill="' + RD + '" stroke="' + K + '"/><circle cx="13" cy="9" r="2" fill="' + YL + '" stroke="' + K + '"/>' +
+      '<circle cx="19.5" cy="8.5" r="2" fill="' + LM + '" stroke="' + K + '"/><circle cx="24" cy="12.5" r="2" fill="' + BL + '" stroke="' + K + '"/>' +
+      '<circle cx="11" cy="20" r="2.5" fill="' + W + '" stroke="' + K + '"/>' +
+      p("M30 2.5l-10 13 1.5 1.5 10-12.5z", MR, K) + p("M20 15.5l-3 3 1 2 3.5-2z", LG, K) + r(15, 19, 2, 2, PU),
     // Control Panel: a window with sliders
     control:
       r(3.5, 5.5, 25, 21, LG, K) + r(4, 6, 24, 4, NV) + r(25, 7, 2, 2, LG) +

@@ -237,6 +237,9 @@ def handle(body, data_dir, apps_dir, shutdown=None):
         return {"ok": True, "settings": settings(data_dir), "themes": themes(data_dir),
                 "apps": apps(apps_dir), "edition": info.get("edition", "slim"),
                 "retro_vault": bool((info.get("full") or {}).get("retro_vault", False)),
+                # chosen in Setup, or set up on any computer since: each computer can set itself up
+                "image_gen": bool((info.get("full") or {}).get("image_gen"))
+                or any(Path(data_dir).parent.glob("runtime/*/comfyui/.philibert-ready")),
                 "now": time.time()}
     if op == "save":
         return {"ok": True, "settings": save_settings(data_dir, body.get("settings"))}

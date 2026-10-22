@@ -131,6 +131,22 @@ _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 APPS_DIR     = Path(os.environ.get("ND_APPS_DIR") or
                     (_CONFIG_DIR.parent / "Apps" if os.environ.get("ND_PORTABLE") == "1" else _CONFIG_DIR / "Apps"))
 CONFIG_FILE  = _CONFIG_DIR / "neuraldock_config.json"
+
+
+def _drive_root():
+    """Philibert: the drive's Philibert folder (data\ is in it)."""
+    return Path(os.environ.get("PHILIBERT_ROOT") or _CONFIG_DIR.parent)
+
+
+def portable_drop():
+    """PORTABLE_DROP_TOOLS, less generate_image once Image Generation is set up on this computer."""
+    try:
+        import nd_imagegen
+        if nd_imagegen.installed(_drive_root()):
+            return PORTABLE_DROP_TOOLS - {"generate_image"}
+    except Exception:
+        pass
+    return PORTABLE_DROP_TOOLS
 _BACKUP_FILE = HERETIC_DIR / "neuraldock_config.json"  # legacy location
 _config = {}
 
@@ -8203,6 +8219,24 @@ def tool_generate_image(a):
     return f"[ERROR generate_image: {err}]"
 
 
+def tool_generate_image_portable(a):
+    """Philibert: the drive's Image Generation add-on (nd_imagegen.py). The picture is
+    handed to the chat the same way as ND's, through a finished job, so it shows inline."""
+    import nd_imagegen
+    log(f"generate_image: {str(a.get('prompt') or '')[:70]}", "info")
+    r, png = nd_imagegen.tool(a, _drive_root(), free_vram_for_comfy)
+    if png is None:
+        return r
+    job_id = str(uuid.uuid4())[:8]
+    with _lock:
+        _gen_jobs[job_id] = {"status": "done", "result": base64.b64encode(png).decode(), "mime": "image/png",
+                             "path": r["path"], "error": None}
+    return (f"[IMAGE job={job_id}] Made it, and saved it as {r['name']} in the Image Generation gallery "
+            f"(seed {r['seed']}).\n"
+            "The image is already shown to the user. Do NOT describe it in detail or claim to have "
+            "inspected it - you cannot see it. Just confirm it was made and ask if they want changes.")
+
+
 _design_reviewer = None
 
 # ─── NeuralDock's own managed browser ─────────────────────────────────────────
@@ -13221,7 +13255,7 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
     if PORTABLE:
         _off = set() if internet_on() else {"web_search", "web_fetch"}
         active_tools = [t for t in active_tools
-                        if t.get("function", {}).get("name") not in (PORTABLE_DROP_TOOLS | _off)]
+                        if t.get("function", {}).get("name") not in (portable_drop() | _off)]
     pending_images = []          # screen_capture output, attached to the next message
 
     def _tier(name):
@@ -13338,7 +13372,7 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
         a, _kvnote = unpack_kv_args(a)
         if _kvnote:
             log(f"{name}: {_kvnote}", "warn")
-        if PORTABLE and name in PORTABLE_DROP_TOOLS:
+        if PORTABLE and name in portable_drop():
             return (f"[NOT AVAILABLE] {name} is not part of {PRODUCT} and never will be - do not "
                     f"call it again. For drive sizes, memory or hardware call computer_info; for "
                     f"files use list_dir / read_file. Otherwise answer from what you know.")
@@ -13370,7 +13404,7 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                 _readonly_run["narrow"] = _readonly_run.get("narrow", 0) + 1
             _readonly_run["n"] += 1
         try:
-            if name == "generate_image": return tool_generate_image(a)
+            if name == "generate_image": return tool_generate_image_portable(a) if PORTABLE else tool_generate_image(a)
             if name == "design_review":
                 if _tests_failing["v"]:
                     log("design_review refused - tests are failing", "warn")
@@ -14772,7 +14806,7 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                 t = _tier(c["name"])
                 if t == "green":
                     continue
-                if PORTABLE and c["name"] in PORTABLE_DROP_TOOLS:
+                if PORTABLE and c["name"] in portable_drop():
                     continue        # refused when it runs: never ask anyone to approve it
                                     # (each Approve came back "not available" - a loop of asks)
                 if c["name"] == "run_shell" and \
@@ -18065,6 +18099,8 @@ class Handler(BaseHTTPRequestHandler):
             bare_path = "/live/notes.html"
         elif bare_path == "/band":
             bare_path = "/live/band.html"
+        elif bare_path == "/images":
+            bare_path = "/live/images.html"
         if bare_path in ("/", "/index.html"):
             if not self.authed():
                 page = PAIR_PAGE.encode("utf-8")
@@ -18118,6 +18154,22 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             if data and self.command != "HEAD":
                 self.wfile.write(data)
+            return
+        if bare_path == "/api/images/file":
+            # Image Generation's gallery: a picture by name, never a path from outside
+            import nd_imagegen
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            f = nd_imagegen.image_file(_drive_root(), (q.get("name") or [""])[0])
+            if not f or not self.authed():
+                self.send_json({"error": "not found"}, 404)
+                return
+            data = f.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "max-age=86400")
+            self.end_headers()
+            self.wfile.write(data)
             return
         if bare_path.startswith("/apps/"):
             # Desktop apps published to <drive>/Apps (nd_retro_desktop.py), never outside it
@@ -18250,7 +18302,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error":"unauthorized","hint":"Send X-ND-Token. Pair in Setup > Devices."}, 401)
             return
 
-        if path in ("/api/notes", "/api/chats", "/api/desktop", "/api/band"):
+        if path in ("/api/notes", "/api/chats", "/api/desktop", "/api/band", "/api/images"):
             # The Notes app (nd_notes.py) and saved chats (nd_chats.py). They
             # write files, so a page from another site in the user's own browser
             # must not be able to drive them.
@@ -18265,6 +18317,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/band":
                 import nd_band
                 self.send_json(nd_band.handle(body, _CONFIG_DIR / "band.db"))
+                return
+            if path == "/api/images":
+                import nd_imagegen
+                self.send_json(nd_imagegen.handle(body, _drive_root(), internet_on(), free_vram_for_comfy))
                 return
             if path == "/api/desktop":
                 import nd_retro_desktop

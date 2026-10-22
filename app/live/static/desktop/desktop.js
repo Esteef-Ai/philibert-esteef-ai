@@ -55,6 +55,7 @@
       { id: "suite", name: "ND Suite", icon: "suite", url: "/full", w: 1280, h: 800, max: true },
     ];
     if (st.retro) list.push({ id: "vault", name: "Retro Vault", icon: "vault", url: "/retro/", w: 1240, h: 800, max: true });
+    if (st.imagegen) list.push({ id: "images", name: "Image Generation", icon: "images", url: "/images", w: 1240, h: 800, title: "Philibert Image Generation" });
     var sh = THEMES[st.settings.theme] ? THEMES[st.settings.theme].shell : "taskbar";
     if (sh === "phone" || sh === "c64")          // no Start menu there: shutting down is an app
       list.push({ id: "power", name: "Shut Down", icon: "shutdown", action: function () { shutdownDialog(); } });
@@ -1120,7 +1121,7 @@
   addEventListener("resize", function () { if (!st.settings.icons || !Object.keys(st.settings.icons).length) renderIcons(); });
 
   api("/api/desktop", { op: "state" }).then(function (d) {
-    st.settings = d.settings || {}; st.themes = d.themes || []; st.apps = d.apps || []; st.retro = !!d.retro_vault;
+    st.settings = d.settings || {}; st.themes = d.themes || []; st.apps = d.apps || []; st.retro = !!d.retro_vault; st.imagegen = !!d.image_gen;
     boot(st.settings.boot !== false);
     applySettings().then(function () {
       applyWallpaper(desk.className.replace(/.*\bwp-(\S+).*/, "$1"));   // sized now the layout is final

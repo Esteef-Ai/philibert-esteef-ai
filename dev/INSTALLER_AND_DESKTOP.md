@@ -252,7 +252,7 @@ or search history, no AI memory, no vault notes, no config, no personal paths.
 - Mac testing: the user will have a Mac soon (model TBD).
 - Whether the code repo also goes public (then the GitHub sign-in step disappears).
 
-## 12. Later: Image Generation add-on (ComfyUI)
+## 12. Image Generation add-on (ComfyUI)
 
 Asked for 2026-10-22, to build after the Full edition. An **extended option** on top of
 a Full install: the installer offers "Image Generation (ComfyUI)" as an add-on (off by
@@ -274,3 +274,27 @@ again only when the add-on is installed (it is in PORTABLE_DROP_TOOLS today).
   minutes per image; the installer should mark it red there.
 - Packages for each Mac chip are pip wheels (torch for macOS arm64), so the drive's
   Mac setup installs them on first start, like the other Mac runtimes.
+
+**Built 2026-10-22 (app/nd_imagegen.py).** What changed from the plan above:
+
+- **Per computer, from the page.** torch differs by chip, so the add-on is set up once
+  per computer: Setup does it for the computer it runs on (Full > Extras > Image
+  Generation, off by default, with this computer's rating), and the Image Generation
+  page offers SET UP ON THIS COMPUTER anywhere else (needs the INTERNET switch on). A
+  Mac never needs Setup for it. The desktop icon shows once any computer has it, or
+  Setup chose it.
+- **Its own Python.** runtime/<plat>/comfyui/python is a second copy of the pinned
+  python-build-standalone, so torch (3 GB) never mixes with the app's packages.
+- **Pins** (setup/pins.json "imagegen"): ComfyUI v0.38.0; torch 2.14.1 + cu130 for an
+  NVIDIA driver 580+, 2.11.0 + cu128 for 570+, the cpu build without NVIDIA (red),
+  PyPI torch on an Apple chip (macOS 14+, yellow). Driver < 570 and Intel Macs: not
+  offered. ComfyUI's own requirements.txt is not pinned further.
+- **Model:** SDXL base 1.0 (6.9 GB, CreativeML Open RAIL++-M), skipped when
+  models/image/checkpoints already has one. Downloads resume.
+- **Running:** 127.0.0.1:8199 (not 8188, so a ComfyUI the person already has is left
+  alone), no window, no browser; Ollama's models are unloaded first; stopped when
+  Philibert exits. Pictures: data/images (+ a .json with prompt and seed beside
+  each); deleting moves them to data/images/.trash.
+- **Chat:** generate_image comes back in portable mode only once this computer has
+  it set up; the picture shows in the chat like ND's. ComfyUI's own editor is one
+  click away (OPEN COMFYUI (ADVANCED)).

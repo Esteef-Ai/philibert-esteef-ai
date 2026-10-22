@@ -51,7 +51,8 @@ def main():
             "--specpath", str(HERE / "build"),
             "--add-data", f"{HERE / 'ui'}{sep}ui", "--add-data", f"{bundle}{sep}bundle",
             "--hidden-import", "core", "--hidden-import", "engine", "--hidden-import", "github_auth",
-            "--paths", str(HERE), str(HERE / "app.py")]
+            "--hidden-import", "nd_imagegen",           # this computer's Image Generation rating
+            "--paths", str(HERE), "--paths", str(REPO / "app"), str(HERE / "app.py")]
     subprocess.run(args, check=True, cwd=str(HERE))
     out = HERE / "dist" / (name + (".exe" if IS_WIN else ".app"))
     print(f"built {out} ({out.stat().st_size / 1e6:.1f} MB)" if out.exists() else "build finished")
