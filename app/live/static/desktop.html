@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Philibert</title>
+<link rel="icon" href="/live/philibert-p1.svg">
+<link href="/live/fonts/fonts.css" rel="stylesheet">
+<link href="/live/desktop/win95.css" rel="stylesheet" id="theme-css">
+</head>
+<body class="theme-win95">
+
+<!-- boot splash -->
+<div id="boot" hidden>
+  <div class="boot-sky"><i class="cl c1"></i><i class="cl c2"></i><i class="cl c3"></i><i class="cl c4"></i><i class="cl c5"></i></div>
+  <div class="boot-logo">
+    <span class="boot-mark" id="boot-mark"></span>
+    <div class="boot-word"><b>Philibert</b><span id="boot-ver">95</span></div>
+  </div>
+  <div class="boot-by">Esteef<b>.Ai</b></div>
+  <div class="boot-bar"><i></i></div>
+</div>
+
+<!-- the desktop -->
+<div id="desk" class="wp-teal">
+  <div id="wallart"></div>
+  <div id="icons" role="list" aria-label="Desktop"></div>
+  <div id="windows"></div>
+</div>
+
+<!-- taskbar -->
+<div id="taskbar">
+  <button id="start" class="btn" type="button" aria-haspopup="true" aria-expanded="false"><span id="start-mark"></span><b>Philibert</b></button>
+  <div id="tasks"></div>
+  <div id="tray" class="sunk">
+    <button id="tray-e3" type="button" title="About Philibert - Esteef.Ai"></button>
+    <span id="clock">--:--</span>
+  </div>
+</div>
+
+<!-- start menu -->
+<div id="startmenu" class="raised" hidden>
+  <div class="band"><span><b>Philibert</b><i id="band-ver">95</i></span></div>
+  <ul id="sm-list"></ul>
+</div>
+<div id="flyout" class="raised" hidden></div>
+
+<!-- screen saver -->
+<canvas id="saver" hidden></canvas>
+
+<!-- shutting down -->
+<div id="safe" hidden><p id="safe-text">It's now safe to unplug your Philibert drive.</p></div>
+
+<script src="/live/desktop/icons.js"></script>
+<script src="/live/desktop/sounds.js"></script>
+<script src="/live/desktop/desktop.js"></script>
+</body>
+</html>

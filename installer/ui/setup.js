@@ -353,7 +353,7 @@
     $("donefacts").innerHTML =
       (win ? "<dt>On Windows</dt><dd>Double-click <b>Start-Windows.bat</b> in that folder.</dd>" : "") +
       (mac ? "<dt>On a Mac</dt><dd>Double-click <b>Start-Mac.command</b>. The first start on a Mac finishes setting up there (with the Internet, once).</dd>" : "") +
-      (p.edition === "full" ? "<dt>Full edition</dt><dd>Your choices are saved. The retro desktop and Retro Vault arrive with the next Philibert update - Update in Philibert fetches them.</dd>" : "") +
+      (p.edition === "full" ? "<dt>Full edition</dt><dd>Philibert opens on the retro desktop (Windows 95 to start; the other themes and Retro Vault arrive with Philibert updates). Philibert Chat is an icon on it.</dd>" : "") +
       "<dt>Your games</dt><dd>" + (p.edition === "full" && p.full.retro_vault ? "Put your own games in <b>Entertainment\\Cartridges</b>, one folder per system." : "-") + "</dd>";
     $("donewarn").textContent = (s.warnings || []).join(" ");
   }

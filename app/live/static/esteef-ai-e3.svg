@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="20 0 260 80" width="520" height="160">
   <!-- Esteef.Ai wordmark E3: ESTEEF + AI in an orbit, node at the bottom left.
        Montserrat ExtraBold 800, capitals, tracked +0.12em. Colours via CSS vars
-       (--ink, --orbit, --ai, --node); defaults are the one-colour black version. -->
+       (ink, orbit, ai, node); defaults are the one-colour black version. -->
   <style>
     text { font-family: Montserrat, Arial, sans-serif; font-weight: 800; letter-spacing: .12em; }
   </style>

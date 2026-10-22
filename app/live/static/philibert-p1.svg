@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
   <!-- Philibert mark P1: the boombox. Speaker eyes, Soft Pulse heartbeat mouth.
-       Colours via CSS vars: --mark (the body) and --bg (the cut-outs); defaults
+       Colours via CSS vars: mark (the body) and bg (the cut-outs); defaults
        are the one-colour black version on paper. -->
   <path d="M62 62 V46 Q62 34 74 34 H126 Q138 34 138 46 V62" fill="none" stroke="var(--mark, #121214)" stroke-width="9" stroke-linecap="round"/>
   <rect x="26" y="60" width="148" height="100" rx="16" fill="var(--mark, #121214)"/>

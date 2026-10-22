@@ -127,6 +127,9 @@ def get_gallery_dir():
 # replace app/ without touching it.
 _CONFIG_DIR  = Path(os.environ["ND_DATA_DIR"]) if os.environ.get("ND_DATA_DIR") else Path(__file__).parent
 _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+# Desktop apps (the Full edition's icons): <drive>\Philibert\Apps beside data\
+APPS_DIR     = Path(os.environ.get("ND_APPS_DIR") or
+                    (_CONFIG_DIR.parent / "Apps" if os.environ.get("ND_PORTABLE") == "1" else _CONFIG_DIR / "Apps"))
 CONFIG_FILE  = _CONFIG_DIR / "neuraldock_config.json"
 _BACKUP_FILE = HERETIC_DIR / "neuraldock_config.json"  # legacy location
 _config = {}
@@ -17695,6 +17698,28 @@ def open_ui(url):
     webbrowser.open(url)
     return False
 
+def _close_portable_browser():
+    """Shut Down on the retro desktop: close the drive's browser window. The window
+    watch below then sees no window and ends the launcher, exactly as if the user
+    had closed it. Done a moment later, so the request that asked gets its answer."""
+    profile = os.path.normcase(os.environ.get("ND_BROWSER_PROFILE") or str(_CONFIG_DIR / "browser"))
+
+    def _go():
+        time.sleep(0.8)
+        try:
+            import psutil
+        except Exception:
+            return
+        for p in psutil.process_iter():
+            try:
+                if any(profile in os.path.normcase(a) for a in (p.cmdline() or [])
+                       if a.startswith("--user-data-dir")):
+                    p.terminate()
+            except Exception:
+                continue
+    threading.Thread(target=_go, daemon=True).start()
+
+
 def _open_portable_browser(url):
     """Open `url` in the drive's Chromium as an app window and wait until it closes.
 
@@ -17986,7 +18011,11 @@ class Handler(BaseHTTPRequestHandler):
         bare_path = urllib.parse.urlparse(self.path).path or "/"
         # Philibert opens on the simple view; the full interface stays at /full.
         if PORTABLE and bare_path in ("/", "/index.html"):
-            bare_path = "/live/"
+            # Full edition: the retro desktop; Slim: Philibert Chat, the one-stop page
+            import nd_retro_desktop
+            bare_path = "/live/desktop.html" if nd_retro_desktop.edition(_CONFIG_DIR) == "full" else "/live/"
+        elif bare_path == "/desktop":
+            bare_path = "/live/desktop.html"
         elif bare_path == "/full":
             bare_path = "/"
         elif bare_path == "/notes":
@@ -18016,6 +18045,21 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
             self.end_headers()
             self.wfile.write(js)
+            return
+        if bare_path.startswith("/apps/"):
+            # Desktop apps published to <drive>/Apps (nd_retro_desktop.py), never outside it
+            import nd_retro_desktop
+            f = nd_retro_desktop.app_file(APPS_DIR, urllib.parse.unquote(bare_path[len("/apps/"):]))
+            if not f or not self.authed():
+                self.send_json({"error": "not found"}, 404)
+                return
+            data = f.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", self._LIVE_TYPES.get(f.suffix.lower(), "application/octet-stream"))
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(data)
             return
         if bare_path == "/live" or bare_path.startswith("/live/"):
             if not self.authed():
@@ -18113,7 +18157,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error":"unauthorized","hint":"Send X-ND-Token. Pair in Setup > Devices."}, 401)
             return
 
-        if path in ("/api/notes", "/api/chats"):
+        if path in ("/api/notes", "/api/chats", "/api/desktop"):
             # The Notes app (nd_notes.py) and saved chats (nd_chats.py). They
             # write files, so a page from another site in the user's own browser
             # must not be able to drive them.
@@ -18124,6 +18168,11 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/chats":
                 import nd_chats
                 self.send_json(nd_chats.handle(body, _CONFIG_DIR / "chats"))
+                return
+            if path == "/api/desktop":
+                import nd_retro_desktop
+                self.send_json(nd_retro_desktop.handle(body, _CONFIG_DIR, APPS_DIR,
+                                                       _close_portable_browser if PORTABLE else None))
                 return
             import nd_notes
             o = obs()
