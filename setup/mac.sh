@@ -15,7 +15,9 @@ case "$(uname -m)" in
   arm64) PYA="aarch64-apple-darwin"; RT="$ROOT/runtime/mac-arm64"; CRP="mac-arm64" ;;
   *)     PYA="x86_64-apple-darwin";  RT="$ROOT/runtime/mac-x64";   CRP="mac-x64" ;;
 esac
-DL="$ROOT/runtime/_download"
+# Per chip: the installer may have fetched these archives already (from a Windows
+# PC, which cannot unpack Mac apps onto exFAT); they are unpacked here, on the Mac.
+DL="$ROOT/runtime/_download/$CRP"
 PY="$RT/python/bin/python3"
 OL="$RT/ollama/ollama"
 APP="$ROOT/app/NeuralDock_launcher.py"

@@ -88,6 +88,19 @@ If the list is empty the screen says "Nothing needs installing on this PC."
 10. **Done** — "Open Philibert now", and how to start it on any PC
    (`Start-Windows.bat` / `Start-Mac.command`).
 
+**Built (2026-10-21):** `installer/` - `core.py` (survey, places, format verdicts,
+speed test past the OS cache, ratings calibrated on a 16 GB RTX 5070 Ti), `engine.py`
+(the install: app files, this computer's runtime complete, the other computers'
+archives pre-downloaded into `runtime\_download\<platform>` for their first start,
+data + welcome notes + `data\install.json`, models through the drive's own Ollama
+with byte progress, voices, optional shortcut), `app.py` (pywebview bridge),
+`ui/` (the wizard; opens in a plain browser with sample data for checking),
+`build.py` (`--dev` = installs from the local repo; release = from GitHub),
+`tests/test_core.py`. Mac apps hold symlinks that a Windows PC cannot write onto
+exFAT, so Mac runtimes are unpacked on the Mac. Still to do: GitHub sign-in (needs an
+OAuth app; skipped while installing from a local folder or a public repo), the Full
+edition's content (choices are recorded now), the Mac build.
+
 Builds: GitHub Actions on Windows and macOS runners (the Mac app must be built on
 macOS). Mac note: files the installer downloads itself are not quarantined, so
 runtimes on the drive start without further Gatekeeper prompts.

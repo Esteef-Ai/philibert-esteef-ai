@@ -1,0 +1,31 @@
+{
+  "about": "What this version of Philibert was tested with. The installer reads this; setup/windows.ps1 and setup/mac.sh carry the same values - change all three together.",
+  "python": {
+    "release": "20261003",
+    "version": "3.11.17",
+    "win-x64":   "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.11.17%2B20261003-x86_64-pc-windows-msvc-install_only.tar.gz",
+    "mac-arm64": "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.11.17%2B20261003-aarch64-apple-darwin-install_only.tar.gz",
+    "mac-x64":   "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.11.17%2B20261003-x86_64-apple-darwin-install_only.tar.gz"
+  },
+  "ollama": {
+    "version": "v0.40.4",
+    "win-x64":   "https://github.com/ollama/ollama/releases/download/v0.40.4/ollama-windows-amd64.zip",
+    "mac-arm64": "https://github.com/ollama/ollama/releases/download/v0.40.4/ollama-darwin.tgz",
+    "mac-x64":   "https://github.com/ollama/ollama/releases/download/v0.40.4/ollama-darwin.tgz"
+  },
+  "chromium": {
+    "version": "156.0.8078.47",
+    "win-x64":   "https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.47/win64/chrome-win64.zip",
+    "mac-arm64": "https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.47/mac-arm64/chrome-mac-arm64.zip",
+    "mac-x64":   "https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.47/mac-x64/chrome-mac-x64.zip"
+  },
+  "packages": {
+    "windows": ["psutil==7.2.2", "websockets==15.0.1", "pywebview==6.2.1", "pythonnet==3.1.0",
+                "clr_loader==0.3.1", "cffi==2.1.1", "pycparser==3.0", "bottle==0.13.4",
+                "proxy_tools==0.1.0", "typing_extensions==4.15.0",
+                "faster-whisper==1.2.1", "ctranslate2==4.8.1", "av==17.1.0", "tokenizers==0.22.2",
+                "huggingface_hub==1.20.1", "piper-tts==1.6.0", "onnxruntime==1.28.0", "numpy==2.4.4"],
+    "mac": ["psutil==7.2.2", "websockets==15.0.1", "pywebview==6.2.1", "faster-whisper==1.2.1",
+            "ctranslate2==4.8.1", "piper-tts==1.6.0"]
+  }
+}

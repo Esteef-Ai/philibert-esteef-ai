@@ -1,11 +1,15 @@
 # What each drive makes for itself - never in the repo.
-/runtime/
-/models/
-/speech/
 /data/
+/models/
+/runtime/
 /secrets/
+/speech/
 /VERSION
-__pycache__/
 *.pyc
+__pycache__/
 .DS_Store
 ._*
+# The installer's build output.
+installer/.buildenv/
+installer/build/
+installer/dist/

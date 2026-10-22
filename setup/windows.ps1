@@ -361,8 +361,9 @@ if (Test-Path $hdrPath) {
     $img = [Drawing.Image]::FromFile($hdrPath)
     $pic = New-Object Windows.Forms.PictureBox
     $pic.Image = $img; $pic.SetBounds(0, 0, 560, 112); $form.Controls.Add($pic)
-    try { $form.Icon = [Drawing.Icon]::FromHandle(([Drawing.Bitmap]$img).Clone((New-Object Drawing.Rectangle(26, 22, 68, 68)), $img.PixelFormat).GetHicon()) } catch {}
 }
+$icoPath = Join-Path $PSScriptRoot "assets\philibert.ico"
+if (Test-Path $icoPath) { try { $form.Icon = New-Object Drawing.Icon($icoPath) } catch {} }
 function New-Label($x, $y, $w, $h, $color, $font) {
     $l = New-Object Windows.Forms.Label
     $l.SetBounds($x, $y, $w, $h); $l.ForeColor = $color; $l.BackColor = $navy
