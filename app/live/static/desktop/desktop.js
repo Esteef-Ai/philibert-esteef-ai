@@ -679,19 +679,37 @@
       '<div id="trash-rows"></div></div><div class="status sunk" id="trash-status">Loading...</div></div>';
     loadTrash();
   }
+  // the Band Manager's deleted rows, as Trash rows: what it was, and which list it came from
+  var BAND_LISTS = { gigs: "Gigs", tours: "Tours", venues: "Venues", contacts: "Contacts", suppliers: "Suppliers", songs: "Songs",
+                     setlists: "Setlists", merch: "Merch", money: "Money", bills: "Bills", reminders: "Reminders", sales: "Sales" };
+  function bandRows(d) {
+    var out = [];
+    Object.keys((d && d.rows) || {}).forEach(function (t) {
+      (d.rows[t] || []).forEach(function (r) {
+        var name = r.name || r.title || r.text || r.what ||
+                   (t === "gigs" ? "Gig on " + r.date : t === "money" ? (r.kind || "entry") + " " + (r.amount || "") + " " + (r.category || "") : "#" + r.id);
+        out.push({ kind: "band", key: t + ":" + r.id, name: name, from: "Band Manager \u203a " + (BAND_LISTS[t] || t), at: r.updated || 0 });
+      });
+    });
+    return out;
+  }
+  function trashSources() {
+    return Promise.all([api("/api/notes", { op: "trash_list" }).catch(function () { return {}; }),
+                        api("/api/chats", { op: "trash_list" }).catch(function () { return {}; }),
+                        api("/api/band", { op: "trash" }).catch(function () { return {}; })]);
+  }
   function loadTrash() {
-    Promise.all([api("/api/notes", { op: "trash_list" }).catch(function () { return {}; }),
-                 api("/api/chats", { op: "trash_list" }).catch(function () { return {}; })]).then(function (r) {
+    trashSources().then(function (r) {
       var rows = (r[0].items || []).map(function (n) {
         return { kind: "note", key: n.name, name: n.title, from: (n.from || "").split("/").slice(0, -1).join("/") || "Notes", at: n.at };
       }).concat((r[1].chats || []).map(function (c) {
         return { kind: "chat", key: c.id, name: c.title, from: c.folder || "Chats", at: c.updated };
-      })).sort(function (a, b) { return b.at - a.at; });
+      })).concat(bandRows(r[2])).sort(function (a, b) { return b.at - a.at; });
       var el = $("trash-rows");
       if (!el) return;
       el.innerHTML = rows.map(function (x, i) {
         return '<div class="row" data-i="' + i + '" title="Double-click to put it back"><span class="n">' +
-               I.svg(x.kind === "note" ? "notes" : "chat", 16) + esc(x.name) + "</span><span>" + esc(x.from) +
+               I.svg(x.kind === "note" ? "notes" : x.kind === "band" ? "band" : "chat", 16) + esc(x.name) + "</span><span>" + esc(x.from) +
                "</span><span>" + esc(new Date(x.at * 1000).toLocaleDateString()) + "</span></div>";
       }).join("");
       $("trash-status").textContent = rows.length + " object(s). Double-click one to put it back.";
@@ -699,7 +717,9 @@
         var row = ev.target.closest("[data-i]");
         if (!row) return;
         var x = rows[+row.dataset.i];
-        (x.kind === "note" ? api("/api/notes", { op: "restore", name: x.key }) : api("/api/chats", { op: "restore", id: x.key }))
+        (x.kind === "note" ? api("/api/notes", { op: "restore", name: x.key })
+         : x.kind === "band" ? api("/api/band", { op: "restore", table: x.key.split(":")[0], id: +x.key.split(":")[1] })
+         : api("/api/chats", { op: "restore", id: x.key }))
           .then(function () { S.play("ding"); loadTrash(); updateTrashIcon(); });
       };
       setTrashIcon(rows.length > 0);
@@ -710,9 +730,8 @@
     if (d) d.innerHTML = I.svg(full ? "trash_full" : "trash", 32);
   }
   function updateTrashIcon() {
-    Promise.all([api("/api/notes", { op: "trash_list" }).catch(function () { return {}; }),
-                 api("/api/chats", { op: "trash_list" }).catch(function () { return {}; })]).then(function (r) {
-      setTrashIcon(((r[0].items || []).length + (r[1].chats || []).length) > 0);
+    trashSources().then(function (r) {
+      setTrashIcon(((r[0].items || []).length + (r[1].chats || []).length + bandRows(r[2]).length) > 0);
     });
   }
 
@@ -737,8 +756,19 @@
   }
 
   function controlPanel(body, el, opts) {
-    var tabs = [["themes", "Themes"], ["wallpaper", "Wallpaper"], ["saver", "Screen Saver"], ["sounds", "Sounds"], ["about", "About"]];
+    var tabs = [["themes", "Themes"], ["wallpaper", "Wallpaper"], ["you", "You"], ["saver", "Screen Saver"], ["sounds", "Sounds"], ["about", "About"]];
     var cur = opts.tab || "themes", draft = Object.assign({}, st.settings);
+    // You: the name Philibert calls you, the Internet switch, and the band's currency and
+    // measurements. They live with the app (config) and in the band file, not desktop.json.
+    var you = null, youWas = null, UNITS = { imperial: "Imperial (feet and inches, pounds, miles)", metric: "Metric (metres, kilograms, kilometres)" };
+    Promise.all([api("/api/desktop", { op: "you" }).catch(function () { return {}; }),
+                 api("/api/band", { op: "settings" }).catch(function () { return {}; })]).then(function (r) {
+      var bs = (r[1] && r[1].settings) || {};
+      you = { user_name: r[0].user_name || "", online: !!r[0].online, currency: bs.currency || "USD", units: bs.units || "imperial",
+              currencies: (r[1] && r[1].currencies) || ["USD"] };
+      youWas = JSON.stringify(you);
+      if (cur === "you") draw();
+    });
     body.innerHTML = '<div style="display:flex;flex-direction:column;height:100%"><div class="tabs">' +
       tabs.map(function (t) { return '<button class="tab' + (t[0] === cur ? " on" : "") + '" data-tab="' + t[0] + '">' + t[1] + "</button>"; }).join("") +
       '</div><div class="tabpanel" id="cp-panel"></div><div class="dlg-foot"><button class="btn" data-ok>OK</button>' +
@@ -760,6 +790,20 @@
           return '<div data-wp="' + w.id + '" class="' + (w.id === draft.wallpaper ? "on" : "") + (ok ? "" : " off") + '">' + esc(w.name) +
                  (ok ? "" : " (not installed)") + "</div>";
         }).join("") + "</div>";
+      } else if (cur === "you") {
+        if (!you) { panel.innerHTML = "<div>Loading...</div>"; return; }
+        var curs = you.currencies.indexOf(you.currency) < 0 ? [you.currency].concat(you.currencies) : you.currencies;
+        panel.innerHTML =
+          '<div class="field"><label>Your name: <input data-you="user_name" maxlength="40" style="width:170px" value="' + esc(you.user_name) + '"></label></div>' +
+          '<div class="field" style="margin-top:-4px">Philibert calls you this in the chat.</div>' +
+          '<div class="field"><label><input type="checkbox" data-you="online"' + (you.online ? " checked" : "") +
+          "> Let Philibert use the Internet</label></div>" +
+          '<div class="field" style="margin-top:-4px">Web search, web pages, box art and updates. Off, nothing leaves this computer.</div>' +
+          '<div class="field"><label>Money in: <select data-you="currency">' + curs.map(function (c) {
+            return "<option" + (c === you.currency ? " selected" : "") + ">" + c + "</option>"; }).join("") + "</select></label></div>" +
+          '<div class="field"><label>Measurements: <select data-you="units">' + Object.keys(UNITS).map(function (u) {
+            return '<option value="' + u + '"' + (u === you.units ? " selected" : "") + ">" + UNITS[u] + "</option>"; }).join("") + "</select></label></div>" +
+          '<div class="field">The Band Manager and the chat use these.</div>';
       } else if (cur === "saver") {
         panel.innerHTML = '<div class="field"><b>Philibert Constellation</b> - your notes drawn as stars.</div>' +
           '<div class="field"><label><input type="checkbox" data-k="screensaver"' + (draft.screensaver ? " checked" : "") + "> Use the screen saver</label></div>" +
@@ -806,7 +850,13 @@
       if (ev.target.closest("[data-apply]")) apply();
       if (ev.target.closest("[data-cancel]")) close("control");
     });
+    body.addEventListener("input", function (ev) {
+      var y = ev.target.dataset.you;
+      if (y && you) you[y] = ev.target.type === "checkbox" ? ev.target.checked : ev.target.value;
+    });
     body.addEventListener("change", function (ev) {
+      var y = ev.target.dataset.you;
+      if (y && you) { you[y] = ev.target.type === "checkbox" ? ev.target.checked : ev.target.value; return; }
       var k = ev.target.dataset.k;
       if (!k) return;
       draft[k] = ev.target.type === "checkbox" ? ev.target.checked : ev.target.value;
@@ -815,7 +865,13 @@
       var ch = { theme: draft.theme, wallpaper: draft.wallpaper, screensaver: !!draft.screensaver,
                  saver_minutes: +draft.saver_minutes || 10, sounds: !!draft.sounds, boot: !!draft.boot };
       var newTheme = ch.theme !== st.settings.theme;
-      save(ch).then(function () {
+      var jobs = [save(ch)];
+      if (you && JSON.stringify(you) !== youWas) {
+        jobs.push(api("/api/set_config", { user_name: String(you.user_name || "").trim().slice(0, 40), online: !!you.online }));
+        jobs.push(api("/api/band", { op: "settings_save", settings: { currency: you.currency, units: you.units } }));
+        youWas = JSON.stringify(you);
+      }
+      Promise.all(jobs).then(function () {
         if (newTheme) location.reload();       // a new theme boots like the real thing
         else applySettings();
       });
@@ -1139,6 +1195,8 @@
 
   api("/api/desktop", { op: "state" }).then(function (d) {
     st.settings = d.settings || {}; st.themes = d.themes || []; st.apps = d.apps || []; st.retro = !!d.retro_vault; st.imagegen = !!d.image_gen;
+    // the modern themes get modern icons in their platform's shape; the rest stay 90s pixels
+    I.style = { win11: "tile", macos: "squircle", ios: "squircle", android: "circle" }[st.settings.theme] || "pixel";
     boot(st.settings.boot !== false);
     applySettings().then(function () {
       applyWallpaper(desk.className.replace(/.*\bwp-(\S+).*/, "$1"));   // sized now the layout is final

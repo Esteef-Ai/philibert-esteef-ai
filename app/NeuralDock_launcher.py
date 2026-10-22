@@ -18323,6 +18323,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(nd_imagegen.handle(body, _drive_root(), internet_on(), free_vram_for_comfy))
                 return
             if path == "/api/desktop":
+                if body.get("op") == "you":       # Control Panel > You, without /api/status's 4 s
+                    self.send_json({"ok": True, "user_name": str(_config.get("user_name") or "")[:40],
+                                    "online": internet_on()})
+                    return
                 import nd_retro_desktop
                 self.send_json(nd_retro_desktop.handle(body, _CONFIG_DIR, APPS_DIR,
                                                        _close_portable_browser if PORTABLE else None))
@@ -18352,6 +18356,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"started":True})
 
         elif path == "/api/set_config":
+            # It changes settings (the Internet switch, folders): same-site only, like
+            # /api/notes - a page on another site must not be able to switch the Internet on.
+            _origin = self.headers.get("Origin")
+            if _origin and urllib.parse.urlparse(_origin).netloc != self.headers.get("Host"):
+                self.send_json({"ok": False, "msg": "refused: another site"}, 403)
+                return
+            if "user_name" in body:
+                body["user_name"] = str(body.get("user_name") or "").strip()[:40]
             for k,v in body.items():
                 _config[k] = v
             save_config()

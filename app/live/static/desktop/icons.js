@@ -111,5 +111,61 @@
       '<rect x="44" y="160" width="20" height="10" rx="3" fill="' + mark + '"/><rect x="136" y="160" width="20" height="10" rx="3" fill="' + mark + '"/></svg>';
   }
 
-  window.PhilIcons = { svg: svg, p1: p1, names: Object.keys(ART) };
+  /* The modern themes' icons: one line glyph per app (24 grid, round strokes), on the
+   * app's own gradient, in the platform's shape - a rounded square (iOS, macOS), a
+   * circle (Android), a squarer tile (Windows 11), or the glyph alone in colour. In-house, no
+   * Apple / Google / Microsoft artwork. PhilIcons.style picks: "pixel" (the 90s
+   * icons above), "squircle", "circle", "tile" or "bare"; the desktop sets it per theme. */
+  var GLYPH = {
+    chat: "M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-9l-5 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM7 11h2l1.5-3 2 6 1.5-3h3",
+    notes: "M6 3h9l4 4v14H6zM15 3v4h4M9 12h7M9 16h7",
+    suite: "M7 7h10v10H7zM10 10h4v4h-4zM9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3",
+    vault: "M6.5 8.5h11a3.5 3.5 0 0 1 3.5 3.5v1.5a3 3 0 0 1-5.4 1.8L14 13.5h-4l-1.6 1.8A3 3 0 0 1 3 13.5V12a3.5 3.5 0 0 1 3.5-3.5zM7.5 10.5v3M6 12h3M15.5 11.5h.01M17.5 13h.01",
+    band: "M4 6h16v14H4zM4 9.5h16M12 15m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0M7 7.8h.01M10 7.8h.01",
+    images: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15.5 9.5m-1.5 0a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0",
+    control: "M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4",
+    trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13",
+    trash_full: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6",
+    app: "M5 5h5v5H5zM14 5h5v5h-5zM5 14h5v5H5zM14 14h5v5h-5z",
+    programs: "M5 5h5v5H5zM14 5h5v5h-5zM5 14h5v5H5zM14 14h5v5h-5z",
+    folder: "M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z",
+    help: "M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0-18 0M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01",
+    find: "M11 11m-6 0a6 6 0 1 0 12 0a6 6 0 1 0-12 0M20 20l-4.5-4.5",
+    docs: "M8 3h7l4 4v12H8zM15 3v4h4M5 7v14h11M11 12h5M11 15h5",
+    gpu: "M3 7h18v10H3zM7 17v3M17 17v3M8.5 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M15.5 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0",
+    shutdown: "M12 3v8M7.5 6.3a7 7 0 1 0 9 0",
+    settings: "M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1",
+  };
+  var TINT = {
+    chat: ["#22d3ee", "#0369a1"], notes: ["#fcd34d", "#d97706"], suite: ["#a78bfa", "#5b21b6"], vault: ["#fb7185", "#be123c"],
+    band: ["#fdba74", "#c2410c"], images: ["#f472b6", "#7e22ce"], control: ["#9ca3af", "#374151"], trash: ["#d1d5db", "#4b5563"],
+    trash_full: ["#d1d5db", "#4b5563"], app: ["#60a5fa", "#1d4ed8"], programs: ["#60a5fa", "#1d4ed8"], folder: ["#fcd34d", "#ca8a04"],
+    help: ["#34d399", "#047857"], find: ["#60a5fa", "#1e40af"], docs: ["#93c5fd", "#1d4ed8"], gpu: ["#4ade80", "#15803d"],
+    shutdown: ["#f87171", "#b91c1c"], settings: ["#9ca3af", "#1f2937"],
+  };
+  var gid = 0;
+  function modern(name, size, shape) {
+    var g = GLYPH[name] || GLYPH.app, c = TINT[name] || TINT.app, id = "pg" + (++gid);
+    var grad = '<defs><linearGradient id="' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + c[0] +
+               '"/><stop offset="1" stop-color="' + c[1] + '"/></linearGradient></defs>';
+    var body;
+    if (shape === "bare") {                 // Windows 11: the glyph itself carries the colour
+      body = '<path d="' + g + '" transform="translate(1.6 1.6) scale(1.2)" fill="none" stroke="url(#' + id +
+             ')" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>';
+    } else {
+      var tile = shape === "circle" ? '<circle cx="16" cy="16" r="15" fill="url(#' + id + ')"/>'
+                                    : '<rect x="1" y="1" width="30" height="30" rx="' + (shape === "tile" ? 4.5 : 7.2) + '" fill="url(#' + id + ')"/>';
+      body = tile + (shape !== "squircle" ? "" : '<path d="M8.2 1h15.6A7.2 7.2 0 0 1 31 8.2V14H1V8.2A7.2 7.2 0 0 1 8.2 1z" fill="#fff" opacity=".12"/>') +
+             '<path d="' + g + '" transform="translate(6 6) scale(.8333)" fill="none" stroke="#fff" stroke-width="2.2" ' +
+             'stroke-linecap="round" stroke-linejoin="round"/>';
+    }
+    return '<svg class="ico modern" viewBox="0 0 32 32" width="' + size + '" height="' + size +
+           '" aria-hidden="true">' + grad + body + "</svg>";
+  }
+  function pick(name, size) {
+    var st = window.PhilIcons.style;
+    return st && st !== "pixel" ? modern(name, size || 32, st) : svg(name, size);
+  }
+
+  window.PhilIcons = { svg: pick, pixel: svg, modern: modern, p1: p1, names: Object.keys(ART), style: "pixel" };
 })();
