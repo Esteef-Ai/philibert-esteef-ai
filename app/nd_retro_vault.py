@@ -9,7 +9,8 @@ edition. What changed for a drive that travels between computers:
   - box art is cached in Entertainment/art; new art is only downloaded while
     Philibert's Internet switch is on
   - save states are files in Entertainment/saves, so a game saved on Windows
-    loads on the Mac
+    loads on the Mac; so are battery saves (SRAM, the game's own save), in
+    saves/sram, each write keeping the one before as .bak
   - game descriptions come from Philibert's own model, not an online service
   - no netplay, phone page, push-to-talk helper, uploads or LAN sharing
 
@@ -187,6 +188,12 @@ class Vault:
             return None
         return self.saves / "states" / (key + ".state")
 
+    def sram_path(self, key):
+        key = urllib.parse.unquote(key or "")
+        if not _STATE_KEY.match(key) or ".." in key:
+            return None
+        return self.saves / "sram" / (key + ".srm")
+
     def profile_path(self, uid):
         return self.saves / "profiles" / (uid + ".json") if _PROFILE_ID.match(uid or "") else None
 
@@ -282,6 +289,9 @@ def handle_get(v, path, query):
     if rel.startswith("state/"):
         p = v.state_path(rel[6:])
         return (200, "application/octet-stream", p) if p and p.is_file() else (404, "text/plain", b"")
+    if rel.startswith("sram/"):
+        p = v.sram_path(rel[5:])
+        return (200, "application/octet-stream", p) if p and p.is_file() else (404, "text/plain", b"")
     if rel.startswith("profile/"):
         p = v.profile_path(urllib.parse.unquote(rel[8:]).strip("/"))
         return (200, "application/json", p) if p and p.is_file() else (404, "application/json", b'{"error":"Not found"}')
@@ -303,6 +313,24 @@ def handle_post(v, path, raw):
                    + urllib.parse.quote(str(d.get("title")), safe="") + "/" + str(d.get("type", "box")))
             return 200, "application/json", json.dumps({"ok": True, "url": url}).encode()
         return 200, "application/json", json.dumps({"ok": False, "why": why}).encode()
+    if rel == "api/art-cached":
+        # which games already have art on the drive: one request for the whole library,
+        # so art shows offline at once (new art is only downloaded while online)
+        try:
+            games = (json.loads(raw or b"{}").get("games") or [])[:20000]
+        except (ValueError, AttributeError):
+            games = []
+        out = []
+        for g in games:
+            sys_id, title = str((g or {}).get("system", "")), str((g or {}).get("title", ""))
+            hit = {}
+            for kind in ("box", "snap"):
+                p = v.art_path(sys_id, title, kind)
+                if p and p.is_file():
+                    hit[kind] = ("/retro/boxart/" + urllib.parse.quote(sys_id, safe="") + "/"
+                                 + urllib.parse.quote(title, safe="") + "/" + kind)
+            out.append(hit)
+        return 200, "application/json", json.dumps({"ok": True, "art": out, "online": v.online()}).encode()
     if rel == "api/describe":
         try:
             d = json.loads(raw or b"{}")
@@ -314,6 +342,19 @@ def handle_post(v, path, raw):
         if not p or not raw or len(raw) > 64_000_000:
             return 400, "application/json", b'{"ok":false}'
         p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".saving")
+        tmp.write_bytes(raw)
+        os.replace(tmp, p)
+        return 200, "application/json", b'{"ok":true}'
+    if rel.startswith("sram/"):
+        p = v.sram_path(rel[5:])
+        if not p or not raw or len(raw) > 4_000_000:
+            return 400, "application/json", b'{"ok":false}'
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if p.is_file():
+            if p.read_bytes() == raw:
+                return 200, "application/json", b'{"ok":true}'
+            os.replace(p, p.with_name(p.name + ".bak"))     # one step back, if a write ever goes wrong
         tmp = p.with_name(p.name + ".saving")
         tmp.write_bytes(raw)
         os.replace(tmp, p)

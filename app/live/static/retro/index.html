@@ -960,7 +960,7 @@ const SYSTEMS=[
   {id:"NES",label:"NES",color:"var(--nes)",exts:[".nes"],core:"nes",emoji:"🎮"},
   {id:"SNES",label:"SNES",color:"var(--snes)",exts:[".sfc",".smc"],core:"snes",emoji:"🕹️"},
   {id:"Genesis",label:"Genesis",color:"var(--genesis)",exts:[".bin",".md",".gen"],core:"segaMD",emoji:"🦔"},
-  {id:"SMS",label:"Master System",color:"var(--genesis)",exts:[".sms",".bin"],core:"segaMS",emoji:"🎮"},
+  {id:"SMS",label:"Master System",color:"var(--genesis)",exts:[".sms",".bin"],core:"genesis_plus_gx",emoji:"🎮"},
   {id:"GBA",label:"GBA",color:"var(--gba)",exts:[".gba"],core:"gba",emoji:"⭐"},
   {id:"N64",label:"N64",color:"var(--n64)",exts:[".z64",".n64",".v64"],core:"n64",emoji:"🌟"},
   {id:"GB",label:"GB/GBC",color:"var(--gb)",exts:[".gb",".gbc"],core:"gb",emoji:"🎲"},
@@ -1515,10 +1515,36 @@ async function launchGame(idx){
   _dl.push("  quickSave:{visible:true,callback:function(){window._doSave();}},");
   _dl.push("  quickLoad:{visible:true,callback:function(){window._doLoad();}},");
   _dl.push("  volume:true,screenshot:true,screenRecord:false,cheat:false};");
-  _dl.push("EJS_onGameStart=function(){ window._ejsReady=true; window.parent.postMessage({type:'ejs_started'},'*'); };");
+  _dl.push("EJS_onGameStart=function(){ window._ejsReady=true; window._sramLoad(); window.parent.postMessage({type:'ejs_started'},'*'); };");
   _dl.push("EJS_onSaveState=function(){ window.parent.postMessage({type:'ejs_saved'},'*'); };");
   _dl.push("EJS_onLoadState=function(){ window.parent.postMessage({type:'ejs_loaded'},'*'); };");
   _dl.push("window._ejsReady=false; window._slot=1; window._stateKey='"+stateKey+"';");
+  // Battery saves (SRAM: the in-game save of Zelda, Pokemon...) are files on the drive,
+  // so they travel with it. Loaded when the game starts; written when they change
+  // (checked every 15 s), when the window hides, and when the game is closed.
+  _dl.push("window._sramKey='"+("rvsram_"+g.system+"_"+safeName)+"'; window._sramLast='';");
+  _dl.push("window._sramSig=function(d){var h=0;for(var i=0;i<d.length;i+=7)h=(h*31+d[i])|0;return d.length+':'+h;};");
+  _dl.push("window._sramLoad=function(){");
+  _dl.push("  var gm=window.EJS_emulator&&window.EJS_emulator.gameManager; if(!gm)return;");
+  _dl.push("  fetch('/retro/sram/'+encodeURIComponent(window._sramKey)).then(function(r){return r.ok?r.arrayBuffer():null;}).then(function(buf){");
+  _dl.push("    if(!buf||!buf.byteLength){window._sramTimer=setInterval(window._sramFlush,15000);return;}");
+  _dl.push("    try{var d=new Uint8Array(buf),p=gm.getSaveFilePath(),parts=p.split('/'),dir='';");
+  _dl.push("      for(var i=0;i<parts.length-1;i++){if(parts[i]){dir+='/'+parts[i];if(!gm.FS.analyzePath(dir).exists)gm.FS.mkdir(dir);}}");
+  _dl.push("      if(gm.FS.analyzePath(p).exists)gm.FS.unlink(p); gm.FS.writeFile(p,d); gm.loadSaveFiles();");
+  _dl.push("      window._sramLast=window._sramSig(d); window.parent.postMessage({type:'ejs_sram_loaded'},'*');");
+  _dl.push("    }catch(err){console.warn('[RV] battery save not loaded',err);}");
+  _dl.push("    window._sramTimer=setInterval(window._sramFlush,15000);");
+  _dl.push("  }).catch(function(){window._sramTimer=setInterval(window._sramFlush,15000);});");
+  _dl.push("};");
+  _dl.push("window._sramGrab=function(){");
+  _dl.push("  try{var gm=window.EJS_emulator&&window.EJS_emulator.gameManager; if(!window._ejsReady||!gm)return null;");
+  _dl.push("    var d=gm.getSaveFile(); if(!d||!d.length)return null; var sig=window._sramSig(d); if(sig===window._sramLast)return null;");
+  _dl.push("    window._sramLast=sig; return {url:'/retro/sram/'+encodeURIComponent(window._sramKey),data:d.slice()};");
+  _dl.push("  }catch(err){console.warn('[RV] battery save not read',err);return null;}");
+  _dl.push("};");
+  _dl.push("window._sramFlush=function(){var x=window._sramGrab(); if(x)fetch(x.url,{method:'POST',body:x.data,keepalive:x.data.length<60000}).catch(function(){window._sramLast='';});};");
+  _dl.push("document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')window._sramFlush();});");
+  _dl.push("window.addEventListener('pagehide',window._sramFlush);");
   _dl.push("window._doSave=function(){");
   _dl.push("  if(!window._ejsReady||!window.EJS_emulator||!window.EJS_emulator.gameManager)return;");
   _dl.push("  try{");
@@ -1614,6 +1640,11 @@ function buildFilter(){
 
 function emuTeardown(){
   const iframe=document.getElementById("emu-iframe");
+  // the battery save goes to the drive before the game goes away. This page sends it,
+  // not the game's frame: a request from a frame being torn down is cut off above 64 KB
+  // (GBA and N64 saves are 128-300 KB).
+  try{ const x=iframe&&iframe.contentWindow&&iframe.contentWindow._sramGrab&&iframe.contentWindow._sramGrab();
+       if(x) fetch(x.url,{method:"POST",body:x.data}).catch(()=>toast("The game's save could not be written to the drive",true)); }catch(e){}
   if(iframe){ iframe.srcdoc=""; iframe.src="about:blank"; iframe.style.display="none"; }
   if(window._romBlobUrl){ URL.revokeObjectURL(window._romBlobUrl); window._romBlobUrl=null; }
   if(window._emuMsgHandlerRef){ window.removeEventListener("message",window._emuMsgHandlerRef); window._emuMsgHandlerRef=null; }
@@ -1983,8 +2014,10 @@ function setArtMode(mode){
 document.getElementById("mn-art-box").onclick=()=>setArtMode("box");
 document.getElementById("mn-art-cart").onclick=()=>setArtMode("cart");
 document.getElementById("mn-art-none").onclick=()=>setArtMode("none");
-document.getElementById("mn-download-art").onclick=function(){
+document.getElementById("mn-download-art").onclick=async function(){
   closeAllMenus();
+  try{ const st=await fetch("/retro/api/status").then(r=>r.json());
+       if(!st.online){ toast("Box art downloads while Philibert's INTERNET switch is on. Art already downloaded shows offline.",true); return; } }catch(e){}
   var missing=[];
   LIBRARY.forEach(function(g,i){ if(!g.coverBox&&!g.coverCart) missing.push(i); });
   if(!missing.length){ toast("All box art already downloaded ✓"); return; }
@@ -3339,10 +3372,34 @@ if(window.location.protocol === "file:") {
       renderGames();
       saveLib(); // compact save - won't exceed quota
     }
+    await artFromDrive();
   }catch(e){
     console.warn("[RV] serverAutoLoad error:",e.message);
   }
 })();
+
+// Box art: what is on the drive shows at once (one request, works offline); while the
+// INTERNET switch is on, what is missing downloads in the background once a session.
+async function artFromDrive(){
+  const need=[]; LIBRARY.forEach(function(g,i){ if(!g.coverBox||!g.coverCart) need.push(i); });
+  if(!need.length) return;
+  const r=await fetch("/retro/api/art-cached",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({games:need.map(function(i){ return {system:LIBRARY[i].system,title:LIBRARY[i].title}; })})}).then(function(x){ return x.json(); });
+  let got=0; const missing=[];
+  need.forEach(function(i,k){
+    const a=(r.art||[])[k]||{}, g=LIBRARY[i];
+    if(a.box&&!g.coverBox){ g.coverBox=a.box; got++; }
+    if(a.snap&&!g.coverCart){ g.coverCart=a.snap; got++; }
+    if(a.box||a.snap) g.cover=getCoverForMode(g);
+    if(!g.coverBox) missing.push(i);
+  });
+  if(got){ saveLib(); renderGames(); }
+  let auto=false; try{ auto=sessionStorage.getItem("rv.artAuto")==="1"; }catch(e){}
+  if(r.online&&missing.length&&!auto){
+    try{ sessionStorage.setItem("rv.artAuto","1"); }catch(e){}
+    for(let b=0;b<missing.length;b+=40) await fetchBoxArt(missing.slice(b,b+40));
+  }
+}
 </script>
 </body>
 </html>
