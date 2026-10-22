@@ -201,6 +201,23 @@
       var f = document.createElement("iframe");
       f.src = app.url; f.title = app.name;
       body.appendChild(f);
+      // C64: Esc is RUN/STOP - back to the BASIC screen even with the app focused. Keys
+      // inside a frame never reach this page, so listen in the frame (same origin) and
+      // in the frames it holds (Philibert Chat has one).
+      var hookEsc = function (fr) {
+        try {
+          var w = fr.contentWindow;
+          if (!w || w.__philEsc) return;
+          w.__philEsc = true;
+          w.addEventListener("keydown", function (ev) {
+            if (ev.key === "Escape" && T().shell === "c64" && st.wins[id]) { minimize(id); renderC64(); }
+          });
+          var inner = function () { w.document.querySelectorAll("iframe").forEach(function (x) {
+            x.addEventListener("load", function () { hookEsc(x); }); hookEsc(x); }); };
+          if (w.document.readyState === "loading") w.addEventListener("DOMContentLoaded", inner); else inner();
+        } catch (e) { /* another site's page: it keeps its own keys */ }
+      };
+      f.addEventListener("load", function () { hookEsc(f); });
     } else if (app.internal) {
       app.internal(body, el, opts || {});
       if (!body.querySelector(".shield")) {       // the app replaced the body: put the click shield back
