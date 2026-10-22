@@ -294,7 +294,18 @@ button:disabled{color:var(--dim); border-color:var(--s2); cursor:default}
 .hint .off{color:var(--rd)}
 @media (max-width:620px){ .key{margin-left:0} .tip{margin-left:-34px}
   .tip canvas{width:46px;height:46px} }
+
+/* Embedded in Philibert Chat (/chat?embed=1): the page around it carries the
+   brand, the legend and the way back, so the chat column keeps only the chat. */
+.embed .wrap{max-width:none; padding:16px 14px 8px;}
+.embed .head .glyph, .embed .key, .embed #backlink{display:none;}
+.embed .head{margin-bottom:8px;}
+.embed .thread{padding-left:44px;}
+.embed .thread::before, .embed .thread.live::after{left:16px;}
+.embed .tip canvas{width:40px; height:40px;}
+.embed .cin{max-width:none; padding:10px 12px 6px;}
 </style>
+<script>if (/[?&]embed=1\b/.test(location.search)) document.documentElement.classList.add("embed");</script>
 </head>
 <body>
 

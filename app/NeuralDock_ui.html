@@ -1297,7 +1297,7 @@ body.portable [onclick="openCloneModal()"] { display: none !important; }
       <button class="ca" style="width:auto;padding:5px 12px;margin-top:0" onclick="stopSpeaking()">&#9632; STOP AUDIO</button>
       <span id="voice-status" style="font-size:10px"></span>
     </div>
-    <p style="font-size:9px;color:var(--muted);margin-top:8px">More voices: drop any Piper <code>.onnx</code> + <code>.onnx.json</code> pair into <code style="color:var(--cyan)">G:\EsteefAi\Voices</code> and hit rescan.</p>
+    <p style="font-size:9px;color:var(--muted);margin-top:8px">More voices: drop any Piper <code>.onnx</code> + <code>.onnx.json</code> pair into <code style="color:var(--cyan)">D:\AI\Voices</code> and hit rescan.</p>
 
     <h3 style="margin-top:14px">// Microphone Input</h3>
     <p style="font-size:10px;color:var(--muted);margin-bottom:8px">Which device the Agent tab records from. Saved in this browser.</p>
@@ -1480,14 +1480,14 @@ body.portable [onclick="openCloneModal()"] { display: none !important; }
 
   <div class="sc no-scroll">
     <h3>// Install Drive Config</h3>
-    <p style="font-size:10px;color:var(--muted);margin-bottom:10px">All installs go into a named folder — never drive root. Default: <code style="color:var(--cyan)">T:\EsteefAi\</code></p>
+    <p style="font-size:10px;color:var(--muted);margin-bottom:10px">All installs go into a named folder — never drive root. Default: <code style="color:var(--cyan)">D:\AI\</code></p>
     <div style="display:grid;grid-template-columns:100px 1fr 1fr;gap:8px;align-items:end;margin-bottom:8px">
       <div><label class="ctrl-label">Drive</label>
         <select id="drive-sel" class="ctrl-num" style="color:var(--text);width:100%"></select></div>
       <div><label class="ctrl-label">ComfyUI Folder</label>
-        <input class="retro-input" id="cfg-comfyui" oninput="this._dirty=true" placeholder="T:\EsteefAi\ComfyUI" style="width:100%"></div>
+        <input class="retro-input" id="cfg-comfyui" oninput="this._dirty=true" placeholder="D:\AI\ComfyUI" style="width:100%"></div>
       <div><label class="ctrl-label">Gallery Folder</label>
-        <input class="retro-input" id="cfg-gallery" oninput="this._dirty=true" placeholder="T:\EsteefAi\Gallery" style="width:100%"></div>
+        <input class="retro-input" id="cfg-gallery" oninput="this._dirty=true" placeholder="D:\AI\Gallery" style="width:100%"></div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="ca" style="width:auto;padding:6px 16px;margin-top:0" onclick="saveConfig()">💾 SAVE CONFIG</button>
@@ -1564,7 +1564,7 @@ body.portable [onclick="openCloneModal()"] { display: none !important; }
         weights &mdash; that has to happen on full-precision HuggingFace tensors, before conversion.
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <input id="heretic-path" placeholder="C:\Heretic\models\mymodel" class="retro-input" style="flex:2;min-width:160px">
+        <input id="heretic-path" placeholder="C:\Tools\Heretic\models\mymodel" class="retro-input" style="flex:2;min-width:160px">
         <input id="heretic-name" placeholder="Name e.g. qwen-rtx" class="retro-input" style="flex:1;min-width:100px">
         <button class="ca" style="width:auto;padding:5px 12px;margin-top:0;white-space:nowrap" onclick="importHeretic()">⬆ IMPORT</button>
       </div>
@@ -1579,7 +1579,7 @@ body.portable [onclick="openCloneModal()"] { display: none !important; }
   </div>
 </div>
 <div id="heretic-msg" style="font-size:10px;color:var(--muted);margin-top:6px">
-  Typical path after Heretic: <span style="color:var(--cyan)">T:\HereticModel\decensored</span>
+  Typical path after Heretic: <span style="color:var(--cyan)">D:\Models\decensored</span>
   After import, click DEEP CHECK to verify it appears in Ollama.
 </div>
     </div>
@@ -1611,7 +1611,7 @@ body.portable [onclick="openCloneModal()"] { display: none !important; }
       <span id="modal-drive-preview" style="color:var(--cyan);font-size:11px;white-space:nowrap">T:\</span>
       <input id="modal-folder" class="retro-input" value="EsteefAi" style="flex:1" oninput="updateModalPath()">
     </div>
-    <div style="font-size:10px;color:var(--muted);margin-bottom:10px">Full path: <span id="modal-full-path" style="color:var(--green)">T:\EsteefAi</span></div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:10px">Full path: <span id="modal-full-path" style="color:var(--green)">D:\AI</span></div>
     <button class="modal-confirm-btn" onclick="confirmDriveSetup()">✓ CREATE FOLDER AND CONTINUE</button>
     <div id="modal-msg" style="font-size:10px;color:var(--muted);margin-top:8px;text-align:center"></div>
   </div>
@@ -3054,7 +3054,7 @@ document.addEventListener('DOMContentLoaded',function(){
     var modelFolder=url.split('/').pop();
     var dest=document.getElementById('clone-dest');
     var name=document.getElementById('clone-name');
-    if(dest&&!dest.value&&modelFolder) dest.value=(_workspace||'T:\\EsteefAi\\Models')+('\\'+modelFolder);
+    if(dest&&!dest.value&&modelFolder) dest.value=(_workspace||'D:\\AI\\Models')+('\\'+modelFolder);
     if(name&&!name.value&&modelFolder) name.value=modelFolder.toLowerCase().replace(/[^a-z0-9-]/g,'-');
   });
 });
@@ -6768,7 +6768,7 @@ if(document.readyState === 'loading'){
           Step 1 -- Enter a folder path to scan for model files:
         </div>
         <div style="display:flex;gap:6px">
-          <input id="mm-folder-input" class="retro-input" placeholder="e.g. T:\EsteefAi\Models" style="flex:1">
+          <input id="mm-folder-input" class="retro-input" placeholder="e.g. D:\AI\Models" style="flex:1">
           <button class="ca" style="width:auto;padding:5px 12px;margin-top:0;white-space:nowrap" onclick="mmScanFolder()">SCAN FOLDER</button>
         </div>
         <div id="mm-scan-status" style="font-size:9px;color:var(--yellow);display:none;margin-top:4px">Scanning...</div>
@@ -6821,7 +6821,7 @@ if(document.readyState === 'loading'){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
       <div>
         <label class="ctrl-label">Download Folder</label>
-        <input id="clone-dest" class="retro-input" style="width:100%" placeholder="T:\EsteefAi\Models\Qwen3-14B">
+        <input id="clone-dest" class="retro-input" style="width:100%" placeholder="D:\AI\Models\Qwen3-14B">
       </div>
       <div>
         <label class="ctrl-label">Model Name (for Ollama)</label>
@@ -6854,7 +6854,7 @@ if(document.readyState === 'loading'){
       <div id="import-tab-file">
         <label class="ctrl-label">Path to existing .gguf file</label>
         <div style="display:flex;gap:6px">
-          <input id="direct-gguf-path" class="retro-input" style="flex:1" placeholder="G:\AI_Chat_Models\mymodel.Q8_0.gguf">
+          <input id="direct-gguf-path" class="retro-input" style="flex:1" placeholder="D:\Models\mymodel.Q8_0.gguf">
           <button class="ca" style="width:auto;padding:5px 12px;margin-top:0" onclick="directImportGGUF()">IMPORT</button>
         </div>
         <div style="font-size:9px;color:var(--muted);margin-top:3px">Model name uses the value from the MODEL NAME field above</div>
@@ -6863,7 +6863,7 @@ if(document.readyState === 'loading'){
       <!-- Tab: convert existing HF folder -->
       <div id="import-tab-folder" style="display:none">
         <label class="ctrl-label">Path to HuggingFace model folder (already downloaded)</label>
-        <input id="hf-folder-path" class="retro-input" style="width:100%;margin-bottom:8px" placeholder="G:\AI_Chat_Models\Qwen3Code">
+        <input id="hf-folder-path" class="retro-input" style="width:100%;margin-bottom:8px" placeholder="D:\Models\Qwen3Code">
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:10px">
           <label style="color:var(--muted);display:flex;align-items:center;gap:5px;cursor:pointer">
             <input type="checkbox" id="keep-source-files" checked style="cursor:pointer">
@@ -6992,7 +6992,7 @@ function decidePair(id, ok){
     <label>NAME<input id="pm-name" type="text"></label>
     <label>FOLDER (the workspace)<input id="pm-ws" type="text"></label>
     <label>INSTRUCTIONS - added to every chat request in this project's folder
-      <textarea id="pm-ins" rows="10" placeholder="e.g. Run Python with C:\Heretic\venv\Scripts\python.exe. Never run the game scripts with --go."></textarea></label>
+      <textarea id="pm-ins" rows="10" placeholder="e.g. Run Python with C:\Tools\Heretic\venv\Scripts\python.exe. Never run the game scripts with --go."></textarea></label>
     <div class="pm-row">
       <button class="ws-mini" style="color:var(--red);border-color:var(--red)" onclick="projDelete()">DELETE PROJECT</button>
       <span style="flex:1"></span>

@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Philibert + Esteef.Ai — logo round 1</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#121214; --paper:#f4f4f2; --cyan:#00e5ff; --pink:#ff2e88; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#e9e9e6; color:var(--ink); font-family:Montserrat, Arial, sans-serif; width:1600px; }
+  h1 { font-weight:800; letter-spacing:.12em; font-size:26px; margin:36px 48px 6px; }
+  .sub { margin:0 48px 26px; font-weight:600; color:#555; font-size:14px; }
+  h2 { font-weight:800; letter-spacing:.12em; font-size:15px; margin:28px 48px 12px; color:#333; }
+  .row { display:flex; gap:20px; margin:0 48px; }
+  .card { flex:1; background:#fff; border-radius:10px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,.12); }
+  .card .tag { font-weight:800; letter-spacing:.1em; font-size:12px; margin-bottom:10px; }
+  .card .note { font-size:12px; color:#666; font-weight:600; margin-top:10px; line-height:1.45; }
+  .swatches { display:flex; gap:10px; }
+  .sw { flex:1; min-width:0; height:150px; border-radius:6px; display:grid; place-items:center; }
+  .sw.l { background:var(--paper); } .sw.d { background:var(--ink); } .sw.c { background:#0b1530; }
+  svg { display:block; }
+  .wm { font-family:Montserrat; font-weight:800; letter-spacing:.12em; }
+  /* theme mockups */
+  .mock { height:300px; border-radius:6px; overflow:hidden; position:relative; font-family:Tahoma, Verdana, Arial, sans-serif; font-size:11px; }
+  .w95 { background:#008080; }
+  .w95 .bar { position:absolute; left:0; right:0; bottom:0; height:30px; background:#c0c0c0; border-top:2px solid #fff; display:flex; align-items:center; padding:0 3px; gap:4px; }
+  .bev { border:2px solid; border-color:#fff #404040 #404040 #fff; box-shadow: inset -1px -1px #808080, inset 1px 1px #dfdfdf; background:#c0c0c0; }
+  .w95 .start { display:flex; align-items:center; gap:4px; height:22px; padding:0 6px 0 3px; font-weight:bold; }
+  .w95 .tray { margin-left:auto; height:22px; display:flex; align-items:center; gap:8px; padding:0 8px; border:1px solid; border-color:#808080 #fff #fff #808080; }
+  .w95 .menu { position:absolute; left:3px; bottom:30px; width:190px; height:200px; display:flex; }
+  .w95 .menu .band { width:24px; background:linear-gradient(#000080,#1084d0); color:#fff; writing-mode:vertical-rl; transform:rotate(180deg); font-weight:bold; font-size:15px; padding:8px 2px; letter-spacing:.04em; }
+  .w95 .menu .band b { color:#c0c0c0; font-weight:normal; }
+  .w95 .menu ul { list-style:none; margin:0; padding:4px 0; flex:1; }
+  .w95 .menu li { padding:6px 10px; display:flex; gap:8px; align-items:center; }
+  .w95 .menu li.on { background:#000080; color:#fff; }
+  .icons { position:absolute; top:12px; left:12px; display:grid; gap:16px; color:#fff; text-align:center; width:76px; }
+  .icons div { display:grid; justify-items:center; gap:4px; }
+  .w31 { background:#c0c0c0; padding:14px; }
+  .w31 .win { background:#fff; border:2px solid #000; height:100%; }
+  .w31 .title { background:#000080; color:#fff; font-weight:bold; text-align:center; padding:3px; position:relative; }
+  .w31 .title:before { content:""; position:absolute; left:3px; top:3px; width:16px; height:12px; background:#c0c0c0; border:1px solid #000; }
+  .w31 .menus { border-bottom:1px solid #000; padding:2px 6px; display:flex; gap:12px; }
+  .w31 .groups { display:flex; gap:26px; padding:20px; flex-wrap:wrap; }
+  .w31 .groups div { display:grid; justify-items:center; gap:4px; width:84px; text-align:center; }
+  .s7 { background-color:#8a8a8a; background-image:radial-gradient(#6c6c6c 1px, transparent 1px); background-size:3px 3px; font-family:Geneva, Verdana, sans-serif; }
+  .s7 .mb { background:#fff; height:22px; border-bottom:1px solid #000; display:flex; align-items:center; gap:16px; padding:0 10px; font-weight:bold; font-size:12px; }
+  .s7 .dlg { position:absolute; left:50%; top:58%; transform:translate(-50%,-50%); width:270px; background:#fff; border:1px solid #000; box-shadow:2px 2px 0 #000; padding:16px; text-align:center; }
+  .s7 .dlg .t { font-weight:bold; font-size:16px; margin-top:8px; }
+</style>
+</head>
+<body>
+<h1>PHILIBERT + ESTEEF.AI — ROUND 1</h1>
+<p class="sub">Rules from Artwork notes: compact, balanced, symmetrical marks with a silhouette that reads; Montserrat ExtraBold capitals tracked +0.12em; one-colour black / white versions; Riot colourway (cyan #00e5ff + pink #ff2e88); halo and Soft Pulse carried over from Coma Toast as the family link.</p>
+
+<!-- reusable marks -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <!-- P1: boombox head, speaker eyes, Soft Pulse mouth -->
+    <g id="boombox">
+      <path d="M62 62 V46 Q62 34 74 34 H126 Q138 34 138 46 V62" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/>
+      <rect x="26" y="60" width="148" height="100" rx="16" fill="currentColor"/>
+      <circle cx="70" cy="104" r="25" fill="var(--bg)"/><circle cx="70" cy="104" r="17" fill="currentColor"/><circle cx="70" cy="104" r="6" fill="var(--bg)"/>
+      <circle cx="130" cy="104" r="25" fill="var(--bg)"/><circle cx="130" cy="104" r="17" fill="currentColor"/><circle cx="130" cy="104" r="6" fill="var(--bg)"/>
+      <path d="M48 143 H86 L93 134 L100 150 L107 138 L112 143 H152" fill="none" stroke="var(--bg)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="44" y="160" width="20" height="10" rx="3" fill="currentColor"/><rect x="136" y="160" width="20" height="10" rx="3" fill="currentColor"/>
+    </g>
+    <!-- P2: record with P label and halo -->
+    <g id="record">
+      <ellipse cx="100" cy="22" rx="34" ry="9" fill="none" stroke="currentColor" stroke-width="6"/>
+      <circle cx="100" cy="110" r="78" fill="currentColor"/>
+      <circle cx="100" cy="110" r="64" fill="none" stroke="var(--bg)" stroke-width="1.5" opacity=".45"/>
+      <circle cx="100" cy="110" r="54" fill="none" stroke="var(--bg)" stroke-width="1.5" opacity=".45"/>
+      <circle cx="100" cy="110" r="44" fill="none" stroke="var(--bg)" stroke-width="1.5" opacity=".45"/>
+      <circle cx="100" cy="110" r="32" fill="var(--bg)"/>
+      <text x="100" y="126" text-anchor="middle" font-family="Montserrat" font-weight="800" font-size="46" fill="currentColor">P</text>
+    </g>
+    <!-- P3: floppy with P -->
+    <g id="floppy">
+      <path d="M30 26 H156 L174 44 V174 H30 Z" fill="currentColor"/>
+      <rect x="64" y="26" width="72" height="44" fill="var(--bg)"/><rect x="112" y="34" width="14" height="28" fill="currentColor"/>
+      <rect x="50" y="96" width="104" height="72" rx="4" fill="var(--bg)"/>
+      <text x="102" y="152" text-anchor="middle" font-family="Montserrat" font-weight="800" font-size="56" fill="currentColor">P</text>
+    </g>
+  </defs>
+</svg>
+
+<h2>ESTEEF.AI — WORDMARKS</h2>
+<div class="row">
+  <div class="card"><div class="tag">E1 · PLAIN</div>
+    <div class="swatches">
+      <div class="sw l"><svg width="300" height="60" viewBox="0 0 300 60" style="width:100%;max-width:300px"><text x="150" y="42" text-anchor="middle" class="wm" font-size="34" fill="#121214">ESTEEF.AI</text></svg></div>
+      <div class="sw d"><svg width="300" height="60" viewBox="0 0 300 60" style="width:100%;max-width:300px"><text x="150" y="42" text-anchor="middle" class="wm" font-size="34" fill="#f4f4f2">ESTEEF.AI</text></svg></div>
+    </div><div class="note">Same wordmark as the ESTEEF store logo, with .AI. Works everywhere; the safest.</div></div>
+  <div class="card"><div class="tag">E2 · HALO OVER THE E</div>
+    <div class="swatches">
+      <div class="sw l"><svg width="300" height="80" viewBox="0 0 300 80" style="width:100%;max-width:300px"><ellipse cx="40" cy="25" rx="15" ry="4.5" fill="none" stroke="#121214" stroke-width="4"/><text x="150" y="62" text-anchor="middle" class="wm" font-size="34" fill="#121214">ESTEEF.AI</text></svg></div>
+      <div class="sw d"><svg width="300" height="80" viewBox="0 0 300 80" style="width:100%;max-width:300px"><ellipse cx="40" cy="25" rx="15" ry="4.5" fill="none" stroke="#00e5ff" stroke-width="4"/><text x="150" y="62" text-anchor="middle" class="wm" font-size="34" fill="#f4f4f2">ESTEEF.AI</text></svg></div>
+    </div><div class="note">Mirrors the store's "halo" option, so Esteef.co and Esteef.Ai read as one family.</div></div>
+  <div class="card"><div class="tag">E3 · AI IN ORBIT</div>
+    <div class="swatches">
+      <div class="sw l"><svg width="300" height="80" viewBox="0 0 300 80" style="width:100%;max-width:300px"><text x="128" y="52" text-anchor="middle" class="wm" font-size="34" fill="#121214">ESTEEF</text><ellipse cx="250" cy="40" rx="30" ry="14" fill="none" stroke="#121214" stroke-width="3" transform="rotate(-18 250 40)"/><text x="250" y="52" text-anchor="middle" class="wm" font-size="30" fill="#121214">AI</text><circle cx="276" cy="27" r="4" fill="#121214"/></svg></div>
+      <div class="sw d"><svg width="300" height="80" viewBox="0 0 300 80" style="width:100%;max-width:300px"><text x="128" y="52" text-anchor="middle" class="wm" font-size="34" fill="#f4f4f2">ESTEEF</text><ellipse cx="250" cy="40" rx="30" ry="14" fill="none" stroke="#00e5ff" stroke-width="3" transform="rotate(-18 250 40)"/><text x="250" y="52" text-anchor="middle" class="wm" font-size="30" fill="#00e5ff">AI</text><circle cx="276" cy="27" r="4" fill="#ff2e88"/></svg></div>
+    </div><div class="note">The halo becomes an orbit with a node — ties to the vault constellation.</div></div>
+</div>
+
+<h2>PHILIBERT — MARKS</h2>
+<div class="row">
+  <div class="card"><div class="tag">P1 · BOOMBOX (MASCOT)</div>
+    <div class="swatches">
+      <div class="sw l" style="--bg:#f4f4f2;color:#121214"><svg width="130" height="130" viewBox="0 0 200 200"><use href="#boombox"/></svg></div>
+      <div class="sw d" style="--bg:#121214;color:#f4f4f2"><svg width="130" height="130" viewBox="0 0 200 200"><use href="#boombox"/></svg></div>
+      <div class="sw c" style="--bg:#0b1530;color:#00e5ff"><svg width="130" height="130" viewBox="0 0 200 200"><use href="#boombox"/></svg></div>
+    </div><div class="note">A character like Coma Toast: speaker eyes, the Soft Pulse heartbeat as the mouth (also the living heartbeat in the app). Musical, friendly, symmetrical silhouette.</div></div>
+  <div class="card"><div class="tag">P2 · RECORD + HALO</div>
+    <div class="swatches">
+      <div class="sw l" style="--bg:#f4f4f2;color:#121214"><svg width="130" height="130" viewBox="0 0 200 200"><use href="#record"/></svg></div>
+      <div class="sw d" style="--bg:#121214;color:#f4f4f2"><svg width="130" height="130" viewBox="0 0 200 200"><use href="#record"/></svg></div>
+      <div class="sw c" style="--bg:#0b1530;color:#ff2e88"><svg width="130" height="130" viewBox="0 0 200 200"><use href="#record"/></svg></div>
+    </div><div class="note">A vinyl with a P label and the Saint halo. Reads at any size; strongest as an app icon.</div></div>
+  <div class="card"><div class="tag">P3 · FLOPPY P</div>
+    <div class="swatches">
+      <div class="sw l" style="--bg:#f4f4f2;color:#121214"><svg width="130" height="130" viewBox="0 0 200 200"><use href="#floppy"/></svg></div>
+      <div class="sw d" style="--bg:#121214;color:#f4f4f2"><svg width="130" height="130" viewBox="0 0 200 200"><use href="#floppy"/></svg></div>
+      <div class="sw c" style="--bg:#0b1530;color:#00e5ff"><svg width="130" height="130" viewBox="0 0 200 200"><use href="#floppy"/></svg></div>
+    </div><div class="note">The portable idea: everything on one disk. Fits the retro desktops best, less musical.</div></div>
+</div>
+
+<h2>PHILIBERT — WORDMARK LOCKUPS</h2>
+<div class="row">
+  <div class="card"><div class="tag">P1 + WORDMARK</div><div class="sw l" style="--bg:#f4f4f2;color:#121214;height:120px">
+    <svg width="460" height="90"><svg x="0" y="0" width="90" height="90" viewBox="0 0 200 200"><use href="#boombox"/></svg><text x="104" y="54" class="wm" font-size="40" fill="#121214">PHILIBERT</text><text x="106" y="78" font-family="Montserrat" font-weight="600" font-size="13" letter-spacing="3.2" fill="#121214">BY ESTEEF.AI</text></svg></div></div>
+  <div class="card"><div class="tag">P2 + WORDMARK</div><div class="sw d" style="--bg:#121214;color:#f4f4f2;height:120px">
+    <svg width="460" height="90"><svg x="0" y="0" width="90" height="90" viewBox="0 0 200 200"><use href="#record"/></svg><text x="104" y="54" class="wm" font-size="40" fill="#f4f4f2">PHILIBERT</text><text x="106" y="78" font-family="Montserrat" font-weight="600" font-size="13" letter-spacing="3.2" fill="#00e5ff">BY ESTEEF.AI</text></svg></div></div>
+</div>
+
+<h2>IN THE THEMES (BOOMBOX SHOWN; ANY MARK SLOTS IN)</h2>
+<div class="row">
+  <div class="card"><div class="tag">WINDOWS 95 (DEFAULT)</div>
+    <div class="mock w95">
+      <div class="icons">
+        <div><svg width="34" height="34" viewBox="0 0 200 200" style="--bg:#008080;color:#fff"><use href="#boombox"/></svg>Philibert Chat</div>
+        <div><svg width="34" height="34" viewBox="0 0 200 200" style="--bg:#008080;color:#fff"><use href="#floppy"/></svg>Retro Vault</div>
+      </div>
+      <div class="menu bev"><div class="band">Philibert<b>95</b></div><ul>
+        <li class="on">Philibert Chat</li><li>ND Suite</li><li>Notes</li><li>Retro Vault</li><li>Band Manager</li><li>Control Panel</li></ul></div>
+      <div class="bar"><div class="start bev"><svg width="18" height="18" viewBox="0 0 200 200" style="--bg:#c0c0c0;color:#000"><use href="#boombox"/></svg>Philibert</div>
+        <div class="tray">Esteef.Ai&nbsp;&nbsp;9:41 PM</div></div>
+    </div><div class="note">Start button becomes Philibert; the menu band reads "Philibert 95"; Esteef.Ai beside the tray clock.</div></div>
+  <div class="card"><div class="tag">WINDOWS 3.11</div>
+    <div class="mock w31"><div class="win"><div class="title">Philibert Program Manager</div><div class="menus"><span>File</span><span>Options</span><span>Window</span><span>Help</span></div>
+      <div class="groups">
+        <div><svg width="34" height="34" viewBox="0 0 200 200" style="--bg:#fff;color:#000080"><use href="#boombox"/></svg>Philibert</div>
+        <div><svg width="34" height="34" viewBox="0 0 200 200" style="--bg:#fff;color:#008000"><use href="#floppy"/></svg>Retro Vault</div>
+        <div><svg width="34" height="34" viewBox="0 0 200 200" style="--bg:#fff;color:#800000"><use href="#record"/></svg>Band Manager</div>
+        <div><svg width="34" height="34" viewBox="0 0 200 200" style="--bg:#fff;color:#000"><use href="#boombox"/></svg>Esteef.Ai</div>
+      </div></div></div><div class="note">"Philibert Program Manager" with program groups; boot splash "Philibert for Workgroups — Esteef.Ai".</div></div>
+  <div class="card"><div class="tag">MAC SYSTEM 7</div>
+    <div class="mock s7"><div class="mb"><svg width="16" height="16" viewBox="0 0 200 200" style="--bg:#fff;color:#000"><use href="#boombox"/></svg><span>File</span><span>Edit</span><span>View</span><span>Special</span></div>
+      <div class="dlg"><svg width="64" height="64" viewBox="0 0 200 200" style="--bg:#fff;color:#000;margin:auto"><use href="#boombox"/></svg><div class="t">Welcome to Philibert</div><div>by Esteef.Ai</div></div>
+    </div><div class="note">Philibert menu where the Apple menu sits; "Welcome to Philibert" boot box; About This Philibert credits Esteef.Ai.</div></div>
+</div>
+<div style="height:40px"></div>
+</body>
+</html>

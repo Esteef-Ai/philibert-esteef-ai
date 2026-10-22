@@ -65,7 +65,7 @@ Integration -- three edits in NeuralDock_launcher.py
 
 Config keys read from neuraldock_config.json (all optional):
 
-    obsidian_root            "G:\\!!Obsidian"
+    obsidian_root            "D:\\Obsidian"
     obsidian_vault           "EsteefAI"          (auto-detected if absent)
     obsidian_memory_folder   "AI Memory"
     obsidian_budget_chars    12000
@@ -182,7 +182,7 @@ class ObsidianMemory:
         self.budget = int(config.get("obsidian_budget_chars", DEFAULT_BUDGET))
         self.mem_folder_name = config.get("obsidian_memory_folder", "AI Memory")
 
-        root = config.get("obsidian_root") or r"G:\!!Obsidian"
+        root = config.get("obsidian_root") or r"D:\Obsidian"
         self.root = Path(root)
         self.vault = self._resolve_vault(config.get("obsidian_vault"))
         self.mem_dir = (self.vault / self.mem_folder_name) if self.vault else None

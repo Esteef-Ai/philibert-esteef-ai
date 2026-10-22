@@ -36,7 +36,7 @@ BANNER = rf"""
 # ??? Config ???????????????????????????????????????????????????????????????????
 # --- Version --- (defined above BANNER, which interpolates it)
 
-HERETIC_DIR  = Path("C:/Heretic")
+HERETIC_DIR  = Path("C:/Tools/Heretic")
 VENV_DIR     = HERETIC_DIR / "venv"
 VENV_PY      = VENV_DIR / "Scripts" / "python.exe"
 VENV_PIP     = VENV_DIR / "Scripts" / "pip.exe"
@@ -46,7 +46,7 @@ VENV_PIP     = VENV_DIR / "Scripts" / "pip.exe"
 OLLAMA_URL   = os.environ.get("ND_OLLAMA_URL") or "http://127.0.0.1:11434"
 
 # Philibert by Esteef.Ai: the portable, offline-by-default build of ND that runs
-# from an external drive (G:\\!Ai\\ND-Portable). Its launcher sets these; without
+# from an external drive (D:\\Portable). Its launcher sets these; without
 # them ND is unchanged.
 PORTABLE = os.environ.get("ND_PORTABLE") == "1"
 PRODUCT  = "Philibert" if PORTABLE else "NeuralDock"
@@ -74,6 +74,7 @@ HTML_FILE    = Path(__file__).parent / "NeuralDock_ui.html"
 # the main UI needs. Serving it from here rather than a side process also makes
 # it same-origin, so it needs no CORS and works from a paired phone.
 ELENA_FILE   = Path(__file__).parent / "elena_ui.html"
+LIVE_DIR     = Path(__file__).parent / "live" / "static"   # Elena Live: board + vault
 
 # Install base -- prefer T:\ if available, else ask user
 DEFAULT_INSTALL_DRIVE = "T"
@@ -85,7 +86,7 @@ def get_install_base():
         p = Path(cfg)
         if p.exists():
             return p
-    t = Path("T:/NeuralDock")
+    t = Path("D:/NeuralDock")
     if Path("T:/").exists():
         return t
     return None  # UI will ask user
@@ -99,7 +100,7 @@ def get_comfyui_dir():
         # Path configured but doesn't exist yet — return it anyway so UI shows it
         return p
     # Only auto-detect if nothing configured
-    for p in [Path("T:/ComfyUI"), Path.home()/"ComfyUI", Path("C:/ComfyUI")]:
+    for p in [Path("D:/ComfyUI"), Path.home()/"ComfyUI", Path("C:/ComfyUI")]:
         if p.exists(): return p
     return None
 
@@ -132,7 +133,7 @@ _config = {}
 
 def load_config():
     global _config
-    # Try launcher directory first, then legacy C:\Heretic location. Never the
+    # Try launcher directory first, then legacy C:\Tools\Heretic location. Never the
     # legacy one on Philibert: that is the HOST's config, and loading it would copy
     # this computer's settings onto the drive.
     for cfg_path in ([CONFIG_FILE] if PORTABLE else [CONFIG_FILE, _BACKUP_FILE]):
@@ -214,7 +215,7 @@ def save_config():
         CONFIG_FILE.write_text(json.dumps(_config, indent=2), encoding="utf-8")
     except Exception as e:
         log(f"Config save failed: {e}", "error")
-        # Fallback to C:\Heretic
+        # Fallback to C:\Tools\Heretic
         try:
             HERETIC_DIR.mkdir(parents=True, exist_ok=True)
             _BACKUP_FILE.write_text(json.dumps(_config, indent=2), encoding="utf-8")
@@ -456,7 +457,7 @@ def start_status_loop():
 # ??? Venv + installers ????????????????????????????????????????????????????????
 def ensure_venv():
     if VENV_PY.exists(): return True
-    log("Creating C:\\Heretic venv...", "info")
+    log("Creating C:\\Tools\\Heretic venv...", "info")
     HERETIC_DIR.mkdir(parents=True, exist_ok=True)
     ok, o, e = run(f'python -m venv "{VENV_DIR}"')
     if ok:
@@ -547,7 +548,7 @@ def install_cogvideo():
     log("Installing CogVideoX dependencies...", "info")
     ok = venv_install("diffusers transformers accelerate imageio imageio-ffmpeg sentencepiece", "CogVideoX")
     if ok:
-        # Pre-download model to T:/NeuralDock/CogVideoX if T: available
+        # Pre-download model to D:/NeuralDock/CogVideoX if T: available
         base = get_install_base()
         if base:
             cog_dir = base / "CogVideoX"
@@ -602,13 +603,13 @@ _comfyui_proc = None
 
 # ??? ComfyUI installer ????????????????????????????????????????????????????????
 def install_comfyui():
-    """Clone ComfyUI to T:/ComfyUI (or configured dir), install its deps."""
+    """Clone ComfyUI to D:/ComfyUI (or configured dir), install its deps."""
     base = get_install_base()
     if not base:
         log("No install base configured -- set a drive in Setup first", "error")
         return False
 
-    target = base.parent / "ComfyUI"  # e.g. T:/EsteefAi/../ComfyUI = T:/ComfyUI
+    target = base.parent / "ComfyUI"  # e.g. D:/AI/../ComfyUI = D:/ComfyUI
     # If config has a specific comfyui_dir, use that instead
     cfg_dir = _config.get("comfyui_dir","").strip()
     if cfg_dir:
@@ -657,7 +658,7 @@ def install_comfyui():
     return True
 
 def ensure_comfyui_running(timeout=90):
-    """Start ComfyUI if not running. Auto-installs to T:/ComfyUI if not found. Returns True if ready."""
+    """Start ComfyUI if not running. Auto-installs to D:/ComfyUI if not found. Returns True if ready."""
     global _comfyui_proc
     if _check_comfyui():
         return True
@@ -666,7 +667,7 @@ def ensure_comfyui_running(timeout=90):
 
     # Auto-install if not found
     if not comfyui_dir or not (comfyui_dir / "main.py").exists():
-        log("ComfyUI not found -- auto-installing to T:/ComfyUI...", "info")
+        log("ComfyUI not found -- auto-installing to D:/ComfyUI...", "info")
         ok = install_comfyui()
         if not ok:
             log("ComfyUI auto-install failed -- check git is installed and T: drive is accessible", "error")
@@ -1292,7 +1293,7 @@ def postprocess_video(data, fmt="webp", overlay=None, fps=8):
     return buf.getvalue(), ".webp", "image/webp"
 
 # ??? CogVideoX (diffusers) ????????????????????????????????????????????????????
-COG_HF_HOME = Path("G:/EsteefAi/HFCache")
+COG_HF_HOME = Path("D:/AI/HFCache")
 
 def list_cogvideo_models():
     """CogVideoX snapshots present in the local HF cache."""
@@ -2702,7 +2703,7 @@ def tts_speak(text):
     except: pass
 
 # ─── Voice: Piper TTS (local, customizable) ───────────────────────────────────
-VOICES_DIR = Path(os.environ.get("ND_VOICES_DIR") or "G:/EsteefAi/Voices")   # Philibert: <drive>/speech/voices
+VOICES_DIR = Path(os.environ.get("ND_VOICES_DIR") or "D:/AI/Voices")   # Philibert: <drive>/speech/voices
 _piper_cache = {}     # voice name -> loaded PiperVoice (loading takes ~1s, so cache)
 
 def list_voices():
@@ -2851,19 +2852,28 @@ def _get_whisper(name_override=None):
         return _fw_models[key], dev
     from faster_whisper import WhisperModel
     compute = "float16" if dev == "cuda" else "int8"
+    src = _whisper_source(s["model"])
     t0 = time.time()
     try:
-        m = WhisperModel(s["model"], device=dev, compute_type=compute)
+        m = WhisperModel(src, device=dev, compute_type=compute)
     except Exception as e:
         if dev == "cuda":
             log(f"Whisper CUDA load failed ({e}); falling back to CPU", "warn")
             dev, compute = "cpu", "int8"
-            m = WhisperModel(s["model"], device=dev, compute_type=compute)
+            m = WhisperModel(src, device=dev, compute_type=compute)
         else:
             raise
     _fw_models[(s["model"], dev)] = m
     log(f"Whisper '{s['model']}' loaded on {dev}/{compute} in {round(time.time()-t0,1)}s", "ok")
     return m, dev
+
+def _whisper_source(name):
+    """A Whisper model folder on the drive (Philibert: ND_WHISPER_DIR/<name>, real
+    files - exFAT cannot hold the Hugging Face cache's symlinks), else the name."""
+    d = os.environ.get("ND_WHISPER_DIR")
+    if d and (Path(d) / name / "model.bin").is_file():
+        return str(Path(d) / name)
+    return name
 
 def transcribe_audio(audio_path, model_override=None, quick=False):
     """Speech -> text. Handles webm/ogg straight from the browser MediaRecorder.
@@ -3755,6 +3765,38 @@ def _undefined_names(path):
     return out
 
 
+_NODE = {"path": None, "looked": False}
+
+
+def _node_exe():
+    if not _NODE["looked"]:
+        _NODE["looked"] = True
+        _NODE["path"] = shutil.which("node")
+    return _NODE["path"]
+
+
+def _js_syntax_error(p):
+    """node --check on a .js file: '' when it parses (or node is absent), else
+    'line N: <source line>  <message>'."""
+    node = _node_exe()
+    if not node:
+        return ""
+    try:
+        r = subprocess.run([node, "--check", str(p)], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=20,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except Exception:
+        return ""
+    if r.returncode == 0:
+        return ""
+    err = (r.stderr or r.stdout or "").strip().splitlines()
+    loc = next((l for l in err if re.search(r":\d+\s*$", l)), "")
+    src = err[1].rstrip() if len(err) > 1 else ""
+    msg = next((l for l in err if re.match(r"\w*Error:", l.strip())), err[-1] if err else "")
+    line = re.search(r":(\d+)\s*$", loc)
+    return (f"line {line.group(1) if line else '?'}: {src.strip()[:200]}  ->  {msg.strip()[:200]}")
+
+
 def _verify_file(path):
     """Post-edit check. Returns '' if OK (or unchecked type), else the error text."""
     try:
@@ -3792,6 +3834,13 @@ def _verify_file(path):
                 return ""
             except Exception as e:
                 return f"JSON ERROR: {e}"
+        # A syntax error kills the whole script in the browser (pair 11 kept one
+        # for five turns: _verify_file never looked at .js).
+        if ext in (".js", ".mjs", ".cjs") and _config.get("agent_js_check", True):
+            je = _js_syntax_error(p)
+            if je:
+                return ("JAVASCRIPT SYNTAX ERROR - the whole script fails to load, nothing in "
+                        "it runs: " + je + ". Fix that line with edit_file.")
         return ""
     except Exception:
         return ""
@@ -4346,7 +4395,7 @@ GUI_SMOKE_TIMEOUT = 45
 def is_gui_script(path, workspace=None):
     """A Tk app, or a script that launches one from a module beside it.
 
-    golfit_main.py never mentions tkinter directly -- it imports golfit_gui,
+    mapmaker_main.py never mentions tkinter directly -- it imports mapmaker_gui,
     which does. Checking only the file itself would miss the real entry point.
     """
     try:
@@ -4948,10 +4997,35 @@ _INTENT_VERB = (r"(?:creat|writ|mak|build|add|updat|implement|generat|"
 _LEADIN = (r"\b(?:let\s+me|i'?ll|i\s+will|i'?m\s+going\s+to|next[,\s]+i|now\s+i|"
            r"let'?s|i\s+need\s+to|i\s+should|first[,\s]+i)")
 _INTENT_RE = re.compile(_LEADIN + r"\s+(?:\w+\s+){0,4}" + _INTENT_VERB, re.I)
+# "Now the second: call warmVault() ..." - a step announced with no "I" in it.
+_STEP_ANNOUNCE_RE = re.compile(
+    r"(?:^|[.!]\s+)(?:(?:and\s+)?(?:now|next|then)[,\s]+(?:the\s+)?(?:second|third|fourth|next|last|final|"
+    r"remaining|other)(?:\s+(?:one|edit|step|change|fix|part|file))?|next(?:\s+(?:step|edit|up))?|"
+    r"(?:second|third|final|last)\s+(?:edit|step|change|fix))\s*:", re.I)
 
 # Any first-person lead-in, verb or not. Only used together with a trailing
 # colon, which is already conclusive on its own.
 _LEADIN_RE = re.compile(_LEADIN + r"\b", re.I)
+
+
+_VERIFY_ONLY_RE = re.compile(
+    r"\b(?:verify|verif(?:ying|ication)|confirm|double-?check|check|re-?read|review|inspect|"
+    r"make sure|ensure|validate|test|run the tests?|look over)\b", re.I)
+_DO_WORK_RE = re.compile(
+    r"\b(?:write|create|add|implement|fix|edit|update|change|replace|wire|build|refactor|"
+    r"rewrite|remove|delete|move|rename|patch|insert)\b", re.I)
+
+
+def promises_only_to_verify(text: str) -> bool:
+    """The reply's last sentences only promise to check work already done."""
+    lines = [l.strip() for l in (text or "").strip().splitlines() if l.strip()]
+    tail = " ".join(lines[-2:])
+    sentences = re.split(r"(?<=[.!:])\s+", tail)
+    last = " ".join(sentences[-2:])
+    if re.search(r"\btests?\b|\brun\b|pytest", last, re.I):
+        return False  # running the tests can surface failures to fix: keep nudging
+    return bool(_VERIFY_ONLY_RE.search(last)) and not _DO_WORK_RE.search(
+        re.sub(r"\b(?:the|my|both|these|those|your)\s+(?:\w+\s+)?(?:changes?|edits?|fix(?:es)?|updates?)\b", " ", _VERIFY_ONLY_RE.sub(" ", last), flags=re.I))
 
 
 def announces_unfinished_work(text: str) -> bool:
@@ -4973,6 +5047,9 @@ def announces_unfinished_work(text: str) -> bool:
         # that ends on a colon still promised something it did not deliver.
         if len(text) < 600:
             return True
+    if (_config.get("agent_step_announce", True) and _STEP_ANNOUNCE_RE.search(tail)
+            and len(text) < 1500):
+        return True
     if _INTENT_RE.search(tail) and not re.search(r"\?\s*$", tail):
         # "I'll now write the file" with no colon still counts, but only if the
         # reply is short enough to be a lead-in rather than a finished answer.
@@ -4987,7 +5064,7 @@ def announces_unfinished_work(text: str) -> bool:
 # the tool:
 #
 #     I'll create the file now:
-#     [FILE] [G:\TMP\TMP\retro-vault-enhanced.html]
+#     [FILE] [D:\Temp\TMP\retro-vault-enhanced.html]
 #
 # Zero tool calls parse, nothing is written, and the reply looks like success --
 # to the user AND to the "did it announce work" heuristic. This produced an
@@ -5275,7 +5352,7 @@ def no_progress_report(reply, echoed, st, ctx_pct=0, window=0, reads=0, wrote=No
     # dropping the oldest messages, and the first thing to go is the original
     # instruction. Say so rather than blaming the model's manners.
     ctx_note = ""
-    if ctx_pct >= 80 and window:
+    if (ctx_pct or 0) >= 80 and window:   # None when the endpoint reports no usage
         ctx_note = (f"\nContext was {ctx_pct}% full ({window} tokens) when it gave up"
                     + (f", after {reads} read-only calls" if reads else "")
                     + ". Past ~85% Ollama silently drops the OLDEST messages, which is "
@@ -5853,7 +5930,7 @@ PLACEHOLDER_NAMES = {"PATH", "FILEPATH", "FILE_PATH", "FILENAME", "FILE", "CONTE
 # The TOOL-line template's own slot names. Measured 2026-09-24: in text mode
 # qwen3-coder:30b wrote `TOOL: read_file PATH|||G:\...\set_location.py` and
 # `TOOL: run_shell COMMAND|||type ...` -- the slot name, then the value -- so ND
-# read a file called "PATH", listed "PATH|||G:\GolfItMapMaker" and refused writes
+# read a file called "PATH", listed "PATH|||D:\Projects\MapMaker" and refused writes
 # to "PATH" until the job stalled. A part that IS a slot name is never a value.
 TEMPLATE_SLOT_WORDS = PLACEHOLDER_NAMES | {
     "ROOT", "REGEX_PATTERN", "PATTERN", "OLD_TEXT", "NEW_TEXT", "COMMAND", "QUERY",
@@ -5863,7 +5940,7 @@ _TOOL_TAG_TAIL_RE = re.compile(r"\s*</?tool_call>\s*$")
 
 # A native tool call whose argument carries the model's own imagined next turn.
 # Measured 2026-09-25, qwen3-coder:30b:
-#     "limit": "100<tool_call>\n[FILE] [G:\\GolfItMapMaker\\set_location.py ..."
+#     "limit": "100<tool_call>\n[FILE] [D:\\Projects\\MapMaker\\set_location.py ..."
 #     "command": "cp \"a.py\" \"b.bak\"<tool_call>\n[FILE] ..."
 # The read ran with a garbage limit, and every shell command failed. Nothing
 # after a <tool_call> tag is part of the argument.
@@ -5945,7 +6022,7 @@ def salvage_intended_read(text, workspace, already=()):
 
     Measured 2026-09-26 (Golf It speed-up, qwen3-coder:30b): after one good edit the
     model spent its last five rounds on reads it never made - it TYPED the read
-    result "[FILE] [G:\\GolfItMapMaker\\set_location.py - lines 1-250 of 250 ...]"
+    result "[FILE] [D:\\Projects\\MapMaker\\set_location.py - lines 1-250 of 250 ...]"
     twice, and closed on "Let me check build_hole.py for the timing changes:" -
     each answered by a nudge, and the job stopped with 5 of 6 listed changes
     undone. A read is harmless and its target is not a guess when the file exists,
@@ -6412,7 +6489,7 @@ def infer_workspace(text):
 
     ND takes `workspace` from the request body and the UI sends "". Everything
     gated on it was therefore inert: write confinement AND auto-split. A run
-    told 'create the files in G:\\TMP\\TMP' wrote into the user's ORIGINAL app
+    told 'create the files in D:\\Temp\\TMP' wrote into the user's ORIGINAL app
     folder instead, because nothing knew what the working directory was.
 
     The user states it in plain English every time, so read it from there.
@@ -6495,7 +6572,7 @@ def repair_write_args(a, workspace, user_text=""):
 
     Every earlier guard lived in the TEXT parsers, so a bad call that arrived as
     a NATIVE Ollama tool_call walked straight past all of them. Observed in one
-    run: path = '{"path": "G:\\\\TMP\\\\TMP\\\\x.html", "content": "<!DOCTYPE...'
+    run: path = '{"path": "D:\\\\Temp\\\\TMP\\\\x.html", "content": "<!DOCTYPE...'
     -- the whole JSON object stuffed into the path field. Every write funnels
     through here, so this is the one place that cannot be bypassed.
 
@@ -6539,7 +6616,7 @@ def repair_write_args(a, workspace, user_text=""):
     if not path:
         return (None, None,
                 "[ERROR write_file: no `path` argument. Re-send with an absolute path, e.g. "
-                r'{"path": "G:\\TMP\\TMP\\index.html", "content": "..."}]')
+                r'{"path": "D:\\Temp\\TMP\\index.html", "content": "..."}]')
 
     # 2. A placeholder copied out of an instruction template.
     if path.strip("<>[]{}").upper() in PLACEHOLDER_NAMES:
@@ -6562,7 +6639,7 @@ def repair_write_args(a, workspace, user_text=""):
                 f"[ERROR write_file: `content` was empty for {path}. Nothing was written.]")
 
     # 3. Confine NEW files to the workspace the user gave. One run scattered
-    #    output into G:\TMP (one folder from the user's original app, same
+    #    output into D:\Temp (one folder from the user's original app, same
     #    filename) and tried C:\Users\...\Documents, while the workspace sat
     #    empty. Keep the filename, move it home.
     p = Path(path)
@@ -6801,7 +6878,7 @@ def unpack_kv_args(a):
 
     A fifth malformed-call shape, measured on frontend-design-expert-8b:
 
-        write_file(path='PATH="G:\\TMP\\retro-vault\\retro-vault-neon.html"
+        write_file(path='PATH="D:\\Temp\\retro-vault\\retro-vault-neon.html"
                          CONTENT="<html lang=..."')
 
     -- the entire argument list crammed into `path` as a shell-ish key=value
@@ -6846,7 +6923,7 @@ def unpack_kv_args(a):
 
 
 def _path_key(p):
-    """One canonical key per file. G:/TMP/a.bat, G:\\TMP\\a.bat and g:\\tmp\\A.BAT
+    """One canonical key per file. D:/Temp/a.bat, D:\\Temp\\a.bat and d:\\temp\\A.BAT
     are the same file; keyed by the raw lowercased string they were three
     different counters, so a per-file limit counted far too slowly."""
     s = str(p or "").strip().strip('"').strip("'")
@@ -8864,6 +8941,28 @@ def _code_lines(text):
     return out
 
 
+_JS_FUNC_DEF = re.compile(
+    r"\bfunction\s+([A-Za-z_$][\w$]*)\s*\("
+    r"|\b(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?(?:function\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)")
+
+
+def uncalled_new_functions(old_text, new_text, others=()):
+    """Functions defined in new_text but not old_text whose name occurs nowhere
+    else - not again in new_text, not in any of `others` (the workspace's other
+    scripts and pages)."""
+    def names(t):
+        return {a or b for a, b in _JS_FUNC_DEF.findall(t or "")}
+    out = []
+    for name in sorted(names(new_text) - names(old_text)):
+        pat = re.compile(r"(?<![\w$.])" + re.escape(name) + r"(?![\w$])")
+        if len(pat.findall(new_text)) > 1:
+            continue
+        if any(pat.search(o or "") for o in others):
+            continue
+        out.append(name)
+    return out
+
+
 def claimed_code_missing(reply, files, originals=None):
     """[(block, [files checked])] for code blocks in the reply that are in none of
     `files` now and were not in them before the turn either."""
@@ -8888,6 +8987,26 @@ def claimed_code_missing(reply, files, originals=None):
         new_missing = [l for l in now_missing if l not in was_there]
         if len(new_missing) >= 2 and len(new_missing) >= 0.6 * len(lines):
             out.append((block.strip("\n"), [str(f) for f in files]))
+    # Inline code that states a value or an expression: `f = (cd - 55) * 0.0016`.
+    prose = _FENCE.sub(" ", reply or "")
+    def squash(t):
+        return re.sub(r"\s+", "", (t or "").replace("\u00b2", "2").replace("**2", "2"))
+    now_sq = []
+    for f in files or []:
+        try:
+            now_sq.append(squash(Path(f).read_text(encoding="utf-8", errors="replace")))
+        except OSError:
+            pass
+    before_sq = [squash(b) for b in (originals or {}).values()]
+    spans = []
+    for sp in re.findall(r"`([^`\n]{5,80})`", prose):
+        if re.search(r"\d", sp) and re.search(r"[=*/+<>]|\(", sp):
+            q = squash(sp)
+            if not any(q in t for t in now_sq) and not any(q in b for b in before_sq):
+                spans.append(sp)
+    spans = list(dict.fromkeys(spans))
+    if len(spans) >= 2:
+        out.append(("\n".join(spans), [str(f) for f in files]))
     return out
 
 
@@ -11047,9 +11166,125 @@ def try_placed_edits(model, task, workspace, allow_all, req_id, should_cancel,
             activity(req_id, "done", "imports together", "still failing", ok=False)
             _gate_record(req_id, "imports", repair_passes=_tries, imports_ok=False, repaired=False)
 
+    # Only the NEW tests are red: one repair turn that may fix the CODE (the
+    # in-plan repair is locked to the test file, so a code bug could only be
+    # answered by bending the test). Undone if it makes anything worse.
+    _final_note = ""
+    try:
+        if (_config.get("placed_final_test_repair", True) and not _revert_note
+                and SUITE_GATE and not (should_cancel and should_cancel())):
+            _red = []
+            for _sp in _project_suites(workspace)[:3]:
+                _c, _tail, _okp, _fl = _suite_detail(str(_sp), workspace, timeout=120)
+                if _c and _c[1] > 0:
+                    _red.append((_sp, _c, _tail, _fl))
+                elif _c is None and str(_sp) in (suite_base or {}):
+                    # Does not run at all - acceptable to the gate only when the
+                    # crash is the model's own new test (checked just below).
+                    _red.append((_sp, None, _tail, _fl))
+            if _red and not _suite_regressions(suite_base, workspace):
+                _fails0 = sum((c[1] if c else 999) for _, c, _, _ in _red)
+                log(f"Placed edits: old tests pass but {_fails0} test(s) fail - one "
+                    "final repair turn (code or test)", "warn")
+                activity(req_id, "retry", "new tests red", f"{_fails0} failing", ok=False)
+                _snap = {}
+                for _f in ({s_.get("file") for s_ in (plan.steps or []) if s_.get("file")}
+                           | {str(r_[0]) for r_ in _red}):
+                    try:
+                        _snap[_f] = Path(_f).read_text(encoding="utf-8")
+                    except OSError:
+                        pass
+                _packs = []
+                for _sp, _c, _tail, _fl in _red:
+                    if _c is None:
+                        # The new test takes the whole runner down: the traceback
+                        # names the line (usually a bug in the new code).
+                        _packs.append(f"{_sp.name} does not run at all now - a new test crashes "
+                                      "it (every old test passed before). The crash:\n" + _tail[:2500])
+                        continue
+                    _pk = failure_pack(str(_sp), _tail + "\n" + "\n".join(
+                        "FAIL " + str(x) for x in (_fl or [])), workspace)
+                    _packs.append(f"{_sp.name}: {_c[0]} passed, {_c[1]} FAILED.\n" + (_pk or _tail[:900]))
+                _fp = ("The change is in and every test that passed before still passes, but "
+                       + ("tests added for this task now FAIL or crash the test file. For each, "
+                          if _fails0 >= 999 else
+                          str(_fails0) + " test(s) now FAIL - tests added for this task. For each, ")
+                       + 
+                       "decide which is wrong: the CODE (it does not do what the task asks) or "
+                       "the TEST (it expects something the task does not ask for). Usually it is "
+                       "the code. Fix it with edit_file - small edits, old_text copied exactly - "
+                       "then run the test file again. Do not delete or weaken a test to make it "
+                       "pass unless it plainly contradicts the task.\n\nThe task:\n"
+                       + str(task)[:1500] + "\n\n" + "\n\n".join(_packs)[:10000])
+                try:
+                    _fx = process_ai_response_with_tools(
+                        model, [{"role": "user", "content": _fp}], workspace=workspace,
+                        allow_all=allow_all, req_id=req_id, should_cancel=should_cancel,
+                        agent_mode=agent_mode, session_id=session_id, allow_split=False)
+                    calls += _fx.get("tool_calls") or []
+                    results += _fx.get("tool_results") or []
+                except Exception as _fe:
+                    log(f"Placed edits: final test repair failed: {_fe}", "error")
+                _fails1 = 0
+                for _sp in _project_suites(workspace)[:3]:
+                    _c1 = _suite_detail(str(_sp), workspace, timeout=120)[0]
+                    _fails1 += (_c1[1] if _c1 else 999)
+                _worse = _suite_regressions(suite_base, workspace) or _fails1 > _fails0
+                if _worse:
+                    for _f, _body in _snap.items():
+                        try:
+                            Path(_f).write_text(_body, encoding="utf-8")
+                        except OSError:
+                            pass
+                    log(f"Placed edits: final repair made it worse ({_fails0} -> {_fails1}) - "
+                        f"put back {len(_snap)} file(s)", "warn")
+                    _final_note = ("A final repair of the failing new tests made things worse "
+                                   "and was undone.")
+                else:
+                    log(f"Placed edits: final repair {_fails0} -> {_fails1} failing", "ok" if not _fails1 else "warn")
+                    _final_note = (f"{_fails0} new test(s) were failing; a final repair pass "
+                                   + ("fixed them all." if not _fails1 else f"left {_fails1} failing."))
+                    if _fails0 >= 999:
+                        _final_note = ("A new test crashed its test file; a final repair pass "
+                                       + ("fixed it." if _fails1 < 999 else "could not fix it."))
+                # Still crashing: the new test takes the whole file down and hides
+                # every other result in it. Put back ONLY that test file.
+                _origs = {str(Path(k)).lower(): v for k, v in dict(_orig_files).items()}
+                _origs.update({str(Path(k)).lower(): v for k, v in _originals_peek(req_id).items()
+                               if str(Path(k)).lower() not in _origs})
+                for _sp in _project_suites(workspace)[:3]:
+                    _cnow, _crash = _suite_detail(str(_sp), workspace, timeout=120)[:2]
+                    if _cnow is not None:
+                        continue
+                    _ob = _origs.get(str(Path(_sp)).lower())
+                    # Only when the gate holds the crash to be the NEW test's alone.
+                    if _ob is None or _suite_regressions(suite_base, workspace):
+                        continue
+                    try:
+                        _sp.write_text(_ob, encoding="utf-8")
+                    except OSError:
+                        continue
+                    if _suite_detail(str(_sp), workspace, timeout=120)[0] is not None:
+                        log(f"Placed edits: {_sp.name} still crashed - put its pre-turn "
+                            "version back (the code change stays)", "warn")
+                        _final_note = (_final_note + " " if _final_note else "") + (
+                            f"The new test in {_sp.name} crashed the whole file, hiding every "
+                            "other test in it, and could not be fixed - so that file was put "
+                            "back as it was before this change (the code change itself is "
+                            "kept). The crash:" + NL + str(_crash or "")[-700:])
+                        _gate_record(req_id, "final_test_repair", restored_test=_sp.name)
+                    else:
+                        log(f"Placed edits: putting {_sp.name} back did not make it run", "warn")
+                _gate_record(req_id, "final_test_repair", before=_fails0, after=_fails1,
+                             undone=bool(_worse))
+    except Exception as _fte:
+        log(f"final test repair skipped: {_fte}", "warn")
+
     _report = plan.report()
     if _revert_note:
         _report += NL + NL + _revert_note
+    if _final_note:
+        _report += NL + NL + _final_note
     return {"final_response": _report, "tool_calls": calls,
             "tool_results": results, "needs_permission": None}
 
@@ -11272,6 +11507,103 @@ _SERVER_HINT = re.compile(r"http\.server|HTTPServer|Flask\(|FastAPI\(|uvicorn\.r
 _LINK_HREF = re.compile(r"""<link\b[^>]*\brel\s*=\s*["']stylesheet["'][^>]*\bhref\s*=\s*["']([^"']+)["']""", re.I)
 
 
+_FETCH_API = re.compile(r"""fetch\(\s*["'`](/api/[\w/.-]+)""")
+
+
+def api_snapshot(workspace, wait=20):
+    """{route: (status, kind, keys)} for "/" and the /api routes the page fetches,
+    from the app actually running. None when there is no server or it will not
+    start. kind is "html", "json" or "other"; keys are a JSON object's top keys."""
+    srv = find_web_server(workspace)
+    if not srv:
+        return None
+    ws = Path(workspace)
+    routes = ["/"]
+    for p in list(ws.glob("*.js")) + list(ws.glob("static/*.js")) + list(ws.glob("*.html")) \
+            + list(ws.glob("static/*.html")):
+        try:
+            for r in _FETCH_API.findall(p.read_text(encoding="utf-8", errors="replace")):
+                if r not in routes:
+                    routes.append(r)
+        except OSError:
+            pass
+    try:
+        src = srv.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    taken = {int(x) for x in set(re.findall(r"\b(\d{4,5})\b", src))
+             if 1024 < int(x) < 65536 and _http_get(f"http://127.0.0.1:{int(x)}/", timeout=1)[0] is not None}
+    s_ = socket.socket(); s_.bind(("127.0.0.1", 0)); port = s_.getsockname()[1]; s_.close()
+    env = dict(os.environ, PORT=str(port), VIZ_PORT=str(port), APP_PORT=str(port),
+               SERVER_PORT=str(port), HTTP_PORT=str(port), PYTHONUNBUFFERED="1")
+    proc = subprocess.Popen([_project_python(workspace), str(Path(srv).resolve())], cwd=str(workspace),
+                            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    try:
+        ports = [port] + [int(x) for x in re.findall(r"\b(\d{4,5})\b", src)
+                          if 1024 < int(x) < 65536 and int(x) != port and int(x) not in taken][:4]
+        base, t0 = None, time.time()
+        while time.time() - t0 < wait and base is None and proc.poll() is None:
+            for pt in ports:
+                if _http_get(f"http://127.0.0.1:{pt}/", timeout=2)[0] is not None:
+                    base = f"http://127.0.0.1:{pt}"
+                    break
+            if base is None:
+                time.sleep(0.7)
+        if base is None:
+            return {"(server)": (None, "down", [])}
+        time.sleep(2.0)                      # let a poller fill its first state
+        out = {}
+        for r in routes[:8]:
+            code, body = _http_get(base + r, timeout=8)
+            kind, keys = "other", []
+            b = str(body or "")
+            if re.search(r"<(?:!doctype|html|head|body|script)\b", b, re.I):
+                kind = "html"
+            else:
+                try:
+                    j = json.loads(b)
+                    kind = "json"
+                    keys = sorted(j.keys()) if isinstance(j, dict) else []
+                except ValueError:
+                    pass
+            out[r] = (code, kind, keys)
+        return out
+    finally:
+        try:
+            proc.kill(); proc.wait(timeout=10)
+        except Exception:
+            pass
+
+
+def api_regressions(before, workspace):
+    """What the running app no longer does that it did at the snapshot. "" if nothing."""
+    if not before or "(server)" in before:
+        return ""
+    now = api_snapshot(workspace)
+    if now is None:
+        return ""
+    if "(server)" in now:
+        return "the app's web server no longer starts or answers (it did before this turn)"
+    bad = []
+    for r, (code, kind, keys) in before.items():
+        if code != 200:
+            continue
+        # An /api route that answered HTML was already broken (an error page with
+        # a 200); turning it into JSON is the fix, not a regression (p11_polish7).
+        if r.startswith("/api/") and kind != "json":
+            continue
+        c2, k2, keys2 = now.get(r, (None, "missing", []))
+        if c2 != 200:
+            bad.append(f"{r} answered {code} before, now {c2 or 'no answer (hangs or crashes)'}")
+        elif kind == "html" and k2 != "html":
+            bad.append(f"{r} served the page before, now it does not")
+        elif kind == "json" and (k2 != "json" or set(keys) - set(keys2)):
+            lost = sorted(set(keys) - set(keys2)) if k2 == "json" else ["(no longer JSON)"]
+            bad.append(f"{r} lost {', '.join(lost)[:120]}")
+    return ("the running app got worse: " + "; ".join(bad)) if bad else ""
+
+
 def find_web_server(workspace):
     """The project's web server script, or None."""
     ws = Path(workspace)
@@ -11448,13 +11780,51 @@ def serve_check(workspace, wait=20):
                     "why": tail}
         code, html = _http_get(base)
         problems = [] if code == 200 else [("/", code)]
+        # A 200 is not the page: pair 11's server sent 200 before opening the
+        # file, and "/" carried a 404 error page as its body.
+        if code == 200:
+            _local = ""
+            for _ip in [Path(workspace) / "index.html", Path(workspace) / "static" / "index.html"]:
+                if _ip.is_file():
+                    _local = _ip.read_text(encoding="utf-8", errors="replace"); break
+            _first = re.sub(r"\s+", " ", str(html or ""))[:160]
+            if not re.search(r"<(?:!doctype|html|head|body|script|div|canvas)\b", str(html or ""), re.I):
+                problems.append((f"/ answered 200 but is not an HTML page - it starts: {_first!r}. "
+                                 "Serve index.html for / (map / to index.html, and send the 200 "
+                                 "only after the file has been opened)", "not the page"))
+            elif _local and _SCRIPT_SRC.findall(_local) and not _SCRIPT_SRC.findall(str(html or "")):
+                problems.append(("/ serves a page without the scripts the project's index.html "
+                                 "loads - it is not serving index.html", "not the page"))
         refs = [r for r in _SCRIPT_SRC.findall(html) + _LINK_HREF.findall(html)
                 if not re.match(r"^[a-z]+://|^//|^data:", r, re.I)]
+        _js_texts = []
         for ref in refs[:20]:
             u = urllib.parse.urljoin(base, ref)
-            c2, _ = _http_get(u)
+            c2, _b2 = _http_get(u)
             if c2 != 200:
                 problems.append((ref + "  (requested as " + urllib.parse.urlparse(u).path + ")", c2))
+            elif ref.lower().split("?")[0].endswith((".js", ".mjs")):
+                _js_texts.append(str(_b2 or ""))
+        # Every /api route the page's scripts fetch must be served, as JSON
+        # (p11_polish6: fetch("/api/vault_graph") with no such route - blank vault).
+        _routes = []
+        for _t in _js_texts + [str(html or "")]:
+            for _r in _FETCH_API.findall(_t):
+                if _r not in _routes:
+                    _routes.append(_r)
+        for _r in _routes[:8]:
+            _c3, _b3 = _http_get(base.rstrip("/") + _r, timeout=8)
+            _is_json = False
+            try:
+                json.loads(str(_b3 or ""))
+                _is_json = True
+            except ValueError:
+                pass
+            if _c3 != 200 or not _is_json:
+                problems.append((f"the page's script fetches {_r} but the server answers "
+                                 + (f"{_c3}" if _c3 != 200 else "200 with something that is not JSON")
+                                 + " - add that route to " + srv.name + ", or point the fetch at a "
+                                 "route it does serve", "no such route"))
         # A real browser: layout and runtime errors cannot be seen any other way
         # (Elena Live pair 9: no errors, both canvases laid out 0px tall).
         if not problems and _config.get("agent_browser_check", True):
@@ -11558,6 +11928,35 @@ def serve_repair_prompt(res, workspace, lines=None):
                 parts.append(f"{res['server']} - the lines that decide what it serves:\n-----\n"
                              + "\n".join(routes))
         except OSError:
+            pass
+    # The page itself is not being served: the request handling is the evidence.
+    if kinds & {"not the page", "no such route"}:
+        try:
+            import ast as _ast
+            _st = (ws / res["server"]).read_text(encoding="utf-8", errors="replace")
+            _defs = []
+            for _n in _ast.walk(_ast.parse(_st)):
+                if isinstance(_n, (_ast.FunctionDef, _ast.AsyncFunctionDef)) and (
+                        _n.name in ("do_GET", "do_HEAD", "translate_path", "send_head", "end_headers")
+                        or re.search(r"""["']/["']""", _ast.get_source_segment(_st, _n) or "")):
+                    _defs.append(_ast.get_source_segment(_st, _n, padded=True) or "")
+            # A stdlib trap the model walks into: __init__ replaces a class-level
+            # `directory` with its argument (default: the working directory).
+            if (re.search(r"class\s+\w+\(\s*(?:http\.server\.)?SimpleHTTPRequestHandler\s*\)", _st)
+                    and re.search(r"^\s{4}directory\s*=", _st, re.M)):
+                parts.insert(0, "NOTE: this handler sets `directory` as a CLASS attribute, but "
+                                "SimpleHTTPRequestHandler.__init__ sets self.directory from its own "
+                                "`directory` argument (default: the current working directory), "
+                                "which overrides the class attribute - so files are looked up in the "
+                                "wrong folder. Pass directory= when the handler is constructed (for "
+                                "example functools.partial(Handler, directory=STATIC)), or build the "
+                                "full path from your own constant in translate_path instead of "
+                                "self.directory.")
+            if _defs:
+                parts.insert(0, f"{res['server']} - how it answers requests (fix THIS; keep every "
+                                "other route, /api/... included, exactly as it is):\n-----\n"
+                             + "\n\n".join(d for d in _defs if d)[:6000])
+        except (OSError, SyntaxError, ValueError):
             pass
     shown, used = [], 0
     for p in parts:
@@ -11759,6 +12158,136 @@ def test_failures_in(output):
     return int(m.group(1)), int(m.group(2) or 0)
 
 
+_FAIL_NAME = re.compile(r"(?:FAIL(?:ED)?|ERROR)\b[:\s]*(?:[\w./\\-]+::)?(test_\w+)|\b(test_\w+)\b[^\n]*?\b(?:FAIL(?:ED)?|ERROR)\b")
+
+
+def _defs_by_name(tree, src):
+    """{name: [source]} for every function and method in a module."""
+    out = {}
+    import ast as _ast
+    for node in _ast.walk(tree):
+        if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+            # The file's own indentation: old_text is copied from this.
+            seg = _ast.get_source_segment(src, node, padded=True)
+            if seg:
+                out.setdefault(node.name, []).append(seg)
+    return out
+
+
+def _called_names(node):
+    import ast as _ast
+    names = set()
+    for n in _ast.walk(node):
+        if isinstance(n, _ast.Call):
+            f = n.func
+            if isinstance(f, _ast.Name):
+                names.add(f.id)
+            elif isinstance(f, _ast.Attribute):
+                names.add(f.attr)
+    return names
+
+
+def failure_pack(test_file, output, workspace, budget=9000):
+    """The failing tests' source, their error lines, and the project code they
+    call - so a fix needs no whole-file reads. "" when nothing can be found."""
+    import ast as _ast
+    tf = Path(test_file)
+    if not tf.is_absolute() and workspace:
+        tf = Path(workspace) / tf
+    try:
+        tsrc = tf.read_text(encoding="utf-8", errors="replace")
+        ttree = _ast.parse(tsrc)
+    except (OSError, SyntaxError, ValueError):
+        return ""
+    failing = []
+    for m in _FAIL_NAME.finditer(output or ""):
+        n = m.group(1) or m.group(2)
+        if n and n not in failing:
+            failing.append(n)
+    if not failing:
+        return ""
+    errs = {}
+    for line in (output or "").splitlines():
+        for n in failing:
+            if n in line and n not in errs and re.search(r"FAIL|ERROR|Error|assert", line):
+                errs[n] = line.strip()[:300]
+    tdefs = _defs_by_name(ttree, tsrc)
+    tests, called = [], set()
+    for n in failing[:8]:
+        segs = tdefs.get(n)
+        if segs:
+            tests.append((n, segs[0]))
+            for node in _ast.walk(ttree):
+                if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)) and node.name == n:
+                    called |= _called_names(node)
+    # the project's own modules (not tests), top level and one folder down
+    ws = Path(workspace) if workspace else tf.parent
+    mods = {}
+    for p in list(ws.glob("*.py")) + list(ws.glob("*/*.py")):
+        if p.resolve() == tf.resolve() or _looks_like_test_file(p) or ".nd_backups" in p.parts:
+            continue
+        try:
+            msrc = p.read_text(encoding="utf-8", errors="replace")
+            mods[p] = (msrc, _defs_by_name(_ast.parse(msrc), msrc))
+        except (OSError, SyntaxError, ValueError):
+            pass
+    # helpers the tests define themselves count as test code, not project code
+    called -= set(tdefs)
+    skip = {"print", "len", "range", "str", "int", "float", "list", "dict", "set", "sorted",
+            "isinstance", "getattr", "setattr", "append", "get", "items", "keys", "values",
+            "join", "format", "update_wrapper", "assertEqual", "assertTrue", "copy", "deepcopy"}
+    code, seen = [], set()
+
+    def add(name):
+        for p, (msrc, defs) in mods.items():
+            for seg in defs.get(name, []):
+                key = (p.name, seg[:60])
+                if key not in seen:
+                    seen.add(key)
+                    code.append((p.name, name, seg))
+    for n in sorted(called - skip):
+        add(n)
+    # one level deeper: helpers the project functions call
+    deeper = set()
+    for _, _, seg in list(code):
+        try:
+            import textwrap as _tw
+            deeper |= _called_names(_ast.parse(_tw.dedent(seg)))
+        except SyntaxError:
+            pass
+    first = len(code)
+    for n in sorted(deeper - called - skip - set(tdefs)):
+        add(n)
+    parts = ["Failing tests (" + str(len(failing)) + "): " + ", ".join(failing)]
+    for n in failing:
+        if n in errs:
+            parts.append("  " + errs[n])
+    out = "\n".join(parts) + "\n"
+
+    def cut(seg, n):
+        return seg if len(seg) <= n else seg[:n] + "\n    # ... (cut - read the rest only if you need it)"
+    # Tests are short and repetitive; the code under test is what the fix edits.
+    tblocks, tused = [], 0
+    for n, seg in tests:
+        b = f"--- {tf.name}: {n} ---\n{cut(seg, 700)}"
+        if tused + len(b) > 3500:
+            tblocks.append(f"(... {len(tests) - len(tblocks)} more failing test(s) not shown)")
+            break
+        tblocks.append(b); tused += len(b)
+    cblocks = [f"--- {f}: {n} (called by the failing tests) ---\n{cut(seg, 4000)}" for f, n, seg in code[:first]]
+    cblocks += [f"--- {f}: {n} (helper) ---\n{cut(seg, 1500)}" for f, n, seg in code[first:]]
+    used, shown = 0, []
+    for b in cblocks + tblocks:
+        if used + len(b) > budget:
+            shown.append("(... more not shown - read only what is missing)")
+            break
+        shown.append(b); used += len(b)
+    # code first in the budget, but tests first on the page: what fails, then where
+    tb = [b for b in shown if b in tblocks]
+    cb = [b for b in shown if b not in tblocks]
+    return out + "\n" + "\n\n".join(tb + cb) + "\n"
+
+
 TESTS_FIRST_NOTE = (
     "\n\n[NeuralDock: {failed} test(s) FAIL in {name}. Fixing them is the next job: "
     "edit the code they test (not the tests, unless a test is plainly wrong), then "
@@ -11902,6 +12431,14 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
         wait timed out, otherwise {answer, option_id}."""
         if not req_id:
             return None
+        # Nobody is watching an unattended run; waiting burns its whole budget.
+        if str(req_id).startswith("bench_") or _config.get("agent_unattended", False):
+            log(f"Job {req_id}: ask_user in an unattended run - answered at once: "
+                f"{str(question)[:80]}", "info")
+            return ("[ask_user] This run is unattended - no one is here to answer. Do not "
+                    "ask again. Take the safest reasonable choice that is consistent with the "
+                    "task as written, carry on, and say in your final reply which choice you "
+                    "made and why.")
         ev = threading.Event()
         with _lock:
             _ask_waits[req_id] = {"event": ev, "answer": None,
@@ -12486,7 +13023,14 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                     _lines.append(f"{_sp.name}: does not run.\n{_tail[:700]}")
                 elif _c[1] > 0:
                     _bad.append(f"{_sp.name}: {_c[1]} test(s) failing.")
-                    _lines.append(f"{_sp.name}: {_c[0]} passed, {_c[1]} FAILED.\n{_tail[:900]}")
+                    _pk = ""
+                    if _config.get("agent_failure_pack", True):
+                        _pk = failure_pack(str(_sp), _tail + "\n" + "\n".join(
+                            "FAIL " + str(x) for x in (_fl or [])), workspace)
+                    _lines.append(f"{_sp.name}: {_c[0]} passed, {_c[1]} FAILED.\n"
+                                  + (("\n[The failing tests and the code they exercise - edit from "
+                                      "these, no need to read the files:]\n" + _pk) if _pk
+                                     else _tail[:900]))
             if session_id:
                 remember_ctx(session_id, tests_failing=(" ".join(_bad) or " "))
             if _lines:
@@ -12494,7 +13038,7 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                 _tm["content"] = str(_tm.get("content") or "") + (
                     "\n\n[NeuralDock ran this project's tests before this turn. Fix these "
                     "first - edit the code they test, then run the test file again:]\n\n"
-                    + "\n\n".join(_lines)[:2400])
+                    + "\n\n".join(_lines)[:12000])
                 full_messages[-1] = _tm
                 log("Continue turn: ran the project's tests - " + "; ".join(_bad)[:120], "info")
     except Exception as _ce:
@@ -12669,13 +13213,25 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
         # Read-only loop breaker, only while tests fail (Elena Live pair 4).
         if name in ("write_file", "edit_file"):
             _readonly_run["n"] = 0
+            _readonly_run["narrow"] = 0
         elif name in READ_ONLY_TOOLS and _tests_failing["v"]:
-            if _readonly_run["n"] >= READ_LOOP_MAX:
+            # A narrow read of the exact lines to edit is how a precise old_text is
+            # made - refusing it left the model unable to edit at all (vis_7b_tests).
+            try:
+                _lim = int(a.get("limit") or 0)
+            except (TypeError, ValueError):
+                _lim = 0
+            _narrow = name == "read_file" and 0 < _lim <= 120
+            if (_readonly_run["n"] >= READ_LOOP_MAX
+                    and not (_narrow and _readonly_run.get("narrow", 0) < 6)):
                 log(f"Refused {name} - {_readonly_run['n']} reads in a row while tests fail", "warn")
                 return ("[EDIT NOW] " + str(_readonly_run["n"]) + " read-only calls in a row and "
                         "no edit, while " + _tests_failing["v"] + " You have what you need: "
-                        "make the fix with edit_file now, then run the tests. Further reads "
-                        "are refused until you edit.")
+                        "make the fix with edit_file now, then run the tests. Whole-file reads and "
+                        "searches are refused until you edit; to see the exact lines for old_text, "
+                        "read_file with offset and a limit of at most 120 lines.")
+            if _readonly_run["n"] >= READ_LOOP_MAX:
+                _readonly_run["narrow"] = _readonly_run.get("narrow", 0) + 1
             _readonly_run["n"] += 1
         try:
             if name == "generate_image": return tool_generate_image(a)
@@ -12738,6 +13294,16 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                 """
                 if "base" not in _suite_state:
                     _suite_state["base"] = _suite_snapshot(workspace)
+                    # ...and what the running app answers (top-level turns only:
+                    # starting the app costs seconds). See api_snapshot.
+                    if allow_split and _config.get("agent_api_gate", True):
+                        try:
+                            _suite_state["api"] = api_snapshot(workspace)
+                            if _suite_state["api"]:
+                                log("API gate: watching " + ", ".join(
+                                    k for k, v in _suite_state["api"].items() if v[0] == 200), "info")
+                        except Exception as _ape:
+                            log(f"API snapshot skipped: {_ape}", "warn")
                     if _suite_state["base"]:
                         log("Watching " + str(len(_suite_state["base"]))
                             + " green suite(s): "
@@ -12830,6 +13396,14 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                         if _cnt[1] > 0:
                             _tests_failing["v"] = f"{_tn}: {_cnt[1]} test(s) failing."
                             _out += TESTS_FIRST_NOTE.format(failed=_cnt[1], name=_tn)
+                            # The failing tests and the code they call, so the fix
+                            # needs no whole-file reads (a 32K window cannot hold them).
+                            if _config.get("agent_failure_pack", True):
+                                _fp = failure_pack(_rp, str(r.get("stdout") or "") + "\n"
+                                                   + str(r.get("stderr") or ""), workspace)
+                                if _fp:
+                                    _out += ("\n\n[The failing tests and the code they exercise - "
+                                             "edit from these, no need to read the files:]\n" + _fp)
                         else:
                             _tests_failing["v"] = ""
                         if session_id:
@@ -13031,7 +13605,7 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                 # Was: ar = {"path": ar}. When arguments came back as a MALFORMED
                 # json string that wrapped the entire broken blob as the file
                 # path, producing a write_file whose path was
-                # `["path": "G:\\TMP\\...", "content": "<!DOCTYPE...`. A junk
+                # `["path": "D:\\Temp\\...", "content": "<!DOCTYPE...`. A junk
                 # path is worse than a dropped call: the dropped call gets
                 # nudged, the junk one gets executed.
                 log(f"Discarded {nm} call with unparseable arguments string", "warn")
@@ -13596,6 +14170,32 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                 log(f"  echoed line: {_ws_norm(_ex)[:160]}", "info")
             echoed = echoed or json_echo
             promised = announces_unfinished_work(content_clean)
+            # Edits made, and all that is left is "I'll verify ..." - ND's own
+            # end-of-turn checks are the verification (visual fix 3 was reported
+            # STOPPED after finishing both fixes).
+            _writes_so_far = [r_ for r_ in all_tool_calls if (r_.get("tool") or r_.get("name")) in WRITE_TOOLS]
+            if (promised and not echoed and made_any_edit(all_tool_calls)
+                    # ...and the last write landed: "the edit failed, let me re-read"
+                    # is a retry, not a check (Elena port turn).
+                    and _writes_so_far and not _writes_so_far[-1].get("failed")
+                    and not re.search(r"\b(?:fail(?:ed|s|ure)?|(?:did|does) ?n[o']t match|not found|error)\b",
+                                      content_clean or "", re.I)
+                    and promises_only_to_verify(content_clean)):
+                if not _readonly_run.get("verify_nudged") and _config.get("agent_verify_nudge", True):
+                    # Once: the work may be half done (Elena settle turn closed after
+                    # two of three edits). Not a stall - no breaker count.
+                    _readonly_run["verify_nudged"] = True
+                    log("Reply ends on a promise to verify - one gentle nudge", "info")
+                    convo.append({"role": "assistant", "content": content_clean or "(checking)"})
+                    convo.append({"role": "user", "content": (
+                        "Go ahead: if any part of the task is still not done, do it now with a "
+                        "real tool call (read just the lines you need first). If everything is "
+                        "already done, reply with a short summary of what you changed - ND "
+                        "runs its own checks after you.")})
+                    continue
+                log("Reply ends on a promise to verify work already done - finishing; "
+                    "ND's checks follow", "info")
+                promised = False
             if echoed or promised:
                 st = note_no_progress(session_id, content_clean)
                 # Stop early on an exact repeat: saying the same thing twice is
@@ -13637,7 +14237,7 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                             "Use the real tool call, not text. If structured calls are not "
                             "working, use the text fallback — substitute YOUR real path and "
                             "YOUR real file contents, like this:\n"
-                            "TOOL: write_file G:\\TMP\\TMP\\index.html|||<!doctype html>...\n"
+                            "TOOL: write_file D:\\Temp\\TMP\\index.html|||<!doctype html>...\n"
                             "The path comes first, then three pipe characters, then the file.")
                     elif echoed and _done:
                         # Files ARE on disk. "Nothing has been created" would be a
@@ -13684,6 +14284,38 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                                 "You have read enough. Stop investigating and produce output.\n\n")
                         if workspace:
                             nudge += f"Working directory: {workspace}\n"
+                        if _tests_failing["v"]:
+                            # A fix, not a file: a whole-file rewrite of code with
+                            # passing tests is the worst advice (vis_7c_tests).
+                            nudge = (
+                                "You described the fix but did not call any tool, so nothing "
+                                "changed. " + _tests_failing["v"] + "\n\n"
+                                "Do not try to fix everything at once. Fix ONLY the FIRST "
+                                "failing test now, with ONE edit_file call: `path`, `old_text` "
+                                "(a few lines copied exactly from the file - if you are not sure "
+                                "of them, read_file just those lines with offset and limit first) "
+                                "and `new_text`. Then run the tests, and move to the next one.")
+                            convo.append({"role": "user", "content": nudge})
+                            continue
+                        # Changing an existing codebase: an edit, not a new whole file
+                        # (T3 run: 16 reads of the project, then three write_file nudges).
+                        _read_existing = [p_ for p_ in {
+                            str(c_.get("path") or "")
+                            for c_ in all_tool_calls
+                            if (c_.get("tool") or c_.get("name")) == "read_file"} if p_ and Path(p_).is_file()
+                            and Path(p_).suffix.lower() in (".py", ".js", ".ts", ".html", ".css")]
+                        if (not writes and len(_read_existing) >= 3
+                                and _wants_code_change(_last_user or _orig_task)):
+                            nudge = (
+                                "You described the change but did not call any tool, so nothing "
+                                "changed. You have read the project; now make the FIRST edit. "
+                                "Call edit_file ONCE on the existing file that needs it: `path`, "
+                                "`old_text` (a few lines copied exactly from what you read - the "
+                                "lines just above where the new code goes is fine) and "
+                                "`new_text` (those lines plus the new code). One edit in this "
+                                "reply; the next edit after it. Do not rewrite whole files.")
+                            convo.append({"role": "user", "content": nudge})
+                            continue
                         nudge += (
                             "Call write_file with an absolute `path` and the COMPLETE `content` of "
                             "the file. ONE file in this reply — the single most important one. Do "
@@ -13807,7 +14439,10 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
             # the EXISTING test file, do not create one", which cannot be obeyed
             # there. Measured 2026-09-25: both at once, and the model invented
             # test_set_location.py.
-            _test_ok = not _scope_by_user and _workspace_has_tests(workspace)
+            # ...or ND scoped this step to one file (a placed-edit step: the plan has
+            # its own test step; T3 run 4 timed out on this contradiction).
+            _test_ok = (not _scope_by_user and not (only_file and not _looks_like_test_file(only_file))
+                        and _workspace_has_tests(workspace))
             if _chg and not _tt and not _test_ok and not _test_skip_logged:
                 _test_skip_logged = True
                 log("Test check skipped: " + ("the request is scoped to one file"
@@ -14175,6 +14810,16 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                    if c["name"] == "read_file" else None)
             _stale = bool(_rp and key in _seen_seq
                           and _write_seq.get(_path_key(_rp), -1) > _seen_seq[key])
+            # Running a script (the tests) or searching after ANY write is fresh
+            # too: the old output describes the old code (vis_10_test1 was handed
+            # the pre-edit test run twice after fixing server.py).
+            if (not _stale and c["name"] in ("run_script", "search_files", "find_references",
+                                              "find_definition", "list_dir")
+                    and key in _seen_seq
+                    and max(_write_seq.values(), default=-1) > _seen_seq[key]):
+                _stale = True
+                log(f"Re-running {c['name']}: files changed since it last ran, so the "
+                    "earlier result is out of date", "info")
             if _stale:
                 log(f"Re-reading {Path(str(_rp)).name}: it was written since it was "
                     "last read, so the earlier result is out of date", "info")
@@ -14687,14 +15332,63 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                                + " - that change was not made."))
     except Exception as _cce:
         log(f"claim check skipped: {_cce}", "warn")
+    # New functions nothing calls (visual fix 1: refitElena() written, never called).
+    try:
+        if (allow_split and workspace and req_id and not stuck_stop and _written_now
+                and _config.get("agent_uncalled_check", True)):
+            _orig = {str(Path(k)).lower(): v for k, v in _originals_peek(req_id).items()}
+            _ws = Path(workspace)
+            _web = [p for p in list(_ws.rglob("*.js")) + list(_ws.rglob("*.htm*"))
+                    if ".nd_backups" not in p.parts and "node_modules" not in p.parts][:40]
+            _dead = []
+            for _w in _written_now:
+                _wf = Path(str(_w).split(" (")[0])
+                if _wf.suffix.lower() not in (".js", ".mjs") or not _wf.is_file():
+                    continue
+                _new = _wf.read_text(encoding="utf-8", errors="replace")
+                _others = []
+                for _p in _web:
+                    if _p.resolve() != _wf.resolve():
+                        try:
+                            _others.append(_p.read_text(encoding="utf-8", errors="replace"))
+                        except OSError:
+                            pass
+                for _n in uncalled_new_functions(_orig.get(str(_wf).lower(), ""), _new, _others):
+                    _dead.append((_wf, _n))
+            if _dead:
+                log(f"Uncalled check: {len(_dead)} new function(s) nothing calls - one repair step", "warn")
+                agent_activity(req_id, "retry", "new code never called",
+                               ", ".join(n for _, n in _dead[:4]), ok=False)
+                _up = ("You added these functions this turn, but NOTHING calls them, so they "
+                       "change nothing on screen or in behaviour: "
+                       + ", ".join(f"{n}() in {f.name}" for f, n in _dead[:6])
+                       + ". Wire each one in where it is needed (for example call it after "
+                         "setup, after layout settles, and on resize - whatever it was written "
+                         "for), or delete it if it is not needed. Use edit_file; do not change "
+                         "anything else.")
+                try:
+                    process_ai_response_with_tools(
+                        model, [{"role": "user", "content": _up}], workspace=workspace,
+                        allow_all=allow_all, req_id=req_id, should_cancel=should_cancel,
+                        agent_mode=agent_mode, session_id=session_id, allow_split=False)
+                except Exception as _ure:
+                    log(f"uncalled repair failed: {_ure}", "error")
+                _gate_record(req_id, "uncalled", functions=len(_dead))
+    except Exception as _uce:
+        log(f"uncalled check skipped: {_uce}", "warn")
     # A page and its scripts must agree, however the page got written (pair 7:
     # the page came from the ordinary loop, so the build's check never ran).
     try:
         # ... and on a follow-up turn, which may write no page at all (pair 10:
         # the page came from a turn that timed out, so no check ever saw it).
+        _srv_now = find_web_server(workspace) if workspace else None
         if (allow_split and workspace and req_id and _config.get("agent_page_check", True)
                 and (any(str(w).lower().endswith((".html", ".htm", ".js", ".mjs"))
                          for w in (_written_now or []))
+                     # ...or the web server itself changed (pair 11: a server-only
+                     # repair was "verified" with design_review, never served).
+                     or (_srv_now is not None and any(
+                         Path(str(w).split(" (")[0]).name == _srv_now.name for w in (_written_now or [])))
                      or is_followup(_last_user))):
             final = (final or "").rstrip() + repair_pages(
                 model, workspace, req_id, session_id, allow_all, should_cancel, agent_mode)
@@ -14702,12 +15396,67 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                 model, workspace, req_id, session_id, allow_all, should_cancel, agent_mode)
     except Exception as _pce:
         log(f"page check skipped: {_pce}", "warn")
+    # A new test that crashes its whole file, while every old test still passes:
+    # one repair with the crash, then put that test file back (T3: the ordinary
+    # loop shipped "0 passing (was 50)" - the placed-edit path already did this).
+    try:
+        if (allow_split and req_id and workspace and SUITE_GATE and not stuck_stop
+                and _config.get("placed_final_test_repair", True) and _suite_state.get("base")
+                and not (should_cancel and should_cancel())):
+            _crashed = []
+            for _sp in list(_suite_state["base"].keys())[:3]:
+                _cd = _suite_detail(_sp, workspace, timeout=120)
+                if _cd[0] is None:
+                    _crashed.append((Path(_sp), _cd[1]))
+            if _crashed and not _suite_regressions(_suite_state["base"], workspace):
+                log(f"New test crashes {', '.join(p.name for p, _ in _crashed)} (old tests pass) "
+                    "- one repair turn", "warn")
+                agent_activity(req_id, "retry", "new test crashes its file", "repairing", ok=False)
+                _cp2 = ("Every test that passed before still passes, but a NEW test crashes its whole "
+                        "test file, so none of the tests in it can report. Usually the new code it "
+                        "calls is broken (a missing import, a wrong name). Fix the line the crash "
+                        "names with edit_file, then run the test file again.\n\n"
+                        + "\n\n".join(f"{p.name} - the crash:\n{t[-2500:]}" for p, t in _crashed))
+                try:
+                    process_ai_response_with_tools(
+                        model, [{"role": "user", "content": _cp2}], workspace=workspace,
+                        allow_all=allow_all, req_id=req_id, should_cancel=should_cancel,
+                        agent_mode=agent_mode, session_id=session_id, allow_split=False)
+                except Exception as _ce2:
+                    log(f"crash repair failed: {_ce2}", "error")
+                _orig2 = {str(Path(k)).lower(): v for k, v in _originals_peek(req_id).items()}
+                for _p, _t in _crashed:
+                    if _suite_detail(str(_p), workspace, timeout=120)[0] is not None:
+                        final = (final or "").rstrip() + (NL + NL + f"A new test crashed {_p.name}; "
+                                                          "one repair pass fixed it.")
+                        continue
+                    _ob = _orig2.get(str(_p).lower())
+                    if _ob is None or _suite_regressions(_suite_state["base"], workspace):
+                        continue
+                    try:
+                        _p.write_text(_ob, encoding="utf-8")
+                    except OSError:
+                        continue
+                    if _suite_detail(str(_p), workspace, timeout=120)[0] is not None:
+                        log(f"{_p.name} still crashed - put its pre-turn version back (code kept)", "warn")
+                        _gate_record(req_id, "final_test_repair", restored_test=_p.name, path="ordinary")
+                        final = (final or "").rstrip() + (
+                            NL + NL + f"The new test in {_p.name} crashed the whole file, hiding every "
+                            "other test in it, and could not be fixed - so that file was put back as "
+                            "it was before this turn (the code change itself is kept). The crash:"
+                            + NL + str(_t or "")[-700:])
+    except Exception as _oce:
+        log(f"new-test crash check skipped: {_oce}", "warn")
     # A turn that leaves passing tests broken is undone (Elena Live pair 5: a
     # follow-up took a 20/21 build to 7/21 and nothing put it back).
     try:
         if (allow_split and req_id and workspace and SUITE_GATE
-                and _config.get("agent_turn_revert", True) and _suite_state.get("base")):
-            _rb = _suite_regressions(_suite_state["base"], workspace)
+                and _config.get("agent_turn_revert", True)
+                and (_suite_state.get("base") or _suite_state.get("api"))):
+            _rb = _suite_regressions(_suite_state.get("base") or {}, workspace)
+            # The running app is behaviour too (pair 11: tests green, /api/state broken).
+            if not _rb and _suite_state.get("api"):
+                _rb = api_regressions(_suite_state["api"], workspace)
             if _rb:
                 _orig = _originals_peek(req_id)
                 _put = []
@@ -14719,7 +15468,9 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                         log(f"Turn revert: could not restore {Path(_f).name}: {_we}", "error")
                 with _lock:
                     _new = sorted(Path(x).name for x in (_created_by_req.get(req_id) or set()))
-                _after = _suite_regressions(_suite_state["base"], workspace)
+                _after = (_suite_regressions(_suite_state.get("base") or {}, workspace)
+                          or (api_regressions(_suite_state["api"], workspace)
+                              if _suite_state.get("api") else ""))
                 log(f"Turn revert: {_rb[:100]} - restored {len(_put)} file(s)"
                     + (" - suite green again" if not _after else " - STILL broken"), "warn")
                 agent_activity(req_id, "done", "turn undone",
@@ -14728,7 +15479,8 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                              created_kept=len(_new), green_after=not _after)
                 final = (final or "").rstrip() + (
                     NL + NL + "─────────────────────────────" + NL
-                    + "UNDONE. This turn's edits broke tests that were passing before it:" + NL
+                    + ("UNDONE. This turn's edits broke the running app:" if _rb.startswith(("the running app", "the app's web server"))
+                       else "UNDONE. This turn's edits broke tests that were passing before it:") + NL
                     + _rb[:700] + NL + NL
                     + (f"Put back: {', '.join(_put)}." if _put else "No edited file to put back.")
                     + (f" Files this turn created were left in place: {', '.join(_new)}." if _new else "")
@@ -15887,6 +16639,44 @@ except Exception as _obs_err:
 _OBS = None
 _OBS_TRIED = False
 
+def vault_note(note_id):
+    """One note of the vault, read-only: {id, title, body, mtime} or {error}.
+
+    `note_id` is the vault-relative path vault_graph() hands out. Anything that
+    resolves outside the vault, or is not a markdown file, is refused."""
+    o = obs()
+    if not o or not getattr(o, "vault", None) or not note_id:
+        return {"error": "no vault"}
+    try:
+        root = Path(o.vault).resolve()
+        p = (root / note_id).resolve()
+        p.relative_to(root)
+    except (ValueError, OSError):
+        return {"error": "outside the vault"}
+    if p.suffix.lower() != ".md" or not p.is_file():
+        return {"error": "no such note"}
+    text = p.read_text(encoding="utf-8", errors="replace")[:200000]
+    return {"id": note_id, "title": p.stem, "body": text, "mtime": p.stat().st_mtime}
+
+
+_live = {"poller": None}
+_live_lock = threading.Lock()
+
+
+def live_state():
+    """Elena Live's board + vault state. Its poller asks this ND over HTTP, exactly
+    as the standalone Elena Live does, so the two never drift apart."""
+    with _live_lock:
+        if _live["poller"] is None:
+            sys.path.insert(0, str(LIVE_DIR.parent))
+            import elena_live
+            elena_live.ND_URL = f"http://127.0.0.1:{PORT}"
+            elena_live.OLLAMA_URL = OLLAMA_URL
+            _live["poller"] = elena_live.Poller()
+            _live["poller"].start()
+    return _live["poller"].get_state()
+
+
 def obs():
     """Lazily build the vault backend. Returns None if unavailable."""
     global _OBS, _OBS_TRIED
@@ -16703,10 +17493,18 @@ def install_webview():
         "ok" if ok else "error")
     return ok
 
+def portable_browser():
+    """The drive's own Chromium (Philibert), or "" when there is none."""
+    exe = os.environ.get("ND_BROWSER_EXE") or ""
+    return exe if exe and Path(exe).is_file() else ""
+
+
 def choose_shell():
-    """--window / --browser beat config; 'auto' prefers the window if usable."""
+    """--window / --browser beat config; 'auto' prefers the window if usable.
+    A portable Chromium on the drive beats both: every PC gets the same engine."""
     if "--window" in sys.argv:  return "webview"
     if "--browser" in sys.argv: return "browser"
+    if portable_browser():      return "chromium"
     pref = str(_config.get("ui_shell", "auto")).lower()
     if pref == "webview": return "webview"
     if pref == "browser": return "browser"
@@ -16718,6 +17516,10 @@ def open_ui(url):
     Returns True if this call owns the main thread from here on.
     """
     shell = choose_shell()
+    if shell == "chromium":
+        if _open_portable_browser(url):
+            return True
+        shell = "webview" if _webview_available() else "browser"
     if shell == "webview":
         if not _webview_available():
             log("pywebview not installed - falling back to the browser "
@@ -16766,6 +17568,53 @@ def open_ui(url):
                 log(f"WebView2 window failed ({e}) - falling back to the browser", "warn")
     webbrowser.open(url)
     return False
+
+def _open_portable_browser(url):
+    """Open `url` in the drive's Chromium as an app window and wait until it closes.
+
+    Its profile lives on the drive, so nothing is written into the PC's own
+    browser and the next PC sees the same settings. Chromium hands a second
+    launch with the same profile to the running one and exits at once, so
+    "closed" means: no Chromium process left using this profile.
+    """
+    exe = portable_browser()
+    profile = os.environ.get("ND_BROWSER_PROFILE") or str(_CONFIG_DIR / "browser")
+    Path(profile).mkdir(parents=True, exist_ok=True)
+    args = [exe, f"--app={url}", f"--user-data-dir={profile}",
+            "--no-first-run", "--no-default-browser-check", "--disable-sync",
+            "--disable-background-networking", "--disable-component-update",
+            "--disable-domain-reliability", "--disable-features=Translate,MediaRouter",
+            "--autoplay-policy=no-user-gesture-required",   # startup sounds, voice
+            "--start-maximized"]
+    if os.environ.get("ND_BROWSER_KIOSK") == "1":
+        args.append("--kiosk")
+    try:
+        proc = subprocess.Popen(args)
+    except Exception as e:
+        log(f"Portable browser failed to start ({e})", "warn")
+        return False
+    log(f"Opening {PRODUCT} in the drive's browser", "ok")
+    proc.wait()
+
+    def still_open():
+        try:
+            import psutil
+        except Exception:
+            return False
+        key = os.path.normcase(profile)
+        for p in psutil.process_iter(["name", "cmdline"]):
+            try:
+                if any(key in os.path.normcase(a) for a in (p.info["cmdline"] or [])
+                       if a.startswith("--user-data-dir")):
+                    return True
+            except Exception:
+                continue
+        return False
+
+    while still_open():
+        time.sleep(1.5)
+    return True
+
 
 # --- Device pairing (short-lived code + explicit approval) -------------------
 _pair_code   = {"code": None, "exp": 0}
@@ -16877,6 +17726,32 @@ class Handler(BaseHTTPRequestHandler):
             except (BrokenPipeError, ConnectionAbortedError, OSError):
                 break  # Client disconnected — not an error
 
+    _LIVE_TYPES = {".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8",
+                   ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".woff2": "font/woff2",
+                   ".png": "image/png", ".json": "application/json; charset=utf-8"}
+
+    def serve_live(self, bare_path):
+        """A file of the one-stop page. Never anything outside live/static."""
+        rel = bare_path[len("/live"):].lstrip("/") or "index.html"
+        try:
+            f = (LIVE_DIR / urllib.parse.unquote(rel)).resolve()
+            f.relative_to(LIVE_DIR.resolve())
+        except (ValueError, OSError):
+            self.send_json({"error": "not found"}, 404)
+            return
+        if not f.is_file():
+            self.send_json({"error": "not found"}, 404)
+            return
+        body = f.read_bytes()
+        if PORTABLE and f.name == "index.html":
+            body = body.replace(b"<title>Elena Live</title>", f"<title>{PRODUCT} // Esteef.Ai</title>".encode())
+        self.send_response(200)
+        self.send_header("Content-Type", self._LIVE_TYPES.get(f.suffix.lower(), "application/octet-stream"))
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(body)
+
     def serve_elena(self):
         """Serve Elena's interface, read fresh each request.
 
@@ -16974,7 +17849,7 @@ class Handler(BaseHTTPRequestHandler):
         bare_path = urllib.parse.urlparse(self.path).path or "/"
         # Philibert opens on the simple view; the full interface stays at /full.
         if PORTABLE and bare_path in ("/", "/index.html"):
-            bare_path = "/elena"
+            bare_path = "/live/"
         elif bare_path == "/full":
             bare_path = "/"
         if bare_path in ("/", "/index.html"):
@@ -17003,7 +17878,21 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(js)
             return
-        if bare_path in ("/elena", "/elena.html"):
+        if bare_path == "/live" or bare_path.startswith("/live/"):
+            if not self.authed():
+                page = PAIR_PAGE.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", len(page))
+                self.end_headers()
+                self.wfile.write(page)
+                return
+            if bare_path == "/live/api/state":
+                self.send_json(live_state())
+            else:
+                self.serve_live(bare_path)
+            return
+        if bare_path in ("/elena", "/elena.html", "/chat"):
             # Same auth shape as "/": an unpaired device gets the pairing page
             # rather than a 401 it cannot act on.
             if not self.authed():
@@ -17042,6 +17931,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(sysmon_snapshot())
         elif self.path == "/api/vault_graph":
             self.send_json(vault_graph())
+        elif self.path.startswith("/api/vault_note"):
+            _nid = (urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("id") or [""])[0]
+            res = vault_note(_nid)
+            self.send_json(res, 200 if "body" in res else 404)
         elif self.path.startswith("/api/vault_activity"):
             try:
                 _since = float((urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)

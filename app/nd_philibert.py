@@ -171,15 +171,15 @@ SPEECH = ROOT / "speech"            # HF_HOME (Whisper models) and voices/, set 
 VOICE = "en_US-amy-medium"
 VOICE_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/"
 WHISPER_MODELS = ("small.en", "base.en")     # requests / the wake word
+# Plain folders, not the Hugging Face cache: exFAT cannot hold the cache's symlinks.
+WHISPER_DIR = Path(os.environ.get("ND_WHISPER_DIR") or SPEECH / "whisper")
 
 
 def speech_ready():
     """Voice and both Whisper models already on the drive (checked without the
     network, so an offline start stays quiet)."""
     voices = Path(os.environ.get("ND_VOICES_DIR") or SPEECH / "voices")
-    hub = Path(os.environ.get("HF_HOME") or SPEECH / "hf") / "hub"
-    whisper = all(any((hub / f"models--Systran--faster-whisper-{m}" / "snapshots").glob("*/model.bin"))
-                  for m in WHISPER_MODELS)
+    whisper = all((WHISPER_DIR / m / "model.bin").is_file() for m in WHISPER_MODELS)
     return (voices / f"{VOICE}.onnx").exists() and (voices / f"{VOICE}.onnx.json").exists() and whisper
 
 
@@ -205,7 +205,8 @@ def get_speech():
         from faster_whisper.utils import download_model
         for m in WHISPER_MODELS:
             print(f"Getting the speech model {m} ...", flush=True)
-            download_model(m)            # cached under HF_HOME on the drive; a no-op once there
+            if not (WHISPER_DIR / m / "model.bin").is_file():
+                download_model(m, output_dir=str(WHISPER_DIR / m))   # real files on the drive
     except Exception as e:
         bad.append(f"whisper: {e}")
     return bad
@@ -262,7 +263,7 @@ def first_run():
     model that suits this machine. Prints progress; returns non-zero on failure."""
     have = installed()
     cat = catalog()
-    need = [m["tag"] for m in cat if m.get("kind") == "embed" and m.get("required")]
+    need = [m["tag"] for m in cat if m.get("required")]     # the embedder and the vision model
     chat_on = [h for h in have if any(_same(h, m["tag"]) for m in cat if m.get("kind", "chat") == "chat")]
     if not chat_on:
         d = pick_default(cat)

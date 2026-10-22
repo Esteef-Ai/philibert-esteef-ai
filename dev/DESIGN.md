@@ -175,7 +175,7 @@ correct tool calls and correct data in `band.db`, not on prose.
 4. Windows first; Mac testing later. Both must look and behave the same.
 5. Audience: any musician (generic setup, no band data shipped).
 6. Band data: SQLite on the drive. Reminders: all channels, for every feature.
-7. Pilot drive: J: (WD My Passport), reformatted exFAT by the user.
+7. Pilot drive: an external USB drive, reformatted exFAT by the user.
 
 ## 13. Open questions
 
@@ -190,3 +190,30 @@ correct tool calls and correct data in `band.db`, not on prose.
 - Drive speed matters: the test HDD reads ~31 MB/s, so a cold 14B load takes ~5 min. Recommend a USB 3 port and an SSD/NVMe drive.
   Launcher: OLLAMA_LOAD_TIMEOUT=30m, OLLAMA_NOPRUNE=1, and it stops Ollama's whole process tree on exit.
 - Open: when the host GPU is busy the drive's Ollama can crash at CUDA init instead of spilling to CPU - retry on CPU.
+
+## 15. Planned for later (noted 2026-10-21)
+
+1. **Port the Elena Live visuals into Philibert's default view.** They live in
+   Elena Live's static/viz.js (+ index.html), not in ND3's elena_ui.html that
+   dev/sync_app.py copies today:
+   - the interactive vault constellation (folder clusters with nebulae and names,
+     small degree-sized glowing notes, curved links, light pulses; drag / pan /
+     wheel+pinch zoom / hover card / click focus / double-click reframe / expand);
+   - the living layer: the shared lub-dub heartbeat (vault centre and Elena),
+     breathing, drift, swaying links, pulsing nebulae;
+   - the living board: heartbeat wave out of Elena lighting vias and traces,
+     sparks on micro-traces, fading filaments, dust, breathing chips;
+   - each vault event lights its note once (the server re-sends its rolling list).
+   All motion stays off under prefers-reduced-motion; ambient motion stays dim and
+   never rides a main trace (a bright pulse there is always real data).
+2. **Obsidian in the standard install.** The vault (data/vault) is already
+   Obsidian-compatible markdown; ship the Obsidian app with the install so a
+   musician can browse and edit notes without a separate download. To settle:
+   Obsidian has no official portable build (Windows installer installs per user;
+   Mac is a .dmg), so either the setup scripts fetch a pinned release and
+   unpack it onto the drive (runtime/<os>/obsidian), or first-run offers a
+   one-click install on the host; pre-create data/vault/.obsidian so the vault
+   opens ready (theme, no telemetry/sync prompts); a "Open notes in Obsidian"
+   button in the UI (obsidian://open?path=...). Check Obsidian's licence before
+   bundling the app itself; the safe default is to download it from obsidian.md
+   at setup rather than commit it to git.

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 0 260 80" width="520" height="160">
+  <!-- Esteef.Ai wordmark E3: ESTEEF + AI in an orbit, node at the bottom left.
+       Montserrat ExtraBold 800, capitals, tracked +0.12em. Colours via CSS vars
+       (--ink, --orbit, --ai, --node); defaults are the one-colour black version. -->
+  <style>
+    text { font-family: Montserrat, Arial, sans-serif; font-weight: 800; letter-spacing: .12em; }
+  </style>
+  <text x="128" y="52" text-anchor="middle" font-size="34" fill="var(--ink, #121214)">ESTEEF</text>
+  <ellipse cx="238" cy="40" rx="30" ry="14" fill="none" stroke="var(--orbit, #121214)" stroke-width="3" transform="rotate(-18 238 40)"/>
+  <text x="238" y="52" text-anchor="middle" font-size="30" fill="var(--ai, #121214)">AI</text>
+  <circle cx="212" cy="53" r="4" fill="var(--node, #121214)"/>
+</svg>

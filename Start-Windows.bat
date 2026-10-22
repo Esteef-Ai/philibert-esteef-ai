@@ -1,3 +1,3 @@
 @echo off
-title Philibert by Esteef.Ai
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup\windows.ps1"
+rem Philibert by Esteef.Ai. The setup / start window is the only window you see.
+start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0setup\windows.ps1"

@@ -107,6 +107,13 @@ _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+|\n+")
 _NEGATION_RE = re.compile(r"\b(?:do\s+not|don'?t|never|not|except|nor|without)\b", re.I)
 
 
+_CREATE_FILES_RE = re.compile(
+    r"\b(?:create|add|write|make)\s+(?:the\s+)?(?:two|three|four|five|several|\d+|some)\s+(?:new\s+)?files?\b"
+    r"|\b(?:create|add|make)\s+(?:a\s+|two\s+|three\s+)?new\s+files?\b", re.I)
+_LOCATION_REF_RE = re.compile(
+    r"\b(?:next\s+to|beside|alongside|in\s+the\s+same\s+(?:folder|directory)\s+as|near)\s+[`'\"]?[\w./\\:-]+", re.I)
+
+
 def single_file_target(text: str) -> "str | None":
     """The ONE file an explicitly one-file request names, or None.
 
@@ -119,11 +126,17 @@ def single_file_target(text: str) -> "str | None":
     """
     if not single_file_scope(text):
         return None
+    # Asking for NEW files is not a one-file change (Elena Live launcher request:
+    # "Create two new files ... and change nothing else").
+    if _CREATE_FILES_RE.search(text or ""):
+        return None
     names = []
     for sent in _SENTENCE_RE.split(text or ""):
         if not _SINGLE_FILE_RE.search(sent):
             continue
         head = _NEGATION_RE.split(sent, maxsplit=1)[0]
+        # "next to server.py" names a place, not the file to change.
+        head = _LOCATION_REF_RE.sub(" ", head)
         names += _FILE_NAME_RE.findall(head)
     distinct = {n.replace("/", "\\").lower().rstrip(".") for n in names}
     if len({d.rsplit("\\", 1)[-1] for d in distinct}) != 1:

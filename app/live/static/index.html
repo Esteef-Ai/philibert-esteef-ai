@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elena Live</title>
+<link href="/live/fonts/fonts.css" rel="stylesheet">
+<link rel="icon" href="/live/philibert-p1.svg">
+<style>
+  /* ==========================================================================
+     Elena Live — circuit board visualizer
+     Palette: navy #0f172a canvas · cyan #00f2fe traces · violet #7c3aed spill/memory
+              amber #f59e0b vault · emerald #10b981 writes
+     Grid: 16px base unit, 24px section gaps.
+     ========================================================================== */
+  :root {
+    --u: 16px;                    /* base grid unit */
+    --gap: 24px;                  /* section gaps */
+    --navy: #0f172a;
+    --navy-deep: #0a1120;
+    --navy-panel: #111d36;
+    --navy-raise: #162544;
+    --line: #1e3054;              /* hairlines */
+    --cyan: #00f2fe;
+    --violet: #7c3aed;
+    --amber: #f59e0b;
+    --emerald: #10b981;
+    --txt: #d7e3f4;
+    --txt-dim: #8ea3c4;
+    --txt-faint: #93a8c6;
+    --font-ui: 'Inter', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--navy);
+    color: var(--txt);
+    font-family: var(--font-ui);
+    overflow: hidden;
+  }
+
+  /* ---------- app chrome ------------------------------------------------- */
+  header.appbar {
+    height: calc(var(--u) * 5);          /* 80px */
+    display: flex;
+    align-items: center;
+    gap: var(--gap);
+    padding: 0 var(--gap);
+    background: linear-gradient(180deg, #101b33 0%, #0d1729 100%);
+    border-bottom: 1px solid var(--line);
+    position: relative;
+    z-index: 10;
+  }
+  header.appbar::after {
+    /* thin circuit accent line under the bar */
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: -1px;
+    height: 1px;
+    background: linear-gradient(90deg,
+      transparent 0%, rgba(0,242,254,0.35) 18%,
+      rgba(0,242,254,0.7) 50%,
+      rgba(0,242,254,0.35) 82%, transparent 100%);
+    pointer-events: none;
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: calc(var(--u) * 1.5);
+  }
+  .brand h1 {
+    font-family: var(--font-ui);
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: 0.06em;
+    color: #fff;
+  }
+  .brand h1 .spark {
+    display: inline-block;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--cyan);
+    box-shadow: 0 0 8px var(--cyan), 0 0 18px rgba(0,242,254,0.5);
+    margin-left: 6px;
+    vertical-align: 2px;
+    transition: background 220ms ease, box-shadow 220ms ease;
+  }
+  .brand h1 .spark.think   { background: #00f5ff; box-shadow: 0 0 10px #00f5ff; }
+  .brand h1 .spark.code    { background: #4fd08a; box-shadow: 0 0 10px #4fd08a; }
+  .brand h1 .spark.answer  { background: #f0f0f0; box-shadow: 0 0 10px rgba(240,240,240,0.7); }
+  .wordmark {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    color: #9db3d6;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 4px 10px;
+    background: rgba(22,37,68,0.5);
+  }
+  .wordmark b { color: var(--cyan); font-weight: 600; }
+
+  nav.appnav {
+    display: flex;
+    gap: 4px;
+    margin-left: var(--u);
+  }
+  nav.appnav .tab {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--txt-faint);
+    padding: 6px 12px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: default;
+    transition: color 180ms ease, background 180ms ease, border-color 180ms ease;
+  }
+  nav.appnav .tab.active {
+    color: var(--cyan);
+    background: rgba(0,242,254,0.07);
+    border-color: rgba(0,242,254,0.25);
+  }
+  nav.appnav .tab.active:hover {
+    background: rgba(0,242,254,0.13);
+    border-color: rgba(0,242,254,0.40);
+  }
+  nav.appnav .tab:not(.active) { cursor: default; }
+  nav.appnav .tab:not(.active):hover {
+    color: var(--txt);
+    background: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.10);
+  }
+
+  .appbar .spacer { flex: 1; }
+
+  .conn-status {
+    display: flex;
+    gap: var(--gap);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+  }
+  .conn-status .pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--txt-dim);
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    transition: color 180ms ease, background 180ms ease, border-color 180ms ease;
+  }
+  .conn-status .pill:hover {
+    color: var(--txt);
+    background: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.08);
+  }
+  .conn-status .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--txt-faint);
+    transition: background 250ms ease, box-shadow 250ms ease;
+  }
+  .conn-status .pill.up .dot {
+    background: var(--emerald);
+    box-shadow: 0 0 7px rgba(16,185,129,0.8);
+  }
+  .conn-status .pill.down { color: #d84830; }
+  .conn-status .pill.down .dot { background: #d84830; box-shadow: 0 0 7px rgba(216,72,48,0.8); }
+
+  /* ---------- main layout -------------------------------------------------- */
+  main.board-area {
+    position: absolute;
+    top: calc(var(--u) * 5);
+    left: 0; right: 0; bottom: calc(var(--u) * 2 + 1px);
+    display: flex;
+    gap: var(--gap);
+    padding: var(--gap);
+  }
+
+  /* The board itself fills the remaining width */
+  section.board-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    background:
+      radial-gradient(ellipse 90% 70% at 50% 42%, rgba(0,242,254,0.045) 0%, transparent 60%),
+      linear-gradient(180deg, #0c1526 0%, var(--navy-deep) 100%);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  #board {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* Elena's mark lives on its own canvas, positioned over the centre chip */
+  #elena-chip {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: calc(var(--u) * 13);      /* 208px */
+    height: calc(var(--u) * 13);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 3;
+  }
+  #elena-chip .chip-frame {
+    position: absolute;
+    inset: 0;
+    border: 1px solid rgba(0,242,254,0.30);
+    border-radius: 10px;
+    background:
+      linear-gradient(160deg, rgba(22,37,68,0.92) 0%, rgba(10,17,32,0.95) 100%);
+    box-shadow:
+      0 0 24px rgba(0,242,254,0.10),
+      inset 0 0 30px rgba(0,0,0,0.55);
+    transition: border-color 250ms ease, box-shadow 250ms ease;
+  }
+  #elena-chip .chip-frame.think  { border-color: rgba(0,245,255,0.65);  box-shadow: 0 0 34px rgba(0,245,255,0.28), inset 0 0 30px rgba(0,0,0,0.5); }
+  #elena-chip .chip-frame.code   { border-color: rgba(79,208,138,0.60); box-shadow: 0 0 34px rgba(79,208,138,0.24), inset 0 0 30px rgba(0,0,0,0.5); }
+  #elena-chip .chip-frame.answer { border-color: rgba(240,240,240,0.45); box-shadow: 0 0 30px rgba(240,240,240,0.14), inset 0 0 30px rgba(0,0,0,0.5); }
+  #elena-canvas {
+    position: absolute;
+    inset: 14px;
+    width: calc(100% - 28px);
+    height: calc(100% - 28px);
+    /* The glow is set from JS on every state change — idle gets a soft
+       breathing halo, working states get a much stronger bloom so the
+       mark reads as the centrepiece, not a scratch on a dark board. */
+    filter: drop-shadow(0 0 14px rgba(48,144,216,0.38));
+    transition: filter 400ms ease;
+  }
+  /* faint halo behind the mark so the chip is never empty — a soft
+     radial bloom and a thin ring in the current state colour */
+  #elena-halo {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  #elena-chip .chip-halo {
+    position: absolute;
+    inset: 14px;
+    pointer-events: none;
+    opacity: 0.85;
+  }
+  #elena-chip .chip-halo::before {
+    content: "";
+    position: absolute;
+    inset: 12%;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(48,144,216,0.14) 0%, rgba(48,144,216,0.05) 45%, transparent 72%);
+  }
+  #elena-chip .chip-halo::after {
+    content: "";
+    position: absolute;
+    inset: 24%;
+    border-radius: 50%;
+    border: 1px solid rgba(48,144,216,0.18);
+  }
+  #elena-chip .chip-label {
+    position: absolute;
+    left: 50%;
+    bottom: 6px;
+    transform: translateX(-50%);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.30em;
+    color: var(--cyan);
+    text-shadow: 0 0 8px rgba(0,242,254,0.5);
+  }
+  /* corner pads on the chip */
+  #elena-chip .pad {
+    position: absolute;
+    width: 8px; height: 8px;
+    background: var(--navy-raise);
+    border: 1px solid rgba(0,242,254,0.4);
+    border-radius: 2px;
+  }
+  #elena-chip .pad.tl { top: 5px; left: 5px; }
+  #elena-chip .pad.tr { top: 5px; right: 5px; }
+  #elena-chip .pad.bl { bottom: 5px; left: 5px; }
+  #elena-chip .pad.br { bottom: 5px; right: 5px; }
+
+  /* task readout over the board */
+  .task-readout {
+    position: absolute;
+    left: var(--gap);
+    top: var(--gap);
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: none;
+  }
+  .task-readout .task-line {
+    font-family: var(--font-ui);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--txt);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .task-readout .task-line .task-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--cyan);
+    box-shadow: 0 0 8px currentColor;
+    transition: background 220ms ease;
+  }
+  .task-readout .task-line.think   .task-dot { background: #00f5ff; color: #00f5ff; }
+  .task-readout .task-line.code    .task-dot { background: #4fd08a; color: #4fd08a; }
+  .task-readout .task-line.answer  .task-dot { background: #f0f0f0; color: #f0f0f0; }
+  .task-readout .task-line.idle    .task-dot { background: #3090d8; color: #3090d8; }
+  .task-readout .task-sub {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--txt-dim);
+    letter-spacing: 0.04em;
+  }
+  .task-readout .task-sub .spill {
+    color: var(--violet);
+    text-shadow: 0 0 8px rgba(124,58,237,0.5);
+  }
+  .task-readout .task-sub .up-down { color: #d84830; }
+
+  /* ---------- vault panel -------------------------------------------------- */
+  aside.vault-panel {
+    width: calc(var(--u) * 26);           /* 416px */
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    background: linear-gradient(180deg, #0d182c 0%, var(--navy-deep) 100%);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .vault-panel .panel-head {
+    height: calc(var(--u) * 3);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 var(--u);
+    border-bottom: 1px solid var(--line);
+    background: rgba(22,37,68,0.4);
+  }
+  .vault-panel .panel-head h2 {
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--txt-dim);
+  }
+  .vault-panel .panel-head .count {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--txt-faint);
+  }
+  .vault-panel .panel-head .count b {
+    color: var(--amber);
+    font-weight: 600;
+    text-shadow: 0 0 6px rgba(245,158,11,0.5);
+  }
+  #vault-canvas {
+    flex: 1;
+    width: 100%;
+    display: block;
+    min-height: 0;
+    touch-action: none;
+    cursor: grab;
+  }
+  .vault-panel .vault-expand {
+    display: grid;
+    place-items: center;
+    width: 24px; height: 24px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: rgba(8,18,36,0.6);
+    color: var(--txt-dim);
+    cursor: pointer;
+    transition: color .15s, border-color .15s, box-shadow .15s;
+  }
+  .vault-panel .vault-expand:hover {
+    color: #00f2fe;
+    border-color: rgba(0,242,254,0.5);
+    box-shadow: 0 0 10px rgba(0,242,254,0.25);
+  }
+  .vault-panel.expanded {
+    position: fixed;
+    inset: 4vh 4vw;
+    width: auto;
+    height: auto;
+    z-index: 60;
+    box-shadow: 0 0 0 100vmax rgba(2,6,14,0.78), 0 0 80px rgba(0,242,254,0.12);
+  }
+  .vault-panel.expanded .vault-expand { color: #00f2fe; border-color: rgba(0,242,254,0.5); }
+  .vault-panel .panel-foot {
+    height: calc(var(--u) * 2.5);
+    display: flex;
+    align-items: center;
+    gap: var(--u);
+    padding: 0 var(--u);
+    border-top: 1px solid var(--line);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--txt-faint);
+    letter-spacing: 0.05em;
+  }
+  .vault-panel .panel-foot .legend {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .vault-panel .panel-foot .swatch {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+  }
+
+  /* ---------- status bar --------------------------------------------------- */
+  footer.statusbar {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: calc(var(--u) * 2 + 1px);
+    display: flex;
+    align-items: center;
+    gap: var(--gap);
+    padding: 0 var(--gap);
+    background: #0c1424;
+    border-top: 1px solid var(--line);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    color: var(--txt-faint);
+    z-index: 10;
+  }
+  footer.statusbar .stat b { color: var(--txt-dim); font-weight: 500; }
+  footer.statusbar .stat .k { color: var(--cyan); }
+  footer.statusbar .stat .k.violet { color: var(--violet); }
+  footer.statusbar .stat .k.amber  { color: var(--amber); }
+  footer.statusbar .stat .k.green  { color: var(--emerald); }
+  footer.statusbar .spacer { flex: 1; }
+  footer.statusbar .clock { color: var(--txt-dim); }
+
+  /* ---------- loading / empty / error states ------------------------------- */
+  .state-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    z-index: 8;
+    background: rgba(10,17,32,0.86);
+    transition: opacity 240ms ease, visibility 240ms ease;
+  }
+  .state-overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+  .state-overlay .big {
+    font-family: var(--font-ui);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--txt);
+  }
+  .state-overlay .small {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--txt-dim);
+    text-align: center;
+    line-height: 1.6;
+    max-width: 340px;
+  }
+  .state-overlay .skeleton-bar {
+    width: 180px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--navy-raise);
+    overflow: hidden;
+    position: relative;
+  }
+  .state-overlay .skeleton-bar::after {
+    content: "";
+    position: absolute;
+    left: -40%;
+    top: 0; bottom: 0;
+    width: 40%;
+    background: linear-gradient(90deg, transparent, rgba(0,242,254,0.7), transparent);
+    animation: scan 1.4s linear infinite;
+  }
+  .state-overlay.error .skeleton-bar::after {
+    background: linear-gradient(90deg, transparent, rgba(216,72,48,0.7), transparent);
+  }
+  @keyframes scan { to { left: 100%; } }
+  @media (prefers-reduced-motion: reduce) {
+    .state-overlay .skeleton-bar::after { animation: none; left: 0; width: 100%; opacity: 0.5; }
+  }
+
+
+  /* ---------- Philibert: brand bar ------------------------------------------ */
+  .brand { align-items: center; gap: 12px; }
+  .brand .p1 { width: 40px; height: 40px; display: block; --mark: #00f2fe; --bg: #0f172a;
+               filter: drop-shadow(0 0 8px rgba(0,242,254,0.35)); }
+  .brand .name { font-family: 'Montserrat', var(--font-ui); font-weight: 800; font-size: 21px;
+                 letter-spacing: 0.12em; color: #fff; display: flex; align-items: center; }
+  .brand .name .spark { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+                        background: var(--cyan); box-shadow: 0 0 8px var(--cyan); margin-left: 8px;
+                        transition: background 220ms ease, box-shadow 220ms ease; }
+  .brand .name .spark.think  { background: #00f5ff; box-shadow: 0 0 10px #00f5ff; }
+  .brand .name .spark.code   { background: #4fd08a; box-shadow: 0 0 10px #4fd08a; }
+  .brand .name .spark.answer { background: #f0f0f0; box-shadow: 0 0 10px rgba(240,240,240,0.7); }
+  .brand .by { display: flex; align-items: center; gap: 7px; font-family: 'Montserrat', var(--font-ui);
+               font-weight: 600; font-size: 10px; letter-spacing: 0.2em; color: var(--txt-dim); margin-top: 3px; }
+  .brand .by svg { height: 21px; width: auto; --ink: #d7e3f4; --orbit: #00f2fe; --ai: #00f2fe; --node: #ff2e88; }
+  .appbtn { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: var(--txt-dim);
+            background: rgba(22,37,68,0.5); border: 1px solid var(--line); border-radius: 5px;
+            padding: 7px 12px; cursor: pointer; text-decoration: none;
+            transition: color .15s, border-color .15s, box-shadow .15s; }
+  .appbtn:hover { color: var(--cyan); border-color: rgba(0,242,254,0.5); box-shadow: 0 0 10px rgba(0,242,254,0.2); }
+  .appbtn.busy { color: var(--amber); border-color: rgba(245,158,11,0.5); }
+  .toast { position: fixed; top: 92px; left: 50%; transform: translateX(-50%); z-index: 80;
+           font-family: var(--font-mono); font-size: 12px; color: var(--txt); background: #102038;
+           border: 1px solid rgba(0,242,254,0.4); border-radius: 6px; padding: 8px 14px;
+           box-shadow: 0 8px 30px rgba(0,0,0,0.5); opacity: 0; transition: opacity .25s; pointer-events: none; }
+  .toast.on { opacity: 1; }
+
+  /* ---------- Philibert: chat on the left ------------------------------------ */
+  section.chat-panel { width: 440px; flex: none; position: relative; border: 1px solid var(--line);
+                       border-radius: 8px; overflow: hidden; background: #1e1e2f; }
+  #chat-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+
+  /* ---------- Philibert: notes under the vault ------------------------------- */
+  aside.vault-panel { min-height: 0; }
+  #vault-canvas { flex: 1.3; }
+  .notes { flex: 1; min-height: 150px; display: flex; flex-direction: column; border-top: 1px solid var(--line);
+           background: rgba(8,15,30,0.55); }
+  .vault-panel.expanded .notes { display: none; }
+  .notes-head { height: 36px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 var(--u);
+                border-bottom: 1px solid var(--line); }
+  .notes-head h2 { font-size: 12px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--txt-dim); }
+  .notes-head .sub { font-family: var(--font-mono); font-size: 10px; color: var(--txt-faint); white-space: nowrap;
+                     overflow: hidden; text-overflow: ellipsis; }
+  .notes-head button { margin-left: auto; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em;
+                       color: var(--txt-dim); background: none; border: 1px solid var(--line); border-radius: 4px;
+                       padding: 3px 8px; cursor: pointer; }
+  .notes-head button:hover { color: var(--cyan); border-color: rgba(0,242,254,0.5); }
+  .notes-body { flex: 1; overflow: auto; padding: 10px var(--u) 14px; font-size: 13px; line-height: 1.55; }
+  .notes-body .empty { color: var(--txt-faint); font-family: var(--font-mono); font-size: 11px; line-height: 1.6; }
+  .notes-body .item { display: flex; align-items: center; gap: 9px; padding: 6px 8px; margin: 0 -8px; border-radius: 5px;
+                      cursor: pointer; color: var(--txt); }
+  .notes-body .item:hover { background: rgba(0,242,254,0.07); }
+  .notes-body .item i { width: 7px; height: 7px; border-radius: 50%; flex: none; box-shadow: 0 0 6px currentColor; }
+  .notes-body .item .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .notes-body .item .w { font-family: var(--font-mono); font-size: 10px; color: var(--txt-faint); }
+  .notes-body .md h1, .notes-body .md h2, .notes-body .md h3 { color: #fff; font-weight: 600; margin: 12px 0 6px; line-height: 1.3; }
+  .notes-body .md h1 { font-size: 17px; } .notes-body .md h2 { font-size: 15px; } .notes-body .md h3 { font-size: 13.5px; }
+  .notes-body .md p { margin: 6px 0; color: var(--txt); }
+  .notes-body .md ul { margin: 6px 0 6px 18px; }
+  .notes-body .md code { font-family: var(--font-mono); font-size: 12px; background: rgba(22,37,68,0.7); padding: 1px 4px; border-radius: 3px; }
+  .notes-body .md pre { font-family: var(--font-mono); font-size: 11.5px; background: rgba(4,10,22,0.8); padding: 8px; border-radius: 5px; overflow: auto; }
+  .notes-body .md a.wl { color: var(--cyan); text-decoration: none; border-bottom: 1px dotted rgba(0,242,254,0.5); cursor: pointer; }
+  .notes-body .md .fm { font-family: var(--font-mono); font-size: 10.5px; color: var(--txt-faint); margin-bottom: 8px; }
+
+  @media (max-width: 1300px) { section.chat-panel { width: 360px; } }
+
+  /* ---------- narrow screens ------------------------------------------------ */
+  @media (max-width: 1100px) {
+    main.board-area { flex-direction: column; overflow: auto; }
+    section.chat-panel { width: 100%; height: 520px; }
+    section.board-wrap { min-height: 420px; }
+    aside.vault-panel {
+      width: 100%;
+      height: 300px;
+    }
+    .conn-status { display: none; }
+  }
+
+  /* focus visibility for keyboard users */
+  :focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 2px;
+  }
+</style>
+</head>
+<body>
+
+  <!-- ======================= top chrome ======================= -->
+  <header class="appbar">
+    <div class="brand">
+      <svg class="p1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" aria-hidden="true">
+  <path d="M62 62 V46 Q62 34 74 34 H126 Q138 34 138 46 V62" fill="none" stroke="var(--mark, #121214)" stroke-width="9" stroke-linecap="round"/>
+  <rect x="26" y="60" width="148" height="100" rx="16" fill="var(--mark, #121214)"/>
+  <circle cx="70" cy="104" r="25" fill="var(--bg, #f4f4f2)"/><circle cx="70" cy="104" r="17" fill="var(--mark, #121214)"/><circle cx="70" cy="104" r="6" fill="var(--bg, #f4f4f2)"/>
+  <circle cx="130" cy="104" r="25" fill="var(--bg, #f4f4f2)"/><circle cx="130" cy="104" r="17" fill="var(--mark, #121214)"/><circle cx="130" cy="104" r="6" fill="var(--bg, #f4f4f2)"/>
+  <path d="M48 143 H86 L93 134 L100 150 L107 138 L112 143 H152" fill="none" stroke="var(--bg, #f4f4f2)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="44" y="160" width="20" height="10" rx="3" fill="var(--mark, #121214)"/><rect x="136" y="160" width="20" height="10" rx="3" fill="var(--mark, #121214)"/>
+</svg>
+      <div>
+        <div class="name">PHILIBERT<span class="spark" id="brand-spark"></span></div>
+        <div class="by">BY <svg xmlns="http://www.w3.org/2000/svg" viewBox="50 0 230 80" aria-label="Esteef.Ai">
+  <style>
+    text { font-family: Montserrat, Arial, sans-serif; font-weight: 800; letter-spacing: .12em; }
+  </style>
+  <text x="128" y="52" text-anchor="middle" font-size="34" fill="var(--ink, #121214)">ESTEEF</text>
+  <ellipse cx="238" cy="40" rx="30" ry="14" fill="none" stroke="var(--orbit, #121214)" stroke-width="3" transform="rotate(-18 238 40)"/>
+  <text x="238" y="52" text-anchor="middle" font-size="30" fill="var(--ai, #121214)">AI</text>
+  <circle cx="212" cy="53" r="4" fill="var(--node, #121214)"/>
+</svg></div>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <button class="appbtn" id="btn-unload" type="button" title="Take the model off the graphics card, freeing it for games and other apps">UNLOAD GPU</button>
+    <a class="appbtn" id="btn-suite" href="/full" title="The full NeuralDock interface">ND SUITE</a>
+    <div class="conn-status">
+      <span class="pill" id="pill-nd"><span class="dot"></span>ND</span>
+      <span class="pill" id="pill-ollama"><span class="dot"></span>OLLAMA</span>
+    </div>
+  </header>
+
+  <!-- ======================= board + vault ======================= -->
+  <main class="board-area">
+    <section class="chat-panel" aria-label="Chat">
+      <iframe id="chat-frame" src="/chat?embed=1" title="Chat with Philibert"></iframe>
+    </section>
+    <section class="board-wrap" id="board-wrap">
+      <canvas id="board" role="img" aria-label="Circuit board showing live NeuralDock activity"></canvas>
+
+      <!-- Elena's centre chip -->
+      <div id="elena-chip">
+        <div class="chip-frame" id="elena-frame">
+          <span class="pad tl"></span><span class="pad tr"></span>
+          <span class="pad bl"></span><span class="pad br"></span>
+        </div>
+        <div class="chip-halo" aria-hidden="true"></div>
+        <canvas id="elena-halo" aria-hidden="true"></canvas>
+      <canvas id="elena-canvas" aria-hidden="true"></canvas>
+        <span class="chip-label">PHILIBERT</span>
+      </div>
+
+      <!-- task + model readout -->
+      <div class="task-readout" id="task-readout">
+        <span class="task-line idle" id="task-line"><span class="task-dot"></span><span id="task-label">idle</span></span>
+        <span class="task-sub" id="task-model">model — none loaded</span>
+      </div>
+
+      <!-- loading / error overlay -->
+      <div class="state-overlay" id="board-overlay">
+        <div class="skeleton-bar"></div>
+        <div class="big" id="overlay-big">Waiting for telemetry</div>
+        <div class="small" id="overlay-small">Polling /api/state once it answers.</div>
+      </div>
+    </section>
+
+    <!-- ======================= vault panel ======================= -->
+    <aside class="vault-panel" id="vault-panel">
+      <div class="panel-head">
+        <h2>Memory Vault</h2>
+        <span class="count" id="vault-count"><b>0</b> notes</span>
+        <button class="vault-expand" id="vault-expand" type="button" aria-pressed="false"
+                title="Expand the vault (Esc to close)" aria-label="Expand the vault">
+          <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+        </button>
+      </div>
+      <canvas id="vault-canvas" role="img" aria-label="Force-directed graph of the Obsidian vault"></canvas>
+      <div class="panel-foot">
+        <span class="legend"><span class="swatch" style="background:#00f2fe"></span>read</span>
+        <span class="legend"><span class="swatch" style="background:#10b981"></span>write</span>
+        <span class="legend"><span class="swatch" style="background:#f59e0b"></span>update</span>
+        <span style="margin-left:auto" id="vault-path">—</span>
+      </div>
+      <div class="notes" id="notes">
+        <div class="notes-head"><h2>Notes</h2><span class="sub" id="notes-sub">recently read</span>
+          <button id="notes-back" type="button" hidden>&larr; RECENT</button></div>
+        <div class="notes-body" id="notes-body"></div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ======================= status bar ======================= -->
+  <footer class="statusbar">
+    <span class="stat">CPU <b id="stat-cpu">—</b></span>
+    <span class="stat">GPU <b id="stat-gpu">—</b></span>
+    <span class="stat">VRAM <b id="stat-vram">—</b></span>
+    <span class="stat">RAM <b id="stat-ram">—</b></span>
+    <span class="stat">DISK <b id="stat-disk">—</b></span>
+    <span class="stat"><span class="k" id="stat-flow-count">0</span> flows</span>
+    <span class="spacer"></span>
+    <span class="stat">poll <b id="stat-age">—</b></span>
+    <span class="clock" id="stat-clock">--:--:--</span>
+  </footer>
+
+  <!-- ======================= scripts ======================= -->
+  <div class="toast" id="toast" role="status"></div>
+  <script>window.VIZ_STATE_URL = "/live/api/state";</script>
+  <script src="/live/elena_mark.js"></script>
+  <script src="/live/viz.js"></script>
+  <script src="/live/philibert.js"></script>
+</body>
+</html>

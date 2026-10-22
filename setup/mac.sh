@@ -12,8 +12,8 @@ FULL=0; [ "${1:-}" = "--full" ] && FULL=1
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 case "$(uname -m)" in
-  arm64) PYA="aarch64-apple-darwin"; RT="$ROOT/runtime/mac-arm64" ;;
-  *)     PYA="x86_64-apple-darwin";  RT="$ROOT/runtime/mac-x64" ;;
+  arm64) PYA="aarch64-apple-darwin"; RT="$ROOT/runtime/mac-arm64"; CRP="mac-arm64" ;;
+  *)     PYA="x86_64-apple-darwin";  RT="$ROOT/runtime/mac-x64";   CRP="mac-x64" ;;
 esac
 DL="$ROOT/runtime/_download"
 PY="$RT/python/bin/python3"
@@ -24,6 +24,10 @@ APP="$ROOT/app/NeuralDock_launcher.py"
 PY_URL="https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.11.17%2B20261003-$PYA-install_only.tar.gz"
 OL_VER="v0.40.4"
 OL_URL="https://github.com/ollama/ollama/releases/download/$OL_VER/ollama-darwin.tgz"
+# The window: Chrome for Testing, Google's pinned Chromium builds, run from the drive.
+CR_VER="156.0.8078.47"
+CR_URL="https://storage.googleapis.com/chrome-for-testing-public/$CR_VER/$CRP/chrome-$CRP.zip"
+CR="$RT/chromium/chrome-$CRP/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
 # Speech (faster-whisper, piper-tts) as on Windows; onnxruntime is left to pip
 # because 1.28 has no Intel-Mac build.
 PKGS="psutil==7.2.2 websockets==15.0.1 pywebview==6.2.1 faster-whisper==1.2.1 ctranslate2==4.8.1 piper-tts==1.6.0"
@@ -36,6 +40,33 @@ fetch() {
 }
 
 echo "Philibert by Esteef.Ai - $ROOT"
+
+# -- one Philibert per drive ---------------------------------------------------
+# A second double-click would run setup twice against the same folders. The lock
+# is a folder holding the owner's process id; a stale one (crash) is taken over.
+LOCK="$ROOT/runtime/.philibert.lock"
+mkdir -p "$ROOT/runtime"
+if ! mkdir "$LOCK" 2>/dev/null; then
+  if kill -0 "$(cat "$LOCK/pid" 2>/dev/null)" 2>/dev/null; then
+    echo; echo "Philibert is already starting or running from this drive."
+    echo "Its window will open by itself (the first start can take a while). You can close this one."
+    read -r -p "Press Enter to close. " _; exit 0
+  fi
+  rm -rf "$LOCK"; mkdir "$LOCK"
+fi
+echo $$ > "$LOCK/pid"
+trap 'rm -rf "$LOCK"' EXIT
+
+# -- the drive's format: say so plainly instead of failing halfway --------------
+FS="$(diskutil info "$ROOT" 2>/dev/null | awk -F': *' '/Type \(Bundle\)/{print $2}')"
+case "$FS" in
+  exfat|apfs|hfs) ;;
+  ntfs)  fail "This drive is formatted NTFS: a Mac can read it but not save to it, so Philibert cannot run from it here. Back up the drive, reformat it as exFAT (Disk Utility), and run this again." ;;
+  msdos) fail "This drive is formatted FAT32, which cannot hold files over 4 GB - every AI model is bigger. Back up the drive, reformat it as exFAT (Disk Utility), and run this again." ;;
+  "")    ;;
+  *)     echo "Note: this drive's format ($FS) has not been tested with Philibert; exFAT is recommended." ;;
+esac
+[ "$FS" = "apfs" ] || [ "$FS" = "hfs" ] && echo "Note: this drive is formatted for Mac only; Windows cannot read it. exFAT works on both."
 
 # -- first run: Python -------------------------------------------------------
 # Unpack an archive, downloading it first if it is not already here. The stamp
@@ -76,14 +107,42 @@ if [ ! -f "$OLSTAMP" ] || [ "$(cat "$OLSTAMP")" != "$OL_VER" ]; then
   printf '%s' "$OL_VER" > "$OLSTAMP"
 fi
 
+# -- first run: the window (a Chromium of our own, so every PC looks the same) --
+CRSTAMP="$RT/chromium/.philibert-version"
+if [ ! -f "$CRSTAMP" ] || [ "$(cat "$CRSTAMP")" != "$CR_VER" ]; then
+  step "First start: getting Philibert's window (about 160 MB)"
+  mkdir -p "$DL" "$RT/chromium"
+  # curl downloads are not quarantined, so the app starts without a Gatekeeper prompt
+  [ -f "$DL/chromium.zip" ] || fetch "$CR_URL" "$DL/chromium.zip"
+  ditto -x -k "$DL/chromium.zip" "$RT/chromium" && [ -f "$CR" ] || fail "Could not unpack the window."
+  rm -f "$DL/chromium.zip"
+  printf '%s' "$CR_VER" > "$CRSTAMP"
+fi
+
 # -- data: created once, never overwritten -----------------------------------
 DATA="$ROOT/data"
 mkdir -p "$DATA/vault" "$DATA/exports" "$ROOT/secrets"
 [ -f "$DATA/neuraldock_config.json" ] || cp "$ROOT/setup/default_config.json" "$DATA/neuraldock_config.json"
+# a new drive's vault starts with a few welcome notes - never over the user's own
+if [ -z "$(find "$DATA/vault" -name '*.md' -print -quit 2>/dev/null)" ]; then
+  cp -R "$ROOT/setup/welcome_vault/." "$DATA/vault/"
+fi
 
 # -- run ---------------------------------------------------------------------
+# The first free port from $1 up: two Philibert drives (or anything else on the
+# usual port) must never answer for each other.
+free_port() {
+  p=$1
+  while [ "$p" -lt $(( $1 + 20 )) ]; do
+    lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1 || { echo "$p"; return; }
+    p=$(( p + 1 ))
+  done
+  fail "No free network port for Philibert on this Mac (tried $1-$(( $1 + 19 )))."
+}
+OLPORT="$(free_port 11435)"
+NDPORT="$(free_port 7790)"
 export OLLAMA_MODELS="$ROOT/models"
-export OLLAMA_HOST="127.0.0.1:11435"
+export OLLAMA_HOST="127.0.0.1:$OLPORT"
 export OLLAMA_FLASH_ATTENTION=1
 export OLLAMA_KV_CACHE_TYPE=q8_0
 export OLLAMA_NOPRUNE=1          # never delete model files on start
@@ -92,23 +151,29 @@ export OLLAMA_LOAD_TIMEOUT=30m   # a USB hard drive can take minutes to load a b
 # Speech models and voices live on the drive too.
 export HF_HOME="$ROOT/speech/hf"
 export ND_VOICES_DIR="$ROOT/speech/voices"
+# Whisper as plain folders: exFAT cannot hold the Hugging Face cache's symlinks.
+export ND_WHISPER_DIR="$ROOT/speech/whisper"
 export HF_HUB_DISABLE_TELEMETRY=1
 
 export PHILIBERT_ROOT="$ROOT"
 export ND_PORTABLE=1
 export ND_DATA_DIR="$DATA"
-export ND_OLLAMA_URL="http://127.0.0.1:11435"
+export ND_OLLAMA_URL="http://127.0.0.1:$OLPORT"
 export ND_OLLAMA_EXE="$OL"
-export ND_PORT=7790
+export ND_PORT="$NDPORT"
 if [ "$FULL" = 1 ]; then export ND_START_PATH=/full; else export ND_START_PATH=""; fi
+# The drive's Chromium, with its profile on the drive: nothing lands in the Mac's browser.
+export ND_BROWSER_EXE="$CR"
+export ND_BROWSER_PROFILE="$DATA/browser/mac"
 
 "$OL" serve >/dev/null 2>&1 &
 OLPID=$!
-# Take Ollama and its model runners down with us, however we exit.
-trap 'pkill -P $OLPID 2>/dev/null; kill $OLPID 2>/dev/null' EXIT
+# Take Ollama and its model runners down with us, however we exit, and free the
+# drive's lock (one EXIT trap only: a second `trap ... EXIT` replaces the first).
+trap 'pkill -P $OLPID 2>/dev/null; kill $OLPID 2>/dev/null; rm -rf "$LOCK"' EXIT
 
 for _ in $(seq 1 60); do
-  curl -s -m 2 http://127.0.0.1:11435/api/version >/dev/null && break
+  curl -s -m 2 "http://127.0.0.1:$OLPORT/api/version" >/dev/null && break
   sleep 0.5
 done
 

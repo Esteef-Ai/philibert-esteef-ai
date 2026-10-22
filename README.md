@@ -85,6 +85,6 @@ Hugging Face repo and use its `hf.co/...` tag.
 
 ## Developing
 
-The code is written and tested in NeuralDock (`G:\!Ai\ND3`). `python dev/sync_app.py`
+The code is written and tested in NeuralDock (the `ND3` folder beside this repo). `python dev/sync_app.py`
 copies the files Philibert uses into `app/`; review, commit, push. See
 `dev/DESIGN.md` for the design.
