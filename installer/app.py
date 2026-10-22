@@ -19,6 +19,7 @@ HERE = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 sys.path.insert(0, str(HERE))
 import core      # noqa: E402
 import engine    # noqa: E402
+import github_auth  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent          # when run from source
 BUNDLED = HERE / "bundle"                               # models.json + philibert.json in a build
@@ -44,12 +45,62 @@ def source():
             "token": os.environ.get("PHILIBERT_GITHUB_TOKEN", "")}
 
 
+def _client_id():
+    p = _bundle_file("philibert.json")
+    return (json.loads(p.read_text(encoding="utf-8")).get("github_client_id") or "") if p else ""
+
+
 class Api:
     def __init__(self):
         self._info = None
         self._installer = None
         self._state = None
         self._window = None
+        self._token = os.environ.get("PHILIBERT_GITHUB_TOKEN", "")   # in memory only, never saved
+        self._user = ""
+        self._device = None
+
+    # -- signing in to GitHub (a private repository) ---------------------------------
+    def github_status(self):
+        src = source()
+        if not src.get("repo"):
+            return {"needed": False}
+        needed = github_auth.repo_needs_signin(src["repo"])
+        if needed is None:
+            return {"needed": True, "offline": True, "device": bool(_client_id()), "signed_in": False}
+        return {"needed": bool(needed), "device": bool(_client_id()),
+                "signed_in": bool(self._token and self._user), "user": self._user}
+
+    def github_start(self):
+        try:
+            d = github_auth.start(_client_id())
+        except Exception as e:
+            return {"ok": False, "message": f"Could not start signing in: {e}"}
+        self._device = d
+        import webbrowser
+        webbrowser.open(d["verification_uri"])
+        return {"ok": True, "user_code": d["user_code"], "uri": d["verification_uri"], "interval": d.get("interval", 5)}
+
+    def github_poll(self):
+        if not self._device:
+            return {"state": "error", "message": "Start signing in first."}
+        try:
+            r = github_auth.poll(_client_id(), self._device["device_code"])
+        except Exception as e:
+            return {"state": "pending", "message": str(e)}
+        if r["state"] == "ok":
+            return self._accept(r["token"])
+        return r
+
+    def github_token(self, token):
+        return self._accept(str(token or "").strip())
+
+    def _accept(self, token):
+        chk = github_auth.check(source()["repo"], token) if token else {"ok": False, "message": "Paste a token."}
+        if chk["ok"]:
+            self._token, self._user, self._device = token, chk["user"], None
+            return {"state": "ok", "user": chk["user"]}
+        return {"state": "denied", "message": chk["message"]}
 
     # -- facts ---------------------------------------------------------------------
     def survey(self):
@@ -122,6 +173,8 @@ class Api:
     def start_install(self, plan):
         plan = dict(plan)
         plan["source"] = source()
+        if plan["source"].get("repo") and self._token:
+            plan["source"]["token"] = self._token
         log = Path(plan["dest"]) / "data" / "logs" / "install.log"
         self._state = {"steps": [], "step": 0, "step_pct": 0, "overall": 0, "detail": "Starting", "done": False,
                        "error": "", "warnings": []}

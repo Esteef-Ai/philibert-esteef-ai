@@ -113,6 +113,14 @@
   .btn.primary:hover { filter: brightness(1.08); }
   .btn:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
   .hide { display: none !important; }
+  .signin { margin-top: 18px; background: var(--panel); border: 1px solid var(--cyan); border-radius: 10px; padding: 16px 18px; }
+  .signin h3 { color: #fff; font-size: 15px; margin-bottom: 6px; }
+  .signin .note { margin-bottom: 10px; }
+  .ghcode { margin-top: 12px; font-size: 13.5px; }
+  .ghcode b { display: block; font-family: var(--mono); font-size: 28px; letter-spacing: .18em; color: var(--cyan); margin: 6px 0; }
+  .ghrow { display: flex; gap: 8px; margin-top: 8px; }
+  .ghrow input { flex: 1; background: #0b1528; border: 1px solid var(--line); border-radius: 7px; color: var(--txt); padding: 9px 11px; font-family: var(--mono); }
+  .signin.ok { border-color: var(--green); }
 </style>
 </head>
 <body>
@@ -153,6 +161,21 @@
         <dt>Takes</dt><dd>About 5 minutes of questions, then downloading - from a few minutes to an hour, depending on the models you pick and your connection.</dd>
         <dt>Needs</dt><dd>The Internet while installing. Afterwards Philibert runs offline.</dd>
         <dt>Space</dt><dd>From about 12 GB (one small model) to 80 GB (every model).</dd>
+      </div>
+      <!-- a private Philibert: sign in to GitHub first (only shown when needed) -->
+      <div class="signin hide" id="signin">
+        <h3>Sign in to GitHub</h3>
+        <p class="note">This copy of Philibert is shared privately. Sign in with the GitHub account that was invited -
+          Setup only reads Philibert with it, and forgets the sign-in when it closes.</p>
+        <div id="gh-device">
+          <button class="btn primary" id="gh-start" type="button">Sign in with GitHub</button>
+          <div class="ghcode hide" id="gh-codebox">Type this code on the GitHub page that opened:
+            <b id="gh-code">----</b><span class="note" id="gh-wait">waiting for you to approve…</span></div>
+        </div>
+        <details id="gh-tokenbox"><summary class="note">Or paste a GitHub token</summary>
+          <div class="ghrow"><input id="gh-token" type="password" placeholder="ghp_… or github_pat_…" autocomplete="off" spellcheck="false">
+            <button class="btn" id="gh-use" type="button">Use it</button></div></details>
+        <p class="note" id="gh-msg"></p>
       </div>
     </section>
 

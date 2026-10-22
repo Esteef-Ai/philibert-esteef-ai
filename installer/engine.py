@@ -7,6 +7,7 @@ as it goes. The plan comes from the wizard:
      "full": {"themes": {...}, "retro_vault": true}, "models": ["qwen3:8b", ...],
      "shortcut": false, "source": {"local": "<repo folder>"} |
                                    {"repo": "owner/name", "branch": "main", "token": "..."}}
+    (the token, for a private repository, is only ever in memory - never in a log)
 
 Everything goes to the destination; nothing is installed on the computer (the
 optional desktop shortcut is the only exception, and only when asked for).
@@ -197,10 +198,14 @@ class Installer:
             root = Path(src["local"])
         else:
             repo, branch = src.get("repo"), src.get("branch", "main")
-            headers = {"Authorization": f"Bearer {src['token']}"} if src.get("token") else {}
             tmp = Path(tempfile.mkdtemp(prefix="philibert_"))
-            z = self.download(f"https://codeload.github.com/{repo}/zip/refs/heads/{branch}",
-                              tmp / "philibert.zip", "Philibert", headers)
+            if src.get("token"):              # a private repository: GitHub's API, signed in
+                z = self.download(f"https://api.github.com/repos/{repo}/zipball/{branch}", tmp / "philibert.zip",
+                                  "Philibert", {"Authorization": f"Bearer {src['token']}",
+                                                "Accept": "application/vnd.github+json"})
+            else:
+                z = self.download(f"https://codeload.github.com/{repo}/zip/refs/heads/{branch}",
+                                  tmp / "philibert.zip", "Philibert")
             with zipfile.ZipFile(z) as zf:
                 zf.extractall(tmp)
             root = next(p for p in tmp.iterdir() if p.is_dir())

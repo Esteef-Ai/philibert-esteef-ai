@@ -74,6 +74,10 @@
                overall: Math.min(1, t / 12), detail: step === 4 ? "Model 1 of 3: qwen3:14b - 3.1 of 9.3 GB" : "Ollama - 412 of 1,402 MB  (17.5 MB/s)",
                done: t > 12, error: "", warnings: [] };
     },
+    github_status: function () { return { needed: /[?&]signin=1/.test(location.search), device: true, signed_in: false }; },
+    github_start: function () { return { ok: true, user_code: "WDJB-MJHT", uri: "https://github.com/login/device", interval: 1 }; },
+    github_poll: function () { return { state: "ok", user: "tester" }; },
+    github_token: function () { return { state: "ok", user: "tester" }; },
     cancel: function () { return true; },
     open_philibert: function () { return true; },
     close: function () { return true; }
@@ -113,8 +117,59 @@
     $("main").scrollTop = 0;
   }
 
+  /* ---------- signing in (only when this Philibert's repository is private) ---------- */
+  var gh = { needed: false, ok: false, polling: null };
+  function ghDone(user) {
+    gh.ok = true;
+    clearTimeout(gh.polling);
+    $("signin").classList.add("ok");
+    $("gh-device").classList.add("hide"); $("gh-tokenbox").classList.add("hide");
+    $("gh-msg").innerHTML = '<span class="good">Signed in as ' + esc(user || "you") + ".</span> You can go on.";
+    validate();
+  }
+  api("github_status").then(function (s) {
+    gh.needed = !!(s && s.needed);
+    if (!gh.needed) return;
+    $("signin").classList.remove("hide");
+    if (!s.device) {                      // no OAuth app set up yet: the token box is the way in
+      $("gh-device").classList.add("hide");
+      $("gh-tokenbox").open = true;
+    }
+    if (s.offline) $("gh-msg").innerHTML = '<span class="warn">Setup cannot reach GitHub. Check the Internet connection.</span>';
+    if (s.signed_in) ghDone(s.user);
+    validate();
+  });
+  $("gh-start").addEventListener("click", function () {
+    $("gh-msg").textContent = "";
+    api("github_start").then(function (d) {
+      if (!d.ok) { $("gh-msg").innerHTML = '<span class="bad">' + esc(d.message) + "</span>"; return; }
+      $("gh-code").textContent = d.user_code;
+      $("gh-codebox").classList.remove("hide");
+      var every = Math.max(1, d.interval || 5) * 1000;
+      (function tick() {
+        gh.polling = setTimeout(function () {
+          api("github_poll").then(function (r) {
+            if (r.state === "ok") return ghDone(r.user);
+            if (r.state === "slow_down") every += 5000;
+            if (r.state === "pending" || r.state === "slow_down") return tick();
+            $("gh-wait").textContent = "";
+            $("gh-msg").innerHTML = '<span class="bad">' + esc(r.message || (r.state === "expired" ? "The code ran out. Click Sign in again." :
+              r.state === "denied" ? "The sign-in was not approved." : "Signing in did not work.")) + "</span>";
+          });
+        }, every);
+      })();
+    });
+  });
+  $("gh-use").addEventListener("click", function () {
+    api("github_token", $("gh-token").value).then(function (r) {
+      if (r.state === "ok") ghDone(r.user);
+      else $("gh-msg").innerHTML = '<span class="bad">' + esc(r.message) + "</span>";
+    });
+  });
+
   function validate() {
     var ok = true, why = "";
+    if (state.page === 0 && gh.needed && !gh.ok) { ok = false; why = "Sign in to GitHub to continue."; }
     if (state.page === 4) {
       ok = !!(state.dest && state.verdict && state.verdict.ok && state.place && state.place.free_gb > needGB() + 2);
       if (state.place && state.place.free_gb <= needGB() + 2) why = "Not enough free space for what you picked (" + gb(needGB()) + " needed).";

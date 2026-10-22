@@ -50,7 +50,7 @@ def main():
             "--distpath", str(HERE / "dist"), "--workpath", str(HERE / "build" / "work"),
             "--specpath", str(HERE / "build"),
             "--add-data", f"{HERE / 'ui'}{sep}ui", "--add-data", f"{bundle}{sep}bundle",
-            "--hidden-import", "core", "--hidden-import", "engine",
+            "--hidden-import", "core", "--hidden-import", "engine", "--hidden-import", "github_auth",
             "--paths", str(HERE), str(HERE / "app.py")]
     subprocess.run(args, check=True, cwd=str(HERE))
     out = HERE / "dist" / (name + (".exe" if IS_WIN else ".app"))
