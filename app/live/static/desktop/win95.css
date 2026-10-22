@@ -25,9 +25,46 @@ button { font: inherit; color: inherit; }
 .btn:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
 .btn[disabled] { color: var(--shade); text-shadow: 1px 1px var(--hi); }
 
-/* ---------- boot ---------- */
+/* ---------- boot (every theme's splash is styled here, so a theme change boots right) ---------- */
 #boot { position: fixed; inset: 0; z-index: 1000; background: #000; display: flex; flex-direction: column;
         align-items: center; justify-content: center; overflow: hidden; }
+.boot-sky.me { background: linear-gradient(180deg, #1f3d6e 0%, #3f6aa8 55%, #8fb0dc 100%); }
+/* XP */
+.xp-boot { position: absolute; inset: 0; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 60px; }
+.xp-logo { display: flex; align-items: center; gap: 16px; color: #fff; }
+.xp-e { font: 600 13px Montserrat, var(--ui-font); letter-spacing: .1em; color: #ddd; }
+.xp-word { font: italic 800 54px/1 Montserrat, var(--ui-font); letter-spacing: -.01em; }
+.xp-word sup { font: 700 22px Montserrat, var(--ui-font); color: #f47a1f; margin-left: 4px; }
+.xp-bar { width: 150px; height: 18px; border: 2px solid #b2b2b2; border-radius: 4px; position: relative; overflow: hidden; }
+.xp-bar i { position: absolute; top: 2px; width: 9px; height: 10px; border-radius: 1px; background: linear-gradient(#5f9ef0, #2b64d6);
+            animation: xpb 2.2s linear infinite; }
+.xp-bar i:nth-child(2) { animation-delay: .12s; } .xp-bar i:nth-child(3) { animation-delay: .24s; }
+@keyframes xpb { from { left: -30px; } to { left: 160px; } }
+.xp-foot { position: absolute; right: 40px; bottom: 30px; color: #fff; font: italic 700 15px Montserrat, var(--ui-font); }
+/* 3.11 */
+.w311-boot { position: absolute; inset: 0; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 30px; }
+.w311-box { display: flex; align-items: center; gap: 26px; padding: 30px 46px; border: 2px solid #000; box-shadow: 6px 6px 0 #000; }
+.w311-a { font: italic 800 46px/1 Montserrat, var(--ui-font); color: #000080; }
+.w311-b { font: 700 20px Montserrat, var(--ui-font); margin-top: 4px; }
+.w311-c { font: 14px var(--ui-font); margin-top: 10px; color: #444; }
+.w311-by { font: 13px var(--ui-font); color: #333; }
+/* Mac family */
+.mac-boot { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; }
+.mac-boot.sys7 { background: #a8a8a8; }
+.mac-happy { padding: 10px 12px; background: #fff; border: 2px solid #000; border-radius: 6px; }
+.mac-welcome { background: #fff; border: 2px solid #000; box-shadow: 3px 3px 0 #000; padding: 16px 46px; text-align: center;
+               display: flex; flex-direction: column; gap: 6px; }
+.mac-welcome b { font: 700 18px Charcoal, Chicago, Geneva, var(--ui-font); }
+.mac-welcome span { font: 11px Geneva, var(--ui-font); color: #333; }
+.mac-boot.os8 { background: #7d7d9e; }
+.mac-splash { background: #fff; border: 1px solid #000; box-shadow: 2px 2px 0 rgba(0,0,0,.5); padding: 22px 50px 16px; display: flex;
+              flex-direction: column; align-items: center; gap: 8px; min-width: 340px; }
+.mac-name { font: 800 28px Montserrat, var(--ui-font); color: #262660; }
+.mac-by { font: 600 11px Montserrat, var(--ui-font); letter-spacing: .3em; color: #666; text-transform: uppercase; }
+.mac-prog { width: 220px; height: 12px; border: 1px solid #000; margin-top: 10px; background: #ddd; overflow: hidden; }
+.mac-prog i { display: block; height: 100%; width: 0; background: linear-gradient(#8a8ad8, #3a3a9a); animation: mprog 2.6s ease-out forwards; }
+@keyframes mprog { to { width: 100%; } }
+.mac-starting { font: 11px Geneva, var(--ui-font); }
 .boot-sky { position: absolute; inset: 0 0 34px; background: linear-gradient(180deg, #1c5fc8 0%, #3e86e0 45%, #8cbcf0 100%); }
 .boot-sky .cl { position: absolute; border-radius: 50%; background: radial-gradient(closest-side, #fff 30%, rgba(255,255,255,0.85) 55%, rgba(255,255,255,0) 100%);
                 filter: blur(1px); animation: drift 30s linear infinite; }
@@ -35,6 +72,7 @@ button { font: inherit; color: inherit; }
 .cl.c3 { width: 460px; height: 140px; left: 30%; top: 62%; animation-duration: 44s; } .cl.c4 { width: 220px; height: 80px; left: 80%; top: 44%; }
 .cl.c5 { width: 300px; height: 100px; left: -6%; top: 70%; animation-duration: 50s; }
 @keyframes drift { to { transform: translateX(60px); } }
+#boot.boot-clouds, #boot.boot-me { background: #000; }
 .boot-logo { position: relative; display: flex; align-items: center; gap: 22px; margin-top: -40px; }
 .boot-mark svg { display: block; filter: drop-shadow(3px 4px 0 rgba(0,0,40,0.35)); }
 .boot-word { font-family: 'Montserrat', var(--ui-font); color: #fff; text-shadow: 3px 3px 0 rgba(0,0,60,0.35); line-height: 1; }
@@ -81,6 +119,8 @@ button { font: inherit; color: inherit; }
 .win { position: absolute; display: flex; flex-direction: column; padding: 3px; min-width: 220px; min-height: 120px; }
 .win.max { inset: 0 !important; width: auto !important; height: auto !important; }
 .win.min { display: none; }
+.win.shade { height: auto !important; min-height: 0; }
+.win.shade .wbody, .win.shade .grip, .win.shade .menubar { display: none; }
 .titlebar { height: 18px; flex: none; display: flex; align-items: center; gap: 3px; padding: 0 2px 0 3px;
             background: var(--title-off); color: var(--face); font-weight: bold; }
 .win.active .titlebar { background: var(--title); color: #fff; }
@@ -119,7 +159,10 @@ body.dragging .wbody iframe { pointer-events: none; }
 #tray-e3 svg { width: 20px; height: auto; display: block; }
 
 /* ---------- start menu ---------- */
-#startmenu { position: fixed; left: 2px; bottom: 27px; z-index: 600; display: flex; padding: 3px; min-width: 200px; }
+#startmenu { position: fixed; left: 2px; bottom: 27px; z-index: 600; display: flex; flex-direction: column; padding: 3px; min-width: 200px; }
+#startmenu .sm-main { display: flex; }
+#startmenu .sm-head:empty, #startmenu .sm-foot:empty { display: none; }
+.sm-right { display: none; }
 #startmenu .band { width: 22px; background: linear-gradient(0deg, #000080, #1a1a9a); position: relative; }
 #startmenu .band span { writing-mode: vertical-rl; transform: rotate(180deg); position: absolute; left: 0; bottom: 8px; width: 22px;
   display: flex; align-items: center; gap: 2px; white-space: nowrap; font: 18px/22px 'Montserrat', var(--ui-font); }
@@ -136,6 +179,31 @@ body.dragging .wbody iframe { pointer-events: none; }
 #flyout .mi { height: 22px; padding-right: 18px; }
 #flyout .mi .ico { width: 16px; height: 16px; }
 #flyout .none { padding: 4px 8px; color: var(--shade); }
+#flyout.drop { min-width: 190px; }
+#flyout .mi.off { color: var(--shade); background: none; }
+#flyout .mi kbd { margin-left: auto; font: inherit; color: inherit; opacity: .7; }
+#flyout .sep { list-style: none; }
+
+/* shells other than the taskbar start hidden; their theme CSS shows them */
+#menubar, #progman { display: none; }
+#minicons { position: absolute; left: 6px; bottom: 6px; display: flex; gap: 8px; z-index: 1; }
+#minicons .dicon { position: static; }
+.mb { background: none; border: none; padding: 1px 8px; height: 100%; cursor: default; }
+
+/* the other wallpapers, drawn here */
+.wp-teal311 { background: #008080 !important; }
+.wp-meslate { background: linear-gradient(180deg, #355f97, #5f87bd) !important; }
+.wp-xpblue { background: #3a6ea5 !important; }
+.wp-hills { background: #5a9ae8 !important; }
+.wp-gray7 { background: #a8a8a8 !important; }
+.wp-pattern7 { background: #9a9ab0 !important; background-image: radial-gradient(#6c6c88 1px, transparent 1.4px) !important;
+               background-size: 4px 4px !important; }
+.wp-platinum8 { background: #7d7d9e !important; }
+.wp-os9blue { background: radial-gradient(ellipse at 30% 20%, #4a6fc4, #1f3478 75%) !important; }
+.wp-esteefpat { background-color: #20304e !important;
+  background-image: radial-gradient(circle at 10px 10px, #ff2e88 2px, transparent 2.5px),
+                    radial-gradient(ellipse 14px 7px at 24px 24px, transparent 11px, #00f2fe 11.5px 12.5px, transparent 13px) !important;
+  background-size: 40px 40px !important; }
 
 /* ---------- dialogs and internal apps ---------- */
 .pad { padding: 10px; }

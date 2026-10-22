@@ -1,0 +1,7 @@
+/* Philibert OS 9: platinum, a touch bluer and glossier than OS 8, on a deep blue desk. */
+@import url("os8.css");
+:root { --hi-blue: #3f62c8; }
+#menubar { background: linear-gradient(#fbfbfb, #dedede 60%, #cfcfcf) !important; }
+.win.active .titlebar { background:
+   repeating-linear-gradient(180deg, #fff 0 1px, #a2a8b8 1px 2px, transparent 2px 3px) 0 4px / 100% 11px no-repeat, #e2e2e6; }
+.dicon .lbl { background: rgba(255,255,255,.92); border-radius: 2px; }

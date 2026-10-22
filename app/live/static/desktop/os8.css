@@ -1,0 +1,18 @@
+/* Philibert OS 8: the platinum era - soft grey chrome with bevels, grey title
+   stripes, bevelled boxes, a lavender-grey desk. */
+@import url("mac.css");
+:root { --stripe: #9a9a9a; --mac-face: #dddddd; --hi-blue: #6d6dcc; --sel: var(--hi-blue); }
+#menubar { background: linear-gradient(#f2f2f2, #d9d9d9) !important; border-bottom: 1px solid #555 !important; }
+#menubar .mb.open, #mb-apps.open, #flyout.drop .mi:hover { background: var(--hi-blue) !important; color: #fff; }
+#flyout.drop { background: #e6e6e6 !important; box-shadow: 0 0 0 1px #555, 2px 2px 3px rgba(0,0,0,.4) !important; }
+.win { background: #ddd; padding: 0 4px 4px; box-shadow: 0 0 0 1px #333, inset 1px 1px #fff, 1px 1px 3px rgba(0,0,0,.35); }
+.titlebar { background: #ddd; border-bottom: none; margin: 0 -4px; }
+.win.active .titlebar { background:
+   repeating-linear-gradient(180deg, #fff 0 1px, #9a9a9a 1px 2px, transparent 2px 3px) 0 4px / 100% 11px no-repeat, #ddd; }
+.titlebar .tt { background: #ddd; }
+.tbtn { background: linear-gradient(135deg, #888, #fff) !important; box-shadow: 0 0 0 1px #333, inset 1px 1px #fff; }
+.wbody { box-shadow: 0 0 0 1px #777; }
+.btn { background: linear-gradient(#fff, #ccc); border-radius: 4px; box-shadow: 0 0 0 1px #333, inset 1px 1px #fff; }
+.btn:active, .btn.down { background: linear-gradient(#999, #bbb); color: #000; }
+.raised, .wbody.face { background: #ddd; }
+.dicon.sel .lbl { background: var(--hi-blue); }

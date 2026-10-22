@@ -60,6 +60,26 @@
         tone(a, t + 0.9 + i * 0.16, f, 1.3, { type: "sine", vol: 0.05, att: 0.02, cut: 4000 });
       });
     },
+    // 3.11: a quick bright arpeggio and a held chord
+    startup_win311: function (a, t) {
+      [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) {
+        tone(a, t + i * 0.09, f, 0.5, { type: "square", vol: 0.05, cut: 1800 });
+      });
+      [523.25, 659.25, 783.99].forEach(function (f) { tone(a, t + 0.4, f, 1.1, { type: "triangle", vol: 0.08 }); });
+    },
+    // XP: a soft, wide pad that blooms upward
+    startup_xp: function (a, t) {
+      [[220, 0], [277.18, 0.25], [329.63, 0.5], [440, 0.75], [554.37, 1.0], [659.25, 1.2]].forEach(function (n) {
+        tone(a, t + n[1], n[0], 3.0 - n[1] * 0.5, { type: "sine", vol: 0.09, att: 0.4, cut: 2200 });
+        tone(a, t + n[1], n[0] * 1.5, 2.2, { type: "triangle", vol: 0.025, att: 0.6, detune: -8 });
+      });
+    },
+    // the Mac family: one big, round major chord - our own, not Apple's
+    startup_mac: function (a, t) {
+      [130.81, 196.0, 261.63, 329.63, 392.0, 523.25].forEach(function (f, i) {
+        tone(a, t, f, 2.6, { type: i % 2 ? "triangle" : "sine", vol: 0.1, att: 0.005, cut: 2600 });
+      });
+    },
     ding: function (a, t) {
       tone(a, t, 1318.5, 0.6, { type: "sine", vol: 0.16 });
       tone(a, t + 0.09, 1975.5, 0.7, { type: "sine", vol: 0.1 });

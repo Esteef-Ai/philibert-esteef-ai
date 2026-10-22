@@ -1,0 +1,11 @@
+/* Philibert Me: the 98 chrome in Millennium colours - a softer blue title gradient,
+   the start-menu band reading "Philibert Me", a slate-blue desk. */
+@import url("win95.css");
+:root { --title: #0a246a; --title2: #a6caf0; --title-off: #808080; --title-off2: #c0c0c0; --sel: #0a246a; --desk: #3a6ea5; }
+.titlebar { background: linear-gradient(90deg, var(--title-off), var(--title-off2)); }
+.win.active .titlebar { background: linear-gradient(90deg, var(--title), var(--title2)); }
+#startmenu .band { background: linear-gradient(0deg, #0a246a 0%, #3a6ea5 60%, #a6caf0 100%); }
+#startmenu .band b { font-style: italic; }
+#startmenu .band i { color: #ffe066; font-weight: 700; }
+.mi:hover, .mi.open { background: #0a246a; }
+.dicon.sel .lbl { background: #0a246a; }

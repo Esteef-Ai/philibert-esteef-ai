@@ -8,29 +8,34 @@
 <link href="/live/fonts/fonts.css" rel="stylesheet">
 <link href="/live/desktop/win95.css" rel="stylesheet" id="theme-css">
 </head>
-<body class="theme-win95">
+<body class="theme-win95 shell-taskbar family-win">
 
-<!-- boot splash -->
-<div id="boot" hidden>
-  <div class="boot-sky"><i class="cl c1"></i><i class="cl c2"></i><i class="cl c3"></i><i class="cl c4"></i><i class="cl c5"></i></div>
-  <div class="boot-logo">
-    <span class="boot-mark" id="boot-mark"></span>
-    <div class="boot-word"><b>Philibert</b><span id="boot-ver">95</span></div>
-  </div>
-  <div class="boot-by">Esteef<b>.Ai</b></div>
-  <div class="boot-bar"><i></i></div>
+<!-- boot splash: filled in per theme by desktop.js -->
+<div id="boot" hidden></div>
+
+<!-- Mac themes: the menu bar -->
+<div id="menubar" hidden>
+  <div id="mb-left"></div>
+  <div id="mb-right"><span id="mb-clock"></span><button id="mb-apps" type="button" title="Open windows"></button></div>
 </div>
 
 <!-- the desktop -->
 <div id="desk" class="wp-teal">
   <div id="wallart"></div>
+  <!-- Windows 3.11: the Program Manager frame around the icons -->
+  <div id="progman" class="raised" hidden>
+    <div class="titlebar pm-title"><span class="tt">Philibert Program Manager</span></div>
+    <div class="pm-menu" id="pm-menu"></div>
+    <div class="pm-group"><div class="titlebar pm-gtitle"><span class="tt">Philibert</span></div><div class="pm-body"></div></div>
+  </div>
   <div id="icons" role="list" aria-label="Desktop"></div>
+  <div id="minicons"></div>
   <div id="windows"></div>
 </div>
 
-<!-- taskbar -->
+<!-- Windows themes: the taskbar -->
 <div id="taskbar">
-  <button id="start" class="btn" type="button" aria-haspopup="true" aria-expanded="false"><span id="start-mark"></span><b>Philibert</b></button>
+  <button id="start" class="btn" type="button" aria-haspopup="true" aria-expanded="false"><span id="start-mark"></span><b id="start-label">Philibert</b></button>
   <div id="tasks"></div>
   <div id="tray" class="sunk">
     <button id="tray-e3" type="button" title="About Philibert - Esteef.Ai"></button>
@@ -40,8 +45,12 @@
 
 <!-- start menu -->
 <div id="startmenu" class="raised" hidden>
-  <div class="band"><span><b>Philibert</b><i id="band-ver">95</i></span></div>
-  <ul id="sm-list"></ul>
+  <div class="sm-head" id="sm-head"></div>
+  <div class="sm-main">
+    <div class="band"><span><b>Philibert</b><i id="band-ver">95</i></span></div>
+    <ul id="sm-list"></ul>
+  </div>
+  <div class="sm-foot" id="sm-foot"></div>
 </div>
 <div id="flyout" class="raised" hidden></div>
 

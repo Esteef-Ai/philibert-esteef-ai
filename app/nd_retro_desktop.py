@@ -22,7 +22,7 @@ THEMES = [  # id, name, family - the order the Control Panel lists them
     ("winme", "Windows ME", "win"), ("winxp", "Windows XP", "win"),
     ("sys7", "Mac System 7", "mac"), ("os8", "Mac OS 8", "mac"), ("os9", "Mac OS 9.2", "mac"),
 ]
-READY = {"win95"}           # themes built so far; the rest show as "coming"
+READY = {t[0] for t in THEMES}      # all eight are built
 DEFAULTS = {"theme": "win95", "wallpaper": "teal", "sounds": True, "boot": True,
             "screensaver": True, "saver_minutes": 10, "icons": {}}
 _APP_ID = re.compile(r"^[a-z0-9][a-z0-9_\-]{1,40}$")
@@ -83,14 +83,19 @@ def save_settings(data_dir, changes):
             except (TypeError, ValueError):
                 continue
         if k == "icons":
+            # {shell: {icon id: [x, y]}} - a Mac layout is not a Windows one
             if not isinstance(v, dict):
                 continue
             clean = {}
-            for i, p in list(v.items())[:200]:
-                try:
-                    clean[str(i)[:60]] = [int(p[0]), int(p[1])]
-                except (TypeError, ValueError, IndexError, KeyError):
+            for shell, pos in list(v.items())[:8]:
+                if shell not in ("taskbar", "progman", "menubar") or not isinstance(pos, dict):
                     continue
+                clean[shell] = {}
+                for i, p in list(pos.items())[:200]:
+                    try:
+                        clean[shell][str(i)[:60]] = [int(p[0]), int(p[1])]
+                    except (TypeError, ValueError, IndexError, KeyError):
+                        continue
             v = clean
         if k == "wallpaper":
             v = re.sub(r"[^a-z0-9\-]", "", str(v))[:30] or "teal"
