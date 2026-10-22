@@ -126,6 +126,16 @@ drive times, gaps); merch reorder suggestions from sales; budget summaries and
 per-gig profit; bills due and payment reminders. Everything exportable to
 CSV/Excel. A simple dashboard: next gigs, bills due, money in/out this month.
 
+Built (2026-10-22, nd_band.py): gigs, tours (gigs carry tour_id; a tour page
+adds up fees, in/out/kept and bills owed), venues, contacts, suppliers, songs,
+setlists, merch + sales, money, bills, reminders. Ticking a bill PAID books one
+expense in money (linked by money_id); un-ticking puts it in the Trash. Settings
+live in band.db (currency, USD by default; measurements, imperial by default),
+and the chat's persona states both every turn. Backups: one automatic copy a
+day before the first change (the last 14 kept) in data/exports/Band backups,
+BACK UP NOW, and restore, which backs up what it replaces. Export: one CSV per
+list in a zip. Not yet: repeating bills, drive times, the desktop Trash.
+
 ## 8. Drive creator ("Create USB media")
 
 From inside the app: pick a drive → show its name, size and current contents →
