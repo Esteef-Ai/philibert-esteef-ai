@@ -22,7 +22,7 @@ REPO = Path(__file__).resolve().parent.parent
 ND = Path(os.environ.get("ND_SOURCE") or (REPO.parent / "ND3"))
 APP = REPO / "app"
 FILES = ["NeuralDock_launcher.py", "NeuralDock_ui.html", "elena_ui.html", "elena_mark.js",
-         "nd_philibert.py", "nd_notes.py", "nd_chats.py", "nd_retro_desktop.py", "nd_retro_vault.py", "nd_band.py", "nd_browser.py", "nd_build_plan.py", "nd_design_review.py",
+         "nd_philibert.py", "nd_github.py", "nd_notes.py", "nd_chats.py", "nd_retro_desktop.py", "nd_retro_vault.py", "nd_band.py", "nd_browser.py", "nd_build_plan.py", "nd_design_review.py",
          "nd_placement.py", "nd_memory_index.py", "nd_obsidian_memory.py", "nd_gpu.py",
          "nd_reskin.py", "nd_test_probe.py", "nd_gui_smoke.py", "ui_house_style.md"]
 DIRS = ["live"]          # Philibert Chat's one-stop page (Elena Live), copied whole

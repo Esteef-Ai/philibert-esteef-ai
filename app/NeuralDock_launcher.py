@@ -18267,6 +18267,11 @@ class Handler(BaseHTTPRequestHandler):
 
         if PORTABLE and path.startswith("/api/philibert/"):
             # Model catalog, downloads and updates for the drive (nd_philibert.py).
+            # It installs code and holds a GitHub sign-in: same site only.
+            _origin = self.headers.get("Origin")
+            if _origin and urllib.parse.urlparse(_origin).netloc != self.headers.get("Host"):
+                self.send_json({"ok": False, "message": "refused: another site"}, 403)
+                return
             import nd_philibert
             self.send_json(nd_philibert.handle(path, body, log))
             return

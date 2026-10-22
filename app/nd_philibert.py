@@ -314,11 +314,60 @@ def version():
         return "unknown"
 
 
+# A private repo: the GitHub sign-in for this session. In memory only - never
+# written to the drive, so a lost drive gives nobody access to the repo.
+_GH = {"token": "", "user": "", "device": None}
+
+
+def _client_id():
+    try:
+        return json.loads(REPO_FILE.read_text(encoding="utf-8")).get("github_client_id", "")
+    except Exception:
+        return ""
+
+
+def github(name, body):
+    import nd_github
+    repo = _repo()[0]
+    if name == "github_status":
+        return {"signed_in": bool(_GH["token"]), "user": _GH["user"], "device": bool(_client_id()),
+                "private": bool(repo and nd_github.repo_needs_signin(repo))}
+    if name == "github_start":
+        try:
+            d = nd_github.start(_client_id())
+        except Exception as e:
+            return {"ok": False, "message": f"Could not start signing in: {e}"}
+        _GH["device"] = d
+        try:
+            import webbrowser
+            webbrowser.open(d["verification_uri"])
+        except Exception:
+            pass
+        return {"ok": True, "user_code": d["user_code"], "uri": d["verification_uri"], "interval": d.get("interval", 5)}
+    if name == "github_poll":
+        if not _GH["device"]:
+            return {"state": "error", "message": "Start signing in first."}
+        try:
+            r = nd_github.poll(_client_id(), _GH["device"]["device_code"])
+        except Exception as e:
+            return {"state": "pending", "message": str(e)}
+        if r["state"] != "ok":
+            return r
+        chk = nd_github.check(repo, r["token"])
+        if not chk["ok"]:
+            return {"state": "denied", "message": chk["message"]}
+        _GH.update(token=r["token"], user=chk["user"], device=None)
+        return {"state": "ok", "user": chk["user"]}
+    return {"error": "unknown"}
+
+
 def update(log=None):
     """Bring the drive up to the repo's latest. git when the drive is a checkout and
-    git is installed; otherwise the repo's zip. Never touches data/ or models/."""
+    git is installed; otherwise the repo's zip (signed in, for a private repo).
+    Never touches data/ or models/."""
     before = version()
     repo, branch = _repo()
+    auth = {"Authorization": f"Bearer {_GH['token']}", "Accept": "application/vnd.github+json"} if _GH["token"] else {}
     if (ROOT / ".git").exists() and shutil.which("git"):
         f = _git("fetch", "origin", branch)
         if f.returncode != 0:
@@ -334,16 +383,19 @@ def update(log=None):
     else:
         if not repo:
             return {"ok": False, "message": "No repo set in philibert.json, so there is nowhere to update from."}
-        url = f"https://codeload.github.com/{repo}/zip/refs/heads/{branch}"
+        url = (f"https://api.github.com/repos/{repo}/zipball/{branch}" if auth
+               else f"https://codeload.github.com/{repo}/zip/refs/heads/{branch}")
         try:
-            with urllib.request.urlopen(url, timeout=600) as r:
+            req = urllib.request.Request(url, headers={"User-Agent": "Philibert", **auth})
+            with urllib.request.urlopen(req, timeout=600) as r:
                 z = zipfile.ZipFile(io.BytesIO(r.read()))
         except urllib.error.HTTPError as e:
             if e.code == 404:     # what GitHub says about a private repo to a stranger
-                return {"ok": False, "message": "This drive was set up without git, and the Philibert repo is "
-                        "private, so it cannot update itself. Install git, then set the drive up again with "
-                        "git clone (see README) - or download the ZIP from GitHub again and unzip it over "
-                        "this folder. Your data/ and models/ folders are kept either way."}
+                if _client_id():
+                    return {"ok": False, "need_signin": True,
+                            "message": "This copy of Philibert is shared privately: sign in to GitHub to update."}
+                return {"ok": False, "message": "The Philibert repo is private and this drive has no way to sign "
+                        "in to it. Set the drive up again with Philibert Setup. Your data/ and models/ are kept."}
             return {"ok": False, "message": f"Could not download the update: {e}"}
         except Exception as e:
             return {"ok": False, "message": f"Could not download the update: {e}"}
@@ -357,7 +409,9 @@ def update(log=None):
             dst.write_bytes(z.read(n))
         sha = ""
         try:
-            with urllib.request.urlopen(f"https://api.github.com/repos/{repo}/commits/{branch}", timeout=30) as r:
+            creq = urllib.request.Request(f"https://api.github.com/repos/{repo}/commits/{branch}",
+                                          headers={"User-Agent": "Philibert", **auth})
+            with urllib.request.urlopen(creq, timeout=30) as r:
                 c = json.loads(r.read())
                 sha = f"{c['sha'][:7]} {c['commit']['committer']['date'][:10]} {c['commit']['message'].splitlines()[0]}"
         except Exception:
@@ -387,6 +441,8 @@ def handle(path, body, log=None):
         return {"version": version(), "repo": _repo()[0]}
     if name == "update":
         return update(log)
+    if name.startswith("github_"):
+        return github(name, body)
     return {"error": "unknown"}
 
 

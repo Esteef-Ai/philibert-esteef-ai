@@ -368,10 +368,7 @@ button:disabled{color:var(--dim); border-color:var(--s2); cursor:default}
         <canvas id="mark" aria-label="Elena's mark: one line whose motion shows what the agent is doing"></canvas>
         <span class="lbl" id="lbl">online</span>
       </div>
-      <div class="empty" id="empty"><b>A single, unbroken flow.</b>
-        Everything in this session hangs off one line. Ask for something &mdash;
-        and watch the mark. It is showing you what is actually happening, not a
-        spinner running on a timer.</div>
+      <div class="empty" id="empty"></div>
     </div>
   </div>
 </main>
@@ -467,11 +464,8 @@ const CLEAN = document.documentElement.classList.contains("embed");
 /* The turn in flight: what it did, summarised once at the end in the clean view. */
 let TURN = {steps: []};
 function emptyText(){
-  return CLEAN ? '<span class="welcome-line">Ask ' + esc(BRAND) + ' anything: your gigs, your notes, '
-                 + 'or this computer.</span>'
-               : '<b>A single, unbroken flow.</b> Everything in this session hangs off one line. '
-                 + 'Ask for something &mdash; and watch the mark. It is showing you what is actually '
-                 + 'happening, not a spinner running on a timer.';
+  return '<span class="welcome-line">Ask ' + esc(BRAND) + ' anything: your gigs, your notes, '
+         + 'or this computer.</span>';
 }
 function showEmptyText(){                    // after probe(): BRAND is known by then
   const e = $("empty");
@@ -829,12 +823,40 @@ function watchPull(tag, lab){
     }
   }, 2000);
 }
+// A private repo: GitHub's device sign-in. The page opens in the browser; the
+// person types the code shown here. The token stays in the server's memory.
+async function githubSignin(b){
+  let s;
+  try{ s = await api("/api/philibert/github_start", {}); }catch(e){ s = {ok: false, message: String(e)}; }
+  if(!s.ok){ alert(s.message || "Could not start signing in to GitHub."); return false; }
+  alert("This copy of " + BRAND + " is shared privately, so updating needs your GitHub sign-in.\n\n"
+    + "A GitHub page has opened (if not, go to " + s.uri + ").\nType this code there:\n\n    " + s.user_code
+    + "\n\nPress OK, then approve it on GitHub.");
+  b.textContent = "CODE " + s.user_code;
+  const until = Date.now() + 15 * 60 * 1000;
+  let wait = (s.interval || 5) * 1000;
+  while(Date.now() < until){
+    await new Promise(res => setTimeout(res, wait));
+    let p;
+    try{ p = await api("/api/philibert/github_poll", {}); }catch(e){ continue; }
+    if(p.state === "ok") return true;
+    if(p.state === "slow_down") wait += 5000;
+    else if(p.state !== "pending"){ alert(p.message || "GitHub sign-in did not finish."); return false; }
+  }
+  alert("The GitHub code expired. Press UPDATE to try again.");
+  return false;
+}
+
 $("updbtn").addEventListener("click", async () => {
   const b = $("updbtn");
   if(!confirm("Check for a newer version of " + BRAND + " and install it?\n\nThis uses the Internet. Your chats, notes and models are not touched.")) return;
   b.disabled = true; b.textContent = "UPDATING\u2026";
   let r;
   try{ r = await api("/api/philibert/update", {}); }catch(e){ r = {ok: false, message: String(e)}; }
+  if(r.need_signin && await githubSignin(b)){
+    b.textContent = "UPDATING…";
+    try{ r = await api("/api/philibert/update", {}); }catch(e){ r = {ok: false, message: String(e)}; }
+  }
   b.disabled = false; b.textContent = "UPDATE";
   alert(r.message || (r.ok ? "Done." : "Update failed."));
   $("modelsel").dataset.list = "";       // a new models.json may list new models

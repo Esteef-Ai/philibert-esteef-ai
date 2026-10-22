@@ -206,14 +206,18 @@ correct tool calls and correct data in `band.db`, not on prose.
    - each vault event lights its note once (the server re-sends its rolling list).
    All motion stays off under prefers-reduced-motion; ambient motion stays dim and
    never rides a main trace (a bright pulse there is always real data).
-2. **Obsidian in the standard install.** The vault (data/vault) is already
-   Obsidian-compatible markdown; ship the Obsidian app with the install so a
-   musician can browse and edit notes without a separate download. To settle:
-   Obsidian has no official portable build (Windows installer installs per user;
-   Mac is a .dmg), so either the setup scripts fetch a pinned release and
-   unpack it onto the drive (runtime/<os>/obsidian), or first-run offers a
-   one-click install on the host; pre-create data/vault/.obsidian so the vault
-   opens ready (theme, no telemetry/sync prompts); a "Open notes in Obsidian"
-   button in the UI (obsidian://open?path=...). Check Obsidian's licence before
-   bundling the app itself; the safe default is to download it from obsidian.md
-   at setup rather than commit it to git.
+2. **Obsidian: settled (2026-10-22): optional, never shipped.** Obsidian's terms
+   (obsidian.md/terms) forbid redistributing or sharing the software, so it is
+   never in the repo, a drive image or a Setup download. A portable copy was
+   prototyped and works: the Windows installer holds plain 7z archives that
+   Windows' own tar unpacks, and --user-data-dir keeps its profile on the drive.
+   It was rejected because every start re-registers the host's obsidian:// handler
+   in HKCU, taking it over from an installed Obsidian, which breaks "nothing
+   installed on the host". On Mac, an .app copied onto exFAT also loses the
+   symlinks its frameworks need. What ships instead:
+   - setup/welcome_vault/.obsidian: core plugins, with sync and publish off;
+     Templates -> Templates; trash -> the vault's .trash (as Notes uses); dark
+     theme. Setup adds it to a vault that has none and never overwrites one;
+   - Notes: OPEN IN OBSIDIAN when it is installed, otherwise GET OBSIDIAN, which
+     opens obsidian.md/download;
+   - Setup's Done page says the vault opens in Obsidian and where to get it.

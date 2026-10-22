@@ -308,6 +308,11 @@ class Installer:
         vault = data / "vault"
         if not any(vault.rglob("*.md")):
             shutil.copytree(self.dest / "setup" / "welcome_vault", vault, dirs_exist_ok=True)
+        # Obsidian's settings for the vault (templates, local trash, no sync), so it opens
+        # ready if the person has Obsidian; never over settings they already have.
+        ready = self.dest / "setup" / "welcome_vault" / ".obsidian"
+        if ready.is_dir() and not (vault / ".obsidian").exists():
+            shutil.copytree(ready, vault / ".obsidian")
         if self.plan.get("edition") == "full" and (self.plan.get("full") or {}).get("retro_vault", True):
             (self.dest / "Entertainment" / "Cartridges").mkdir(parents=True, exist_ok=True)
         info = {"version": 1, "installed": datetime.now().isoformat(timespec="seconds"),

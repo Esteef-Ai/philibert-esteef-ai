@@ -179,7 +179,10 @@
         fillFolderSelect();
         refresh();
         $("mtime").textContent = "edited " + ago(d.mtime);
-        $("btn-obsidian").hidden = !st.info.obsidian;
+        $("btn-obsidian").textContent = st.info.obsidian ? "OPEN IN OBSIDIAN" : "GET OBSIDIAN";
+        $("btn-obsidian").title = st.info.obsidian ? "Open this note in Obsidian"
+          : "Obsidian is a free notes app that opens this vault too: get it from obsidian.md";
+        $("btn-obsidian").hidden = false;
         history.replaceState(null, "", "#" + encodeURIComponent(d.id));
         if (!opts.quiet && !opts.keepFocus) {
           if (!ed.value.trim()) ed.focus();
@@ -518,7 +521,12 @@
       if (!load("notes.obsidianHint", "")) { keep("notes.obsidianHint", "1"); toast(d.hint + "  " + d.vault, 9000); }
     });
   }
-  $("btn-obsidian").addEventListener("click", function () { if (st.cur) openObsidian(st.cur.id); });
+  // Obsidian is never shipped on the drive (its licence forbids passing it on): the
+  // person gets it from the official page, and the vault already opens in it.
+  $("btn-obsidian").addEventListener("click", function () {
+    if (!st.info.obsidian) { window.open("https://obsidian.md/download", "_blank", "noopener"); return; }
+    if (st.cur) openObsidian(st.cur.id);
+  });
 
   /* ================= trash ================= */
   function trashCount() {
