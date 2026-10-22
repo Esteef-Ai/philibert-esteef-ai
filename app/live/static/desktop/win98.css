@@ -1,8 +1,0 @@
-/* Philibert 98: the 95 chrome with gradient title bars and a gradient band. */
-@import url("win95.css");
-:root { --title: #000080; --title2: #1084d0; --title-off: #808080; --title-off2: #b5b5b5; }
-.titlebar { background: linear-gradient(90deg, var(--title-off), var(--title-off2)); }
-.win.active .titlebar { background: linear-gradient(90deg, var(--title), var(--title2)); }
-#startmenu .band { background: linear-gradient(0deg, #000080 0%, #1084d0 100%); }
-#startmenu .band i { color: #fff; font-weight: 300; }
-.mi:hover, .mi.open { background: #000080; }

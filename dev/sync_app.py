@@ -81,6 +81,12 @@ def main():
     for d in DIRS:
         rels += [p.relative_to(ND).as_posix() for p in sorted((ND / d).rglob("*"))
                  if p.is_file() and "__pycache__" not in p.parts]
+        # a file removed from ND goes from app/ too (a retired theme's stylesheet, say)
+        keep = set(rels)
+        for old in sorted((APP / d).rglob("*")) if (APP / d).is_dir() else []:
+            if old.is_file() and old.relative_to(APP).as_posix() not in keep:
+                old.unlink()
+                print("removed", old.relative_to(APP).as_posix())
     for f in rels:
         dst = APP / f
         dst.parent.mkdir(parents=True, exist_ok=True)

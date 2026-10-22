@@ -1,3 +1,0 @@
-/* Philibert System 7: black and white, pinstriped title bars, a dotted desk pattern. */
-@import url("mac.css");
-:root { --stripe: #000; --mac-face: #fff; }
