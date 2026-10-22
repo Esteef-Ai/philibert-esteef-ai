@@ -17602,16 +17602,26 @@ def _open_portable_browser(url):
         except Exception:
             return False
         key = os.path.normcase(profile)
-        for p in psutil.process_iter(["name", "cmdline"]):
+        exe_name = os.path.normcase(os.path.basename(exe))
+        # attrs are NOT pre-fetched: with attrs, process_iter re-raises odd OS
+        # errors (WinError 87 from ReadProcessMemory) and that killed the server
+        for p in psutil.process_iter():
             try:
-                if any(key in os.path.normcase(a) for a in (p.info["cmdline"] or [])
+                if os.path.normcase(p.name()) != exe_name:
+                    continue
+                if any(key in os.path.normcase(a) for a in (p.cmdline() or [])
                        if a.startswith("--user-data-dir")):
                     return True
             except Exception:
                 continue
         return False
 
-    while still_open():
+    while True:
+        try:
+            if not still_open():
+                break
+        except Exception as e:      # never let the window watch stop the server
+            log(f"Window check failed ({e}); checking again", "warn")
         time.sleep(1.5)
     return True
 
