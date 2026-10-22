@@ -117,7 +117,10 @@
       net:  { x: clampX(W * 0.73), y: clampY(H * 0.28) }
     };
     chipLayout.elena = { x: clampX(cx), y: clampY(cy) };
+    if (NO_IO) { delete chipLayout.in; delete chipLayout.out; }
   }
+  // Philibert's mini board leaves out the IN / OUT chips to save room
+  var NO_IO = !!window.VIZ_NO_IO;
 
   // traces between node pairs (both endpoints exist)
   var tracePairs = [
@@ -134,6 +137,7 @@
     traces = {};
     for (var i = 0; i < tracePairs.length; i++) {
       var p = tracePairs[i];
+      if (!chipLayout[p[0]] || !chipLayout[p[1]]) continue;      // a chip left out (NO_IO)
       traces[traceKey(p[0], p[1])] = makeTrace(p[0], p[1]);
     }
   }
@@ -388,9 +392,11 @@
    * Board draw
    * ------------------------------------------------------------------ */
   function resizeBoard() {
-    var rect = boardCanvas.parentElement.getBoundingClientRect();
-    boardW = Math.max(320, rect.width);
-    boardH = Math.max(240, rect.height);
+    // layout size (offset*), not the on-screen rect: Philibert shows the board
+    // CSS-scaled down in a corner, and it must keep laying out at full size
+    var host = boardCanvas.parentElement;
+    boardW = Math.max(320, host.offsetWidth);
+    boardH = Math.max(240, host.offsetHeight);
     boardDPR = window.devicePixelRatio || 1;
     boardCanvas.width = Math.round(boardW * boardDPR);
     boardCanvas.height = Math.round(boardH * boardDPR);
@@ -1571,7 +1577,7 @@
   // Sized from the chip's real CSS dimensions each time.
   function drawElenaHalo(col) {
     if (!elenaCanvas) return;
-    var r = elenaCanvas.getBoundingClientRect();
+    var r = { width: elenaCanvas.offsetWidth, height: elenaCanvas.offsetHeight };
     if (r.width < 2) return;
     var dpr = window.devicePixelRatio || 1;
     var W = Math.round(r.width * dpr), H = Math.round(r.height * dpr);
@@ -1623,8 +1629,7 @@
   // the layout has settled so R tracks the real chip size.
   function refitElena() {
     if (!elenaMark || !elenaCanvas) return;
-    var r = elenaCanvas.getBoundingClientRect();
-    var w = r.width, h = r.height;
+    var w = elenaCanvas.offsetWidth, h = elenaCanvas.offsetHeight;   // unscaled
     if (w < 20 || h < 20) return;
     var dpr = window.devicePixelRatio || 1;
     elenaCanvas.width  = Math.round(w * dpr);

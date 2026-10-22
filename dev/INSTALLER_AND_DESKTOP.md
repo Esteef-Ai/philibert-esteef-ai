@@ -233,3 +233,26 @@ or search history, no AI memory, no vault notes, no config, no personal paths.
   until the installer is ready to test on K:** — until then files stay local.
 - Mac testing: the user will have a Mac soon (model TBD).
 - Whether the code repo also goes public (then the GitHub sign-in step disappears).
+
+## 12. Later: Image Generation add-on (ComfyUI)
+
+Asked for 2026-10-22, to build after the Full edition. An **extended option** on top of
+a Full install: the installer offers "Image Generation (ComfyUI)" as an add-on (off by
+default, with its download size), and the retro desktop gets an **Image Generation**
+icon that opens it in a Philibert window. Philibert's chat gains `generate_image`
+again only when the add-on is installed (it is in PORTABLE_DROP_TOOLS today).
+
+- **On the drive:** ComfyUI + its Python packages per PC under `runtime\<os>\comfyui`,
+  one shared `models\image\` folder (checkpoints are the big part: SDXL ~7 GB, Flux
+  12-24 GB), outputs in `data\images`. Model picks get red / yellow / green ratings
+  like the chat models.
+- **Windows (NVIDIA):** the fast path; ND3 already drives ComfyUI (`generate_image`,
+  the RTX launch flags), so the portable port mostly moves paths onto the drive.
+  AMD / Intel cards: ComfyUI supports them through DirectML / ROCm / XPU, slower.
+- **Mac:** yes, on **Apple Silicon** (M1 and later): ComfyUI runs on PyTorch's Metal
+  (MPS) backend, and there is an official ComfyUI Desktop build for Apple Silicon.
+  Expect it several times slower than a recent NVIDIA card, and it wants memory:
+  16 GB unified memory for SDXL, 32 GB+ for Flux. **Intel Macs:** processor only -
+  minutes per image; the installer should mark it red there.
+- Packages for each Mac chip are pip wheels (torch for macOS arm64), so the drive's
+  Mac setup installs them on first start, like the other Mac runtimes.

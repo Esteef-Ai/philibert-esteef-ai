@@ -8,7 +8,7 @@
  * the pointer. She had already asked for cursor-awareness before it was
  * requested. Her palette runs the colour states.
  *
- * STEVE asked for it to be entertaining, free-flowing and mouse-reactive, with
+ * THE USER asked for it to be entertaining, free-flowing and mouse-reactive, with
  * a different behaviour for each thing the system is doing.
  *
  * MINE is the rule underneath: THE MOTION IS THE TELEMETRY. Nothing here loops
@@ -72,9 +72,10 @@
   }
 
   Mark.prototype._resize = function () {
-    var r = this.cv.getBoundingClientRect();
-    this.w = r.width || 104;
-    this.h = r.height || 104;
+    // layout size, not getBoundingClientRect: the mark can sit inside a
+    // CSS-scaled board (Philibert's mini board) and must draw at its own size
+    this.w = this.cv.offsetWidth || 104;
+    this.h = this.cv.offsetHeight || 104;
     this.cv.width = Math.round(this.w * this.dpr);
     this.cv.height = Math.round(this.h * this.dpr);
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);

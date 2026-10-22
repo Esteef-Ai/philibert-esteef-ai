@@ -7197,7 +7197,7 @@ def _written_paths(rows):
 
 
 TOOL_TIERS = {
-    "list_dir":"green", "read_file":"green", "search_files":"green",
+    "list_dir":"green", "read_file":"green", "search_files":"green", "computer_info":"green",
     "find_definition":"green", "find_references":"green",
     "web_search":"green", "web_fetch":"green", "screen_capture":"green",
     "delegate":"green", "list_specialists":"green", "list_devices":"green",
@@ -7280,13 +7280,76 @@ def agent_audit(tool, tier, detail, decision):
         log(f"audit write failed: {e}", "warn")
 
 def classify_shell(cmd):
-    """Return (tier, reason). 'black' means blocked unless ADMIN MODE is on."""
+    """Return (tier, reason). 'black' means blocked unless ADMIN MODE is on;
+    'read' is a pure lookup (shell_read_only) that runs without asking."""
     import re as _re
     low = (cmd or "").lower()
     for pat, why in BLACK_PATTERNS:
         if _re.search(pat, low, _re.I):
             return "black", why
+    if shell_read_only(cmd):
+        return "read", "only reads"
     return "red", ""
+
+
+# Commands that only LOOK: a question ("how big is my C drive", "what is running")
+# should not need an approval; a change still does. Deliberately an allowlist,
+# checked per pipeline segment, and anything that could hide another command
+# ($( ), &, iex, -Command, redirection, scripts) makes the whole line red.
+_READ_CMDS = {
+    "dir", "ls", "gci", "cat", "type", "gc", "echo", "write-output", "where", "where.exe",
+    "whoami", "hostname", "systeminfo", "tasklist", "ver", "tree", "findstr", "find",
+    "select-object", "select", "where-object", "?", "sort-object", "sort", "format-table", "ft",
+    "format-list", "fl", "measure-object", "measure", "group-object", "test-path",
+    "resolve-path", "split-path", "join-path", "out-string", "select-string", "sls",
+    "convertto-json", "convertto-csv", "head", "tail", "wc", "grep", "df", "du", "free",
+    "uname", "pwd", "date", "uptime", "lsblk", "nproc", "sw_vers", "system_profiler",
+}
+_READ_ARG_CMDS = {          # read-only only with these first arguments
+    "git": {"status", "log", "diff", "show", "branch", "remote", "rev-parse", "ls-files", "blame", "describe", "tag"},
+    "ipconfig": {"", "/all"},
+    "wmic": None,           # checked below: must be a plain "... get ..." query
+    "nvidia-smi": None,     # checked below: no setting flags
+    "python": {"--version", "-v"}, "py": {"--version", "-v"}, "node": {"--version", "-v"},
+    "pip": {"list", "show", "freeze", "--version"}, "ollama": {"list", "ps", "show", "--version"},
+}
+_NOT_READ = re.compile(r"[<>]|\$\(|`|\b(iex|invoke-expression|invoke-command|icm|start-process|saps|"
+                       r"set-|new-|remove-|rename-|move-|copy-|clear-|out-file|add-content|stop-|"
+                       r"restart-|-command|-encodedcommand|-delete|-recurse\s+-force)\b|&&|\|\||(?<![\w-])&(?![\w-])",
+                       re.I)
+
+
+def shell_read_only(cmd):
+    c = _unwrap_command(cmd or "")
+    if not c or _NOT_READ.search(c):
+        return False
+    for seg in re.split(r"[|;]", c):
+        words = seg.strip().split()
+        if not words:
+            continue
+        head = words[0].lower()
+        arg = words[1].lower() if len(words) > 1 else ""
+        if head.startswith("get-") and head not in ("get-credential",):
+            continue                    # PowerShell's Get- verbs only read
+        if head in _READ_CMDS:
+            continue
+        if head in _READ_ARG_CMDS:
+            allowed = _READ_ARG_CMDS[head]
+            low = seg.lower()
+            if head == "wmic":
+                if " get" in low and not re.search(r"\b(call|delete|set|create)\b", low):
+                    continue
+                return False
+            if head == "nvidia-smi":
+                if not re.search(r"\s-(pl|pm|r|ac|rac|lgc|rgc|e|c|am|caa)\b|--(gpu-reset|power-limit|persistence)", low):
+                    continue
+                return False
+            if head == "git" and arg == "branch" and re.search(r"\s-(d|D|m|M)\b|--delete|--move", seg):
+                return False
+            if arg in allowed:
+                continue
+        return False
+    return True
 
 _URI_RE = re.compile(r'(["\'])((?:spotify|steam|ms-settings|mailto|obsidian|vscode|discord|slack|zoommtg):[^"\']*)\1',
                      re.I)
@@ -9676,7 +9739,59 @@ def try_build_plan(model, task, workspace, allow_all, req_id, should_cancel,
             "tool_results": results, "needs_permission": None}
 
 
+def computer_info():
+    """Facts about this computer, read-only: drives (size / used / free / format),
+    memory, processor, graphics card and OS. Answers "how big is my C drive" and
+    the like without a shell command (Philibert has none), so it needs no approval."""
+    import platform
+    import shutil
+    rel = platform.release()
+    try:                                    # Windows 11 still reports release "10"
+        if platform.system() == "Windows" and int(platform.version().split(".")[-1]) >= 22000:
+            rel = "11"
+    except ValueError:
+        pass
+    lines = [f"OS: {platform.system()} {rel} ({platform.machine()})"]
+    gb = lambda b: f"{b / 1e9:,.1f} GB"
+    try:
+        import psutil
+        parts = [p for p in psutil.disk_partitions(all=False)
+                 if p.fstype and "cdrom" not in (p.opts or "")]
+        vm = psutil.virtual_memory()
+        lines.append(f"Memory (RAM): {gb(vm.total)} total, {gb(vm.available)} free")
+        lines.append(f"Processor: {platform.processor() or 'unknown'}, "
+                     f"{psutil.cpu_count(logical=False) or '?'} cores / {psutil.cpu_count() or '?'} threads")
+    except Exception:
+        parts = []
+    lines.append("Drives:")
+    seen = set()
+    for p in parts:
+        if p.mountpoint in seen:
+            continue
+        seen.add(p.mountpoint)
+        try:
+            u = shutil.disk_usage(p.mountpoint)
+        except OSError:
+            continue
+        lines.append(f"  {p.mountpoint}  {p.fstype}: {gb(u.total)} total, {gb(u.used)} used, "
+                     f"{gb(u.free)} free ({u.used / u.total * 100:.0f}% full)")
+    if not parts:
+        for root in ([f"{c}:\\" for c in "CDEFGHIJKLMNOPQRSTUVWXYZ"] if os.name == "nt" else ["/"]):
+            try:
+                u = shutil.disk_usage(root)
+            except OSError:
+                continue
+            lines.append(f"  {root}  {gb(u.total)} total, {gb(u.used)} used, {gb(u.free)} free")
+    try:
+        import nd_gpu
+        lines.append("Graphics card: " + nd_gpu.describe().replace("GPU: ", "", 1).split(", vendor=")[0])
+    except Exception:
+        pass
+    return "\n".join(lines)
+
+
 TOOL_SCHEMAS = [
+  {"type":"function","function":{"name":"computer_info","description":"Facts about THIS computer: every drive's total size, used and free space and format (C:, D:, USB drives), memory, processor, graphics card and OS. Use it for any question about disk space, drive size, RAM or hardware - never a shell command.","parameters":{"type":"object","properties":{}}}},
   {"type":"function","function":{"name":"design_review","description":"LOOK at an HTML file you have written: renders it in a real headless browser at desktop and mobile sizes, runs automated checks, and returns a critique of how it actually looks. ALWAYS call this after writing or editing any HTML/CSS page, before telling the user it is done. It is the only way you can see your own output - without it you are working blind. Fast (a few seconds) and read-only.","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Absolute path to the .html file to render and review"},"brief":{"type":"string","description":"Optional: the design brief or intent to judge it against, e.g. the palette, mood and audience you were aiming for"}},"required":["path"]}}},
   {"type":"function","function":{"name":"generate_image","description":"Create an image from a text prompt using the local ComfyUI image pipeline. USE THIS whenever the user asks for a picture, image, artwork, wallpaper, logo or render. ComfyUI is started automatically if it is not running - never try to launch it yourself, never inspect ComfyUI folders, and never tell the user to install anything. Takes 20-60s.","parameters":{"type":"object","properties":{"prompt":{"type":"string","description":"What to draw. Be descriptive and visual."},"negative":{"type":"string","description":"What to avoid (optional)"},"width":{"type":"integer","description":"Pixels, default 1024"},"height":{"type":"integer","description":"Pixels, default 1024"},"steps":{"type":"integer","description":"Sampling steps, default 20"},"cfg":{"type":"number","description":"Guidance scale, default 7.0"}},"required":["prompt"]}}},
   {"type":"function","function":{"name":"list_dir","description":"List files and folders in a directory on the user's PC","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Absolute directory path"}},"required":["path"]}}},
@@ -13205,7 +13320,9 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
         if _kvnote:
             log(f"{name}: {_kvnote}", "warn")
         if PORTABLE and name in PORTABLE_DROP_TOOLS:
-            return f"[NOT AVAILABLE] {name} is not part of {PRODUCT}."
+            return (f"[NOT AVAILABLE] {name} is not part of {PRODUCT} and never will be - do not "
+                    f"call it again. For drive sizes, memory or hardware call computer_info; for "
+                    f"files use list_dir / read_file. Otherwise answer from what you know.")
         _net = network_refusal(name, a)
         if _net:
             log(f"{name} refused - Internet switch is off", "info")
@@ -13245,6 +13362,7 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
             if name == "web_search":   return "[WEB] " + web_search(a.get("query",""))
             if name == "update_plan":  return tool_update_plan(session_id, a.get("steps"))
             if name == "read_file":    return "[FILE] " + fs_read_file(a.get("path",""), a.get("offset",0), a.get("limit"))
+            if name == "computer_info": return "[INFO] " + computer_info()
             if name == "list_dir":     return "[FILE] " + fs_list_dir(a.get("path",""))
             if name == "search_files": return "[FILE] " + fs_search_files(a.get("root",""), a.get("pattern",""))
             if name == "find_definition": return "[FILE] " + tool_find_definition(a, workspace)
@@ -14625,6 +14743,14 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                 t = _tier(c["name"])
                 if t == "green":
                     continue
+                if PORTABLE and c["name"] in PORTABLE_DROP_TOOLS:
+                    continue        # refused when it runs: never ask anyone to approve it
+                                    # (each Approve came back "not available" - a loop of asks)
+                if c["name"] == "run_shell" and \
+                        classify_shell(c["arguments"].get("command", ""))[0] == "read":
+                    log(f"run_shell only reads - no approval needed: "
+                        f"{str(c['arguments'].get('command', ''))[:80]}", "info")
+                    continue        # a question needs no permission; a change does
                 if t in auto_ok:
                     # A hard-blocked command is never auto-approved, whatever the
                     # autonomy level says. Blacklisted means blacklisted.
@@ -17929,6 +18055,7 @@ class Handler(BaseHTTPRequestHandler):
                 pull_snap = dict(_pull_status)
             self.send_json({**c,"log":log_snap,"setup_running":setup_running,"pulls":pull_snap,
                               "portable":PORTABLE,"product":PRODUCT,"online":internet_on(),"cpu_fallback":_cpu_now,
+                              "user_name":str(_config.get("user_name") or "")[:40],
                               "ollama_models_dir":_config.get("ollama_models_dir",""),
                               "version":VERSION,
                               "model_registry":get_model_registry(),
@@ -17986,12 +18113,17 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error":"unauthorized","hint":"Send X-ND-Token. Pair in Setup > Devices."}, 401)
             return
 
-        if path == "/api/notes":
-            # The Notes app (nd_notes.py). It writes files, so a page from another
-            # site in the user's own browser must not be able to drive it.
+        if path in ("/api/notes", "/api/chats"):
+            # The Notes app (nd_notes.py) and saved chats (nd_chats.py). They
+            # write files, so a page from another site in the user's own browser
+            # must not be able to drive them.
             _origin = self.headers.get("Origin")
             if _origin and urllib.parse.urlparse(_origin).netloc != self.headers.get("Host"):
                 self.send_json({"ok": False, "msg": "refused: another site"}, 403)
+                return
+            if path == "/api/chats":
+                import nd_chats
+                self.send_json(nd_chats.handle(body, _CONFIG_DIR / "chats"))
                 return
             import nd_notes
             o = obs()

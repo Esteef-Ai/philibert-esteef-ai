@@ -8,7 +8,7 @@
  * the pointer. She had already asked for cursor-awareness before it was
  * requested. Her palette runs the colour states.
  *
- * STEVE asked for it to be entertaining, free-flowing and mouse-reactive, with
+ * THE USER asked for it to be entertaining, free-flowing and mouse-reactive, with
  * a different behaviour for each thing the system is doing.
  *
  * MINE is the rule underneath: THE MOTION IS THE TELEMETRY. Nothing here loops

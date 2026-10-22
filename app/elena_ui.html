@@ -304,6 +304,30 @@ button:disabled{color:var(--dim); border-color:var(--s2); cursor:default}
 .embed .thread::before, .embed .thread.live::after{left:16px;}
 .embed .tip canvas{width:40px; height:40px;}
 .embed .cin{max-width:none; padding:10px 12px 6px;}
+
+/* ── the end-user view (embedded in Philibert) ── */
+#dock{max-width:760px; margin:0 auto;}
+.embed #dock{max-width:none; padding:0 14px;}
+#dock .node.perm{margin:12px 0 0; padding:12px 14px; border:1px solid #6a4a8a; border-radius:10px;
+  background:linear-gradient(180deg,#25203a,#1d1a2e); box-shadow:0 -6px 24px rgba(0,0,0,.35);
+  animation:dockin .25s ease-out;}
+#dock .node.perm .dot{display:none}
+#dock .permrow{margin:0 0 8px}
+#dock .permtool{font-family:Inter,sans-serif; font-size:14px; letter-spacing:0; text-transform:none; color:#ecebf5}
+.permdet summary{cursor:pointer; color:#8a8aa0; font-size:11.5px; margin:2px 0 4px}
+.permbar .stopbtn.all{margin-left:auto; border-color:#3a3a56; color:#9a9ab8}
+@keyframes dockin{from{transform:translateY(8px); opacity:0}}
+.node.act .who{color:#7f8fb0}
+.node.act .body{font-family:Inter,sans-serif; font-size:12.5px; color:#8c8ca6}
+.node.act details summary{cursor:pointer; list-style:none}
+.node.act details summary::before{content:"\25B8  "; color:#5a5a78}
+.node.act details[open] summary::before{content:"\25BE  "}
+.node.act ul{margin:6px 0 0 14px; padding:0; color:#7a7a94; font-size:12px}
+.node.ref .who{color:#c86ae0}
+.welcome-line{color:var(--dim); font-size:14.5px}
+.embed .empty:not(.set){visibility:hidden}
+.embed .head > div:not(.tools){display:none}      /* name + "agent mode" line: the page header says it */
+.embed .head .tools{margin-left:0; width:100%}
 </style>
 <script>if (/[?&]embed=1\b/.test(location.search)) document.documentElement.classList.add("embed");</script>
 </head>
@@ -380,6 +404,7 @@ button:disabled{color:var(--dim); border-color:var(--s2); cursor:default}
 </div>
 
 <div class="composer">
+  <div id="dock"></div>
   <div class="cin">
     <button id="convobtn" class="icon" title="Conversation mode — always listening"
             aria-label="Conversation mode">&#9673;</button>
@@ -432,6 +457,26 @@ let STOPPED = null;        // ...and the one the user has given up on
    from the front so a long session cannot outgrow the context window. */
 let history = [];
 const HISTORY_CHARS = 24000;
+/* Your messages are labelled with the config's user_name, else just "You" - a
+   name written into this file would ship to everyone who gets the drive. */
+let ME = "You";
+/* Embedded (Philibert's one-stop page): the end-user view. One summary line per
+   turn instead of every tool call and round, approvals docked by the composer,
+   and the conversation saved to the chat history panel. */
+const CLEAN = document.documentElement.classList.contains("embed");
+/* The turn in flight: what it did, summarised once at the end in the clean view. */
+let TURN = {steps: []};
+function emptyText(){
+  return CLEAN ? '<span class="welcome-line">Ask ' + esc(BRAND) + ' anything: your gigs, your notes, '
+                 + 'or this computer.</span>'
+               : '<b>A single, unbroken flow.</b> Everything in this session hangs off one line. '
+                 + 'Ask for something &mdash; and watch the mark. It is showing you what is actually '
+                 + 'happening, not a spinner running on a timer.';
+}
+function showEmptyText(){                    // after probe(): BRAND is known by then
+  const e = $("empty");
+  if(CLEAN && e){ e.innerHTML = emptyText(); e.classList.add("set"); }
+}
 function pushHistory(role, content){
   if(!content) return;
   history.push({role, content});
@@ -491,7 +536,7 @@ async function showImages(res){
              + '" title="' + GALLERY + '">Gallery</a>' : "") + '</div>';
       thread.appendChild(d);
       tipLast();
-      d.scrollIntoView({block:"end", behavior:"smooth"});
+      follow();
     }catch(e){ /* an image that will not load is not worth breaking the turn */ }
   }
 }
@@ -499,6 +544,19 @@ async function showImages(res){
 /* Keep the mark as the LAST child of the thread. It is the drawing head of the
    line, so anything appended has to go above it, not after. */
 function tipLast(){ const t = $("tip"); if(t) thread.appendChild(t); }
+
+/* Follow the conversation only while the reader is at the bottom. Scrolling on
+   every poll tick yanked the view back whenever you scrolled up to read - or to
+   reach an Approve button that had scrolled out of sight. */
+const SCROLLER = document.querySelector("main");
+let STICK = true;
+SCROLLER.addEventListener("scroll", () => {
+  STICK = SCROLLER.scrollHeight - SCROLLER.scrollTop - SCROLLER.clientHeight < 90;
+}, {passive:true});
+function follow(force){
+  if(force) STICK = true;
+  if(STICK) SCROLLER.scrollTop = SCROLLER.scrollHeight;
+}
 
 function esc(s){ return (s||"").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
 
@@ -510,7 +568,7 @@ function node(kind, who, body){
                 '</span><div class="body">' + esc(body) + "</div>";
   thread.appendChild(d);
   tipLast();
-  d.scrollIntoView({block:"end", behavior:"smooth"});
+  follow(kind === "you");             // your own message always brings you down
   return d;
 }
 function stage(text){
@@ -528,7 +586,7 @@ function stage(text){
           thread.appendChild(s); }
   tipLast();
   $("stgt").textContent = text;
-  s.scrollIntoView({block:"end", behavior:"smooth"});
+  follow();
 }
 function clearStage(){ $("stg")?.remove(); thread.classList.remove("live"); }
 
@@ -552,13 +610,14 @@ function showLong(rid, model, secs, round, what){
     b.addEventListener("click", () => stopTurn(rid));
     d.appendChild(b);
     thread.appendChild(d);
-    d.scrollIntoView({block:"end", behavior:"smooth"});
+    follow();
   }
   // Update in place: a long turn should be one informative line, not a pile.
-  d.querySelector(".body").textContent =
-    String(model || "").split("/").pop() + " has been working for " + secs
-    + "s, now on round " + round + (what ? " (" + what + ")" : "")
-    + ". Agent mode keeps calling tools until it is satisfied.";
+  d.querySelector(".body").textContent = CLEAN
+    ? "Still working on it (" + secs + "s). You can stop it at any time."
+    : String(model || "").split("/").pop() + " has been working for " + secs
+      + "s, now on round " + round + (what ? " (" + what + ")" : "")
+      + ". Agent mode keeps calling tools until it is satisfied.";
 }
 function clearStall(){ $("stall")?.remove(); }
 function showStall(rid, model, secs){
@@ -568,15 +627,17 @@ function showStall(rid, model, secs){
   d.id = "stall"; d.className = "node err";
   d.innerHTML = '<span class="who">no progress for '
     + Math.round(STALL_MS / 1000) + 's</span><div class="body"></div>';
-  d.querySelector(".body").textContent = short
-    + " has produced nothing for a while (" + secs + "s so far). A model larger "
-    + "than the card runs partly on the CPU and can take minutes.";
+  d.querySelector(".body").textContent = CLEAN
+    ? "This is taking longer than usual (" + secs + "s). A big model can be slow to start; "
+      + "a smaller one in the model list answers faster."
+    : short + " has produced nothing for a while (" + secs + "s so far). A model larger "
+      + "than the card runs partly on the CPU and can take minutes.";
   const b = document.createElement("button");
   b.type = "button"; b.className = "stopbtn"; b.textContent = "Stop this turn";
   b.addEventListener("click", () => { stopTurn(rid); });
   d.querySelector(".body").appendChild(b);
   thread.appendChild(d);
-  d.scrollIntoView({block:"end", behavior:"smooth"});
+  follow();
   if(convoOn){
     if(bigMark) bigMark.set("error");
     convoSay("still working", "#d84830", short + " is slow to answer");
@@ -590,7 +651,7 @@ async function stopTurn(rid){
   STOPPED = id;
   try{ await api("/api/chat_cancel", {job_id: id}); }catch(e){}
   clearStall(); clearLong(); clearStage(); clearPermission(); clearQuestion();
-  node("tool", "stopped", "cancelled at your request");
+  node("tool", "stopped", CLEAN ? "Stopped." : "cancelled at your request");
   if(convoOn){
     if(bigMark) bigMark.set("listen");
     convoSay("listening", "#4a9fd8", "");
@@ -612,6 +673,11 @@ async function stopTurn(rid){
 const flow = { queue:"", shown:"", node:null, on:false };
 
 function flowReset(){ flow.queue = ""; flow.shown = ""; flow.node = null; flow.on = false; }
+/* ND marks each agent round in the stream ("── round 3 ──"). The clean view
+   shows only the newest round: the earlier ones are the model talking itself
+   through tool calls, which the activity line summarises instead. */
+const ROUND_RE = /\n*── round \d+ ──\n?/;
+function lastRound(s){ return String(s || "").split(ROUND_RE).pop().replace(/^\s+/, ""); }
 function flowPush(txt){ if(txt){ flow.queue += txt; flow.on = true; } }
 
 function flowDrain(){
@@ -621,9 +687,11 @@ function flowDrain(){
     flow.shown += flow.queue.slice(0, n);
     flow.queue = flow.queue.slice(n);
     const b = flow.node.querySelector(".body");
-    b.textContent = flow.shown;
+    const txt = CLEAN ? lastRound(flow.shown) : flow.shown;
+    b.textContent = txt;
+    if(CLEAN) flow.node.hidden = !txt.trim();     // between rounds: nothing to show yet
     b.classList.add("flowing");
-    flow.node.scrollIntoView({block:"end", behavior:"auto"});
+    follow();
   }
   requestAnimationFrame(flowDrain);
 }
@@ -636,7 +704,9 @@ function flowFinish(finalText, stats){
   if(!flow.on && !finalText) return null;
   if(!flow.node) flow.node = node("el", BRAND, "");
   const b = flow.node.querySelector(".body");
-  b.textContent = (finalText || (flow.shown + flow.queue)).trim();
+  const all = flow.shown + flow.queue;
+  b.textContent = (finalText || (CLEAN ? lastRound(all) : all)).trim();
+  flow.node.hidden = false;
   b.classList.remove("flowing");
   if(stats) flow.node.setAttribute("data-stats", stats);
   const n = flow.node; flowReset(); return n;
@@ -793,6 +863,7 @@ $("modelsel").addEventListener("change", async (e) => {
  * in /api/status; everything that names the assistant follows it. */
 let BRAND = "Elena", HOST = "NeuralDock";
 function applyBrand(d){
+  if(d.user_name) ME = d.user_name;
   const nb = $("netbtn");
   if(d.portable){
     nb.hidden = false;
@@ -871,6 +942,7 @@ async function probe(){
         VOICE_MODEL = fits[0] || MODEL;
       }
       applyBrand(d);
+      showEmptyText();
       // Ollama's list lands in ND's cache a few seconds after start; ask again.
       if(!ms.length) setTimeout(probe, 3000);
       let have = ms;
@@ -889,7 +961,9 @@ async function probe(){
     }
   }catch(e){ live = false; }
   $("st").innerHTML = live ? 'agent mode &middot; <b>connected</b>' : "not connected";
-  $("hint").innerHTML = live
+  $("hint").innerHTML = live && CLEAN
+    ? "Enter to send &middot; Shift+Enter for a new line"
+    : live
     ? ("Enter to send &middot; Shift+Enter for a newline &middot; hover a reply for its stats"
        + (MODEL ? " &middot; typed: " + MODEL.split("/").pop() : "")
        + (VOICE_MODEL && VOICE_MODEL !== MODEL
@@ -907,23 +981,59 @@ async function probe(){
  * A parked turn publishes awaiting_permission on chat_status and waits on
  * /api/chat_permit. Rendering it is the whole of the contract. */
 function clearPermission(){ $("perm")?.remove(); }
+/* What a request does, said plainly (the end-user view shows this, with the exact
+   command one click away). */
+const ASK_LABEL = {
+  run_shell: "Run a command on this computer", run_script: "Run a script",
+  write_file: "Create or replace a file", edit_file: "Change a file",
+  install_app: "Install a program", browser_click: "Click on a web page",
+  browser_type: "Type into a web page", gui_action: "Use the mouse and keyboard",
+  hidden_desktop: "Open a program in the background", device_action: "Act on your phone"
+};
+/* "Approve all" lasts for this chat: every later request in it is answered yes
+   without asking (ND's hard block on destructive commands still applies). */
+let ALLOW_ALL = false;
+async function permit(rid, needs, approved){
+  const keys = needs.map(n => n.key).filter(Boolean);
+  try{
+    await api("/api/chat_permit", {job_id: rid,
+                                   approved: approved ? keys : [],
+                                   denied: approved ? [] : keys});
+  }catch(e){}
+  clearPermission();
+  if(CLEAN){                                  // one summary line per turn, not a node per answer
+    for(const n of needs) TURN.steps.push((approved ? "Allowed: " : "Declined: ") + (ASK_LABEL[n.tool] || n.tool));
+  } else {
+    node("tool", approved ? "approved" : "denied", needs.map(n => n.tool).join(", "));
+  }
+}
 function showPermission(rid, needs){
   if($("perm")) return;                      // already asking
+  if(ALLOW_ALL){ permit(rid, needs, true); return; }
   const d = document.createElement("div");
   d.id = "perm"; d.className = "node perm";
-  d.innerHTML = '<span class="who">may I?</span><div class="body"></div>';
+  d.innerHTML = '<span class="who">' + (CLEAN ? "may I?" : "may I?") + '</span><div class="body"></div>';
   const body = d.querySelector(".body");
   for(const n of needs){
     const row = document.createElement("div");
     row.className = "permrow";
     const h = document.createElement("div");
     h.className = "permtool";
-    h.textContent = n.tool + (n.tier === "red" ? "  ·  this exact call only"
+    h.textContent = CLEAN ? (ASK_LABEL[n.tool] || n.tool)
+                  : n.tool + (n.tier === "red" ? "  ·  this exact call only"
                                                : "  ·  remembered for this chat");
     const pre = document.createElement("pre");
     pre.className = "permarg";
     pre.textContent = n.arg || "(no detail given)";
-    row.appendChild(h); row.appendChild(pre);
+    if(CLEAN){
+      const det = document.createElement("details");
+      det.className = "permdet";
+      det.innerHTML = "<summary>details</summary>";
+      det.appendChild(pre);
+      row.appendChild(h); row.appendChild(det);
+    } else {
+      row.appendChild(h); row.appendChild(pre);
+    }
     if(n.warning){
       const w = document.createElement("div");
       w.className = "permwarn"; w.textContent = n.warning;
@@ -939,22 +1049,22 @@ function showPermission(rid, needs){
   no.type = "button"; no.className = "stopbtn"; no.textContent = "Deny";
   const answer = async (approved) => {
     yes.disabled = no.disabled = true;
-    const keys = needs.map(n => n.key).filter(Boolean);
-    try{
-      await api("/api/chat_permit", {job_id: rid,
-                                     approved: approved ? keys : [],
-                                     denied: approved ? [] : keys});
-    }catch(e){}
-    clearPermission();
-    node("tool", approved ? "approved" : "denied",
-         needs.map(n => n.tool).join(", "));
+    await permit(rid, needs, approved);
   };
   yes.addEventListener("click", () => answer(true));
   no.addEventListener("click", () => answer(false));
   bar.appendChild(yes); bar.appendChild(no);
+  if(CLEAN){
+    const all = document.createElement("button");
+    all.type = "button"; all.className = "stopbtn go all";
+    all.textContent = "Approve all in this chat";
+    all.title = "Say yes to every request for the rest of this chat";
+    all.addEventListener("click", () => { ALLOW_ALL = true; answer(true); });
+    bar.appendChild(all);
+  }
   body.appendChild(bar);
-  thread.appendChild(d);
-  d.scrollIntoView({block:"end", behavior:"smooth"});
+  if(CLEAN){ $("dock").appendChild(d); }     // docked above the composer: always in reach
+  else { thread.appendChild(d); follow(); }
   if(convoOn){
     if(bigMark) bigMark.set("media");
     convoSay("may I?", "#c86ae0",
@@ -981,7 +1091,7 @@ async function answerQuestion(rid, optionId, freeText){
                                    answer: freeText || ""});
   }catch(e){}
   clearQuestion();
-  node("you", "Steve", freeText || optionId || "(answered)");
+  node("you", ME, freeText || optionId || "(answered)");
 }
 function showQuestion(rid, q){
   if($("eq")){ PENDQ = {rid, q}; return; }   // already asking
@@ -1019,7 +1129,7 @@ function showQuestion(rid, q){
     body.appendChild(row);
   }
   thread.appendChild(d);
-  d.scrollIntoView({block:"end", behavior:"smooth"});
+  follow();
   PENDQ = {rid, q};
   if(convoOn){
     if(bigMark) bigMark.set("hear");
@@ -1124,12 +1234,151 @@ function offerTools(question){
   });
   d.querySelector(".body").appendChild(b);
   thread.appendChild(d);
-  d.scrollIntoView({block:"end", behavior:"smooth"});
+  follow();
+}
+
+/* ── the clean view's activity line ───────────────────────────────────────
+ * What the assistant is doing, and afterwards what it did, in plain words. The
+ * same tool called again and again (a small model retrying) folds into one line. */
+const DOING = {
+  computer_info: "Checking this computer", list_dir: "Looking in a folder", read_file: "Reading a file",
+  search_files: "Searching your files", web_search: "Searching the web", web_fetch: "Reading a web page",
+  browser_open: "Opening a web page", browser_read: "Reading a web page", browser_find: "Looking over a web page",
+  browser_see: "Looking at a web page", browser_click: "Clicking on a web page", browser_type: "Typing into a web page",
+  write_file: "Writing a file", edit_file: "Changing a file", run_script: "Running a script",
+  run_shell: "Running a command", update_plan: "Planning", ask_user: "Asking you", design_review: "Checking a page",
+  find_definition: "Searching code", find_references: "Searching code"
+};
+function doing(tool, answering){
+  if(answering) return "Writing the answer…";
+  return (DOING[tool] || "Thinking") + "…";
+}
+function activity(calls){
+  const counts = new Map();
+  for(const c of calls){
+    const label = DOING[c.tool] || (c.tool || "a step").replace(/_/g, " ");
+    counts.set(label, (counts.get(label) || 0) + 1);
+  }
+  const done = [...counts].map(([l, n]) => l + (n > 1 ? " ×" + n : ""));
+  TURN.steps = done.concat(TURN.steps);
+  if(!TURN.steps.length) return;
+  const d = document.createElement("div");
+  d.className = "node act";
+  d.innerHTML = '<span class="dot"></span><span class="who">worked on it</span><div class="body"><details>'
+    + "<summary></summary><ul></ul></details></div>";
+  d.querySelector("summary").textContent = TURN.steps.slice(0, 3).join(" · ")
+    + (TURN.steps.length > 3 ? " · …" : "");
+  const ul = d.querySelector("ul");
+  for(const c of calls.slice(0, 40)){
+    const li = document.createElement("li");
+    li.textContent = (DOING[c.tool] || c.tool || "step") + (c.summary ? ": " + String(c.summary).slice(0, 160) : "");
+    ul.appendChild(li);
+  }
+  // above the answer it led to
+  if(flow.node && flow.node.parentNode === thread) thread.insertBefore(d, flow.node);
+  else { thread.appendChild(d); tipLast(); }
+}
+
+/* ── saved chats (Philibert's chat history panel) ──────────────────────────
+ * The page around this one lists, opens, renames and files chats; this page
+ * keeps the open one saved on the drive after every turn (/api/chats). They
+ * talk by postMessage, same origin only. */
+const HOSTED = CLEAN && window.parent !== window;
+let CHAT = {id: null, title: "", folder: "", messages: [], refs: []};
+function chatPush(role, content, steps){
+  if(!HOSTED || !content) return;
+  const m = {role, content, t: Date.now() / 1000};
+  if(steps && steps.length) m.steps = steps.slice(0, 40);
+  CHAT.messages.push(m);
+}
+let saving = Promise.resolve();
+function saveChat(){
+  if(!HOSTED || !CHAT.messages.some(m => !m.hidden)) return saving;
+  saving = saving.then(() => api("/api/chats", {op: "save", chat: CHAT})).then(r => {
+    if(r && r.ok){
+      CHAT.id = r.id; CHAT.title = r.title;
+      tellHost({type: "phil-chat-saved", id: r.id, title: r.title});
+    }
+  }).catch(() => {});
+  return saving;
+}
+function tellHost(msg){ try{ window.parent.postMessage(msg, location.origin); }catch(e){} }
+
+function resetThread(){
+  thread.querySelectorAll(".node, .stage").forEach(n => n.remove());
+  $("dock").innerHTML = "";
+  if(!$("empty")){
+    const e = document.createElement("div");
+    e.id = "empty"; e.className = "empty set"; e.innerHTML = emptyText();
+    thread.insertBefore(e, $("tip"));
+  }
+  history = []; flowReset(); ALLOW_ALL = false; TURN = {steps: []};
+  STICK = true;
+}
+function showSaved(m){
+  if(m.hidden) return;
+  if(m.role === "user"){ node("you", ME, m.content); return; }
+  if(m.steps && m.steps.length){
+    const d = document.createElement("div");
+    d.className = "node act";
+    d.innerHTML = '<span class="dot"></span><span class="who">worked on it</span><div class="body"></div>';
+    d.querySelector(".body").textContent = m.steps.slice(0, 3).join(" · ");
+    thread.appendChild(d); tipLast();
+  }
+  node("el", BRAND, m.content);
+}
+async function openChat(id){
+  const r = await api("/api/chats", {op: "get", id});
+  if(!r.ok) return;
+  resetThread();
+  CHAT = r.chat;
+  CHAT.messages = CHAT.messages || [];
+  if(CHAT.messages.some(m => !m.hidden)) $("empty")?.remove();
+  for(const m of CHAT.messages){
+    pushHistory(m.role, m.content);
+    showSaved(m);
+  }
+  follow(true);
+  tellHost({type: "phil-chat-opened", id: CHAT.id});
+}
+async function newChat(refs, folder){
+  resetThread();
+  CHAT = {id: null, title: "", folder: folder || "", messages: [], refs: refs || []};
+  if(refs && refs.length){
+    const r = await api("/api/chats", {op: "context", ids: refs}).catch(() => ({}));
+    for(const b of (r.refs || [])){
+      const text = "For context, here is an earlier conversation I want to continue from. "
+                 + "Use it as background; you do not need to summarise it.\n\n" + b.text;
+      CHAT.messages.push({role: "user", content: text, hidden: true, t: Date.now() / 1000});
+      pushHistory("user", text);
+      const d = node("ref", "using an earlier chat", b.title);
+      d.title = "Philibert has this chat as background for the new one";
+    }
+  }
+  tellHost({type: "phil-chat-opened", id: null});
+  ta.focus();
+}
+if(HOSTED){
+  window.addEventListener("message", (ev) => {
+    if(ev.origin !== location.origin || !ev.data || typeof ev.data !== "object") return;
+    const m = ev.data;
+    if(m.type === "phil-chat-open" || m.type === "phil-chat-new"){
+      if(busy){ tellHost({type: "phil-busy"}); return; }
+      if(m.type === "phil-chat-open" && m.id) openChat(m.id);
+      else newChat(m.refs || [], m.folder || "");
+    }
+    if(m.type === "phil-chat-renamed" && m.id === CHAT.id) CHAT.title = m.title;
+    if(m.type === "phil-chat-moved" && m.id === CHAT.id) CHAT.folder = m.folder;
+    if(m.type === "phil-chat-deleted" && m.id === CHAT.id) newChat([], "");
+  });
+  tellHost({type: "phil-chat-ready"});
 }
 
 async function ask(text, opts){
   busy = true; send.disabled = true;
-  node("you", "Steve", text);
+  node("you", ME, text);
+  TURN = {steps: []};
+  chatPush("user", text);
   thread.classList.add("live");
   setState("think", 0);
   flowReset();
@@ -1150,7 +1399,7 @@ async function ask(text, opts){
   try{
     await api("/api/chat", {model:useModel, req_id:rid, session_id:"elena_ui", workspace:"",
                             agent_mode:useAgent, messages:history.slice(),
-                            allow_all:false, approved_tools:[]});
+                            allow_all:ALLOW_ALL, approved_tools:[]});
     let seen = 0, cursor = 0, tick = 0;
     for(;;){
       /* Status is polled fast so text arrives in small pieces; the result call
@@ -1175,7 +1424,7 @@ async function ask(text, opts){
       if(parked && parked.length){
         showPermission(rid, parked);
         moved();
-        stage("waiting for you");
+        stage(CLEAN ? "Waiting for your OK below" : "waiting for you");
         continue;
       }
       if($("perm")) clearPermission();
@@ -1213,13 +1462,16 @@ async function ask(text, opts){
       else if(stg.includes("think")) s2 = "think";
       else if(stg.includes("generat") || flow.on) s2 = "answer";
       setState(s2, seen);
-      stage("round " + (seen||1) + (st.stage ? " · " + st.stage : ""));
+      stage(CLEAN ? doing(t, flow.on && lastRound(flow.shown).trim())
+                  : "round " + (seen||1) + (st.stage ? " · " + st.stage : ""));
 
       if(tick % 4) continue;
       const res = await api("/api/chat_result", {job_id:rid});
       if(!["running","unknown","queued"].includes(res.status)){
         clearStage(); clearStall(); clearLong(); clearPermission(); clearQuestion();
-        for(const c of (res.tool_calls || [])){
+        if(CLEAN){
+          activity(res.tool_calls || []);      // one line: what it did, details on click
+        } else for(const c of (res.tool_calls || [])){
           const nm = c.tool || "tool";
           const key = nm + (c.summary || "");
           if(shown.has(key)) continue;
@@ -1233,6 +1485,7 @@ async function ask(text, opts){
           // The marker is protocol. Never show it, never read it aloud.
           if(wantsTools) finalText = stripNeeds(finalText);
           pushHistory("assistant", finalText);
+          chatPush("assistant", finalText, TURN.steps);
           say(finalText);
           flowFinish(wantsTools ? finalText : res.reply,
                      statsFor(res, seen, tStart, finalText.length));
@@ -1252,6 +1505,7 @@ async function ask(text, opts){
   clearStage(); clearStall(); clearLong(); clearPermission(); clearQuestion();
   if(STOPPED === rid){ STOPPED = null; setState(live ? "idle" : "error"); }
   RID = null;
+  saveChat();                       // answered, stopped or failed: the question is kept
   busy = false; send.disabled = !live;
   setTimeout(() => { if(!busy) setState(live ? "idle" : "error"); }, 2600);
   ta.focus();
