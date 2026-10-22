@@ -392,6 +392,22 @@ class Installer:
         if code != 0:
             self.state["warnings"].append("Some voice files did not finish; Philibert fetches them on its next start.")
 
+    def step_games(self):
+        """Retro Vault: EmulatorJS and its cores onto the drive (about 24 MB), so games
+        play offline. Fetched here, not shipped in git: they are GPL / non-commercial."""
+        py = self.dest / "runtime" / this_platform() / "python" / ("python.exe" if IS_WIN else "bin/python3")
+        env = {**os.environ, "PYTHONNOUSERSITE": "1", "PYTHONIOENCODING": "utf-8"}
+        got = [0]
+
+        def on_line(line):
+            got[0] += 1
+            self.emit(min(1.0, got[0] / 26), line.replace("emulator: ", "Game player: ")[:90])
+        code = self.run_lines([str(py), str(self.dest / "app" / "nd_retro_vault.py"), "--fetch",
+                               str(self.dest / "Entertainment")], on_line, env)
+        if code != 0:
+            self.state["warnings"].append("Retro Vault's game players did not finish downloading; "
+                                          "run Setup again with the Internet on.")
+
     def step_shortcut(self):
         if not self.plan.get("shortcut") or not IS_WIN:
             return
@@ -413,8 +429,11 @@ class Installer:
         if any(p != this_platform() for p in platforms_for(self.pcs)):
             steps.append(("others", "Getting what the other computers need", 25, self.step_other_pcs))
         steps += [("data", "Making room for your notes", 1, self.step_data),
-                  ("models", "Getting the AI models and voices", 40, self.step_models),
-                  ("shortcut", "Finishing", 1, self.step_shortcut)]
+                  ("models", "Getting the AI models and voices", 40, self.step_models)]
+        if self.plan.get("edition") == "full" and (self.plan.get("full") or {}).get("retro_vault", True) \
+                and here_pc in self.pcs:
+            steps.append(("games", "Getting Retro Vault's game players", 3, self.step_games))
+        steps.append(("shortcut", "Finishing", 1, self.step_shortcut))
         self.state["steps"] = [{"id": i, "title": t, "weight": w} for i, t, w, _ in steps]
         self.log(f"---- install to {self.dest} ({', '.join(self.pcs)}, {self.plan.get('edition')}) ----")
         try:

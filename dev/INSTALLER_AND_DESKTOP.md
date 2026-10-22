@@ -184,6 +184,17 @@ library root fixed to `Entertainment\Cartridges` (only games in sub-folders are
 listed); saves and art on the drive; netplay, mobile page and push-to-talk removed.
 The installer only creates the Cartridges folder — users bring their own games.
 
+**Built 2026-10-22** (ND3 `nd_retro_vault.py`, page built by `make_retro_vault.py` from the
+Retro Vault zip, served at `/retro/`): systems NES, SNES, Genesis, Master System (added),
+GBA, N64, GB/GBC, MAME. EmulatorJS 4.2.3 + cores (WebGL2 and legacy builds, ~24 MB)
+are downloaded by Setup into `Entertainment\emulator\4.2.3` - **not shipped in git**:
+EmulatorJS is GPL-3.0 and several libretro cores (snes9x, genesis_plus_gx,
+mame2003_plus) are **non-commercial** licences, so a paid Philibert would need other
+cores. Save states are files in `Entertainment\saves\states` (shared Win/Mac); in-game
+battery saves still live in the browser profile (per PC) - follow-up. Box art is cached
+in `Entertainment\art` and only fetched while the Internet switch is on. Game
+descriptions come from Philibert's own model.
+
 ## 8. Apps on the desktop
 
 `Apps\<id>\app.json` (name, icon, entry page, version, source: `nd` | `git`) +

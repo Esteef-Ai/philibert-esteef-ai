@@ -59,7 +59,7 @@
       { id: "notes", name: "Notes", icon: "notes", url: "/notes?embed=1", w: 1100, h: 720, title: "Philibert Notes" },
       { id: "suite", name: "ND Suite", icon: "suite", url: "/full", w: 1280, h: 800, max: true },
     ];
-    if (st.retro) list.push({ id: "vault", name: "Retro Vault", icon: "vault", internal: comingVault, w: 460, h: 230 });
+    if (st.retro) list.push({ id: "vault", name: "Retro Vault", icon: "vault", url: "/retro/", w: 1240, h: 800, max: true });
     list.push({ id: "band", name: "Band Manager", icon: "band", internal: comingBand, w: 460, h: 220 },
               { id: "control", name: "Control Panel", icon: "control", internal: controlPanel, w: 420, h: 470, fixed: true },
               { id: "trash", name: "Trash", icon: "trash", internal: trashWin, w: 560, h: 380 });
@@ -590,11 +590,6 @@
   }
 
   /* ================= built-in apps ================= */
-  function comingVault(body) {
-    body.innerHTML = '<div class="pad coming">' + I.svg("vault", 32) + "<div><h3>Retro Vault</h3>" +
-      "<p>Your games arrive in the next update: a library with box art, play with a USB or Bluetooth controller, saves on the drive.</p>" +
-      "<p>Put your own games in <b>Entertainment\\Cartridges</b>, one folder per system (for example <b>Cartridges\\SNES</b>).</p></div></div>";
-  }
   function comingBand(body) {
     body.innerHTML = '<div class="pad coming">' + I.svg("band", 32) + "<div><h3>Band Manager</h3>" +
       "<p>Gigs, venues, contacts, setlists, merch and money in one place, with reminders. Coming in a later update.</p>" +

@@ -17698,6 +17698,23 @@ def open_ui(url):
     webbrowser.open(url)
     return False
 
+_RETRO = {}
+
+
+def retro_vault():
+    """Retro Vault's state: games in <drive>/Entertainment, the Internet switch for
+    box art, Philibert's own model for game descriptions."""
+    if "v" not in _RETRO:
+        import nd_retro_vault
+        ent = Path(os.environ.get("ND_ENTERTAINMENT_DIR") or
+                   (_CONFIG_DIR.parent / "Entertainment" if PORTABLE else _CONFIG_DIR / "Entertainment"))
+        _RETRO["v"] = nd_retro_vault.Vault(
+            ent, online=internet_on,
+            ask_json=lambda p: ollama_chat(handler_model(), [{"role": "user", "content": p}], timeout=240),
+            log=lambda m: log(m, "info"))
+    return _RETRO["v"]
+
+
 def _close_portable_browser():
     """Shut Down on the retro desktop: close the drive's browser window. The window
     watch below then sees no window and ends the launcher, exactly as if the user
@@ -18046,6 +18063,34 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(js)
             return
+        if bare_path == "/retro" or bare_path.startswith("/retro/"):
+            # Retro Vault (nd_retro_vault.py): the page, its API, games, art, emulator, saves
+            if not self.authed():
+                self.send_json({"error": "unauthorized"}, 401)
+                return
+            if bare_path in ("/retro", "/retro/"):
+                self.serve_live("/live/retro/index.html")
+                return
+            if bare_path.startswith("/retro/lib/"):
+                self.serve_live("/live/retro/" + bare_path[len("/retro/lib/"):])
+                return
+            import nd_retro_vault
+            res = nd_retro_vault.handle_get(retro_vault(), bare_path,
+                                            urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query))
+            if res is None:
+                self.send_json({"error": "not found"}, 404)
+                return
+            code, ctype, data = res
+            if isinstance(data, Path):
+                data = data.read_bytes()
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "max-age=3600" if "/emulator/" in bare_path else "no-cache")
+            self.end_headers()
+            if data and self.command != "HEAD":
+                self.wfile.write(data)
+            return
         if bare_path.startswith("/apps/"):
             # Desktop apps published to <drive>/Apps (nd_retro_desktop.py), never outside it
             import nd_retro_desktop
@@ -18141,6 +18186,26 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length",0))
+        if self.path.startswith("/retro/"):
+            # Retro Vault posts JSON and raw save states; same-site only
+            raw = self.rfile.read(length) if length else b""
+            _origin = self.headers.get("Origin")
+            # ("null" is refused too: any site can send it from a sandboxed frame)
+            if (_origin and urllib.parse.urlparse(_origin).netloc != self.headers.get("Host")) or not self.authed():
+                self.send_json({"ok": False, "msg": "refused"}, 403)
+                return
+            import nd_retro_vault
+            res = nd_retro_vault.handle_post(retro_vault(), urllib.parse.urlparse(self.path).path, raw)
+            if res is None:
+                self.send_json({"error": "not found"}, 404)
+                return
+            code, ctype, data = res
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         body   = json.loads(self.rfile.read(length)) if length else {}
         path   = self.path
 

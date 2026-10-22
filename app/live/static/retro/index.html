@@ -1,0 +1,3348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Permissions-Policy" content="gamepad=*, fullscreen=*">
+<meta http-equiv="origin-trial" content="">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Retro Vault</title>
+<style>
+@import url('/live/fonts/fonts.css');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0f0f17;--surface:#17171f;--surface2:#1f1f2b;--surface3:#272735;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);--border3:rgba(255,255,255,0.22);
+  --text:#e8e8f0;--muted:#8888a8;--dim:#555570;
+  --accent:#7c5cbf;--accent2:#a07de8;--accent3:#c4a8ff;
+  --nes:#d94f4f;--snes:#4f67d9;--genesis:#2ea86e;
+  --gba:#c45aa0;--n64:#c07830;--gb:#6ea830;
+  --r:10px;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;}
+.app{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+.menubar{background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:stretch;gap:0;padding:0 .5rem;flex-shrink:0;position:relative;z-index:100;}
+.menu-item{position:relative;}
+.menu-btn{background:none;border:none;color:var(--muted);padding:.45rem .75rem;font-size:.78rem;font-family:inherit;cursor:pointer;border-radius:5px;transition:all .15s;white-space:nowrap;}
+.menu-btn:hover,.menu-btn.open{background:var(--surface2);color:var(--text);}
+.menu-logo{font-family:'Press Start 2P',monospace;font-size:.6rem;color:var(--accent2);padding:.5rem 1rem .5rem .5rem;display:flex;align-items:center;margin-right:.25rem;letter-spacing:.04em;border-right:1px solid var(--border);}
+.dropdown{display:none;position:absolute;top:100%;left:0;background:var(--surface);border:1px solid var(--border2);border-radius:8px;min-width:200px;padding:.35rem 0;z-index:150;box-shadow:0 8px 32px rgba(0,0,0,.6);}
+.dropdown.open{display:block;}
+.dd-item{display:flex;align-items:center;gap:.65rem;padding:.42rem 1rem;font-size:.78rem;color:var(--text);cursor:pointer;transition:background .1s;border:none;background:none;width:100%;text-align:left;font-family:inherit;}
+.dd-item:hover{background:var(--surface2);}
+.dd-item .dd-shortcut{margin-left:auto;color:var(--dim);font-size:.7rem;}
+.dd-item .dd-ico{width:14px;height:14px;opacity:.7;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;}
+.dd-sep{height:1px;background:var(--border);margin:.3rem .6rem;}
+.dd-item.danger{color:#e05050;}
+.dd-sub-label{padding:.3rem 1rem .15rem;font-size:.65rem;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;}
+.toolbar{background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.35rem;padding:.45rem 1rem;flex-shrink:0;}
+.tb-btn{background:none;border:1px solid transparent;border-radius:6px;color:var(--muted);cursor:pointer;padding:.3rem .55rem;transition:all .15s;display:flex;align-items:center;gap:.35rem;font-size:.75rem;font-family:inherit;}
+.tb-btn:hover{background:var(--surface3);border-color:var(--border2);color:var(--text);}
+.tb-btn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.tb-sep{width:1px;height:22px;background:var(--border);margin:0 .15rem;}
+#tb-search{background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:.3rem .75rem;font-size:.78rem;font-family:inherit;width:180px;transition:border-color .2s;margin-left:auto;}
+#tb-search:focus{outline:none;border-color:var(--accent);}
+#tb-search::placeholder{color:var(--dim);}
+.body{display:flex;flex:1;overflow:hidden;}
+.sidebar{width:170px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;}
+.sidebar-header{padding:.75rem 1rem .5rem;font-family:'Press Start 2P',monospace;font-size:.42rem;color:var(--dim);letter-spacing:.15em;text-transform:uppercase;}
+.sys-nav-item{display:flex;align-items:center;gap:.65rem;padding:.55rem 1rem;cursor:pointer;transition:background .12s;border-left:3px solid transparent;font-size:.78rem;color:var(--muted);}
+.sys-nav-item:hover{background:var(--surface2);color:var(--text);}
+.sys-nav-item.active{background:var(--surface2);color:var(--text);border-left-color:var(--accent2);}
+.sys-nav-item.active[data-sys="NES"]{border-left-color:var(--nes);}
+.sys-nav-item.active[data-sys="SNES"]{border-left-color:var(--snes);}
+.sys-nav-item.active[data-sys="Genesis"]{border-left-color:var(--genesis);}
+.sys-nav-item.active[data-sys="GBA"]{border-left-color:var(--gba);}
+.sys-nav-item.active[data-sys="N64"]{border-left-color:var(--n64);}
+.sys-nav-item.active[data-sys="GB"]{border-left-color:var(--gb);}
+.sys-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.sys-count-badge{margin-left:auto;font-size:.62rem;color:var(--dim);background:var(--surface3);border-radius:999px;padding:1px 6px;}
+.sidebar-footer{margin-top:auto;padding:.75rem;border-top:1px solid var(--border);}
+.add-folder-btn{width:100%;background:var(--surface2);border:1px dashed var(--border2);border-radius:7px;color:var(--muted);cursor:pointer;padding:.5rem;font-size:.72rem;font-family:inherit;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:.4rem;}
+.add-folder-btn:hover{border-color:var(--accent);color:var(--accent2);}
+.content{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
+.content-header{padding:1rem 1.5rem .75rem;display:flex;align-items:center;gap:.75rem;border-bottom:1px solid var(--border);flex-shrink:0;}
+.content-title{font-family:'Press Start 2P',monospace;font-size:.65rem;letter-spacing:.08em;color:var(--text);}
+.content-count{font-size:.72rem;color:var(--dim);margin-left:.25rem;}
+.view-toggle{margin-left:auto;display:flex;gap:.25rem;}
+.vt-btn{background:none;border:1px solid transparent;border-radius:5px;color:var(--dim);cursor:pointer;padding:.3rem .45rem;transition:all .15s;}
+.vt-btn:hover,.vt-btn.active{background:var(--surface2);border-color:var(--border2);color:var(--text);}
+.vt-btn svg{width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.sort-select{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);padding:.28rem .6rem;font-size:.72rem;font-family:inherit;cursor:pointer;}
+.sort-select:focus{outline:none;}
+.game-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:1.5rem 1.1rem;padding:1.4rem;align-items:start;}
+.game-card{background:transparent;border:none;overflow:visible;cursor:pointer;transition:transform .18s ease;display:flex;flex-direction:column;border-radius:0;}
+.game-card:hover{transform:translateY(-7px);}
+.game-card:hover .game-art{box-shadow:0 18px 44px rgba(0,0,0,.85);}
+.game-card:focus{outline:2px solid var(--accent2);outline-offset:4px;border-radius:6px;}
+.game-card:hover{transform:translateY(-2px);border-color:var(--border2);box-shadow:0 6px 20px rgba(0,0,0,.45);}
+.game-art{width:100%;aspect-ratio:.72;background:linear-gradient(160deg,#1e1e3a 0%,#1a2040 50%,#1a1a3a 100%);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:3.2rem;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.6);transition:box-shadow .18s ease;}
+.game-art img{width:100%;height:100%;object-fit:cover;display:none;border-radius:8px;}
+.game-art img.loaded{display:block;}
+.sys-badge{position:absolute;top:6px;left:6px;font-family:'Press Start 2P',monospace;font-size:.38rem;padding:2px 5px;border-radius:3px;letter-spacing:.04em;color:#fff;}
+.zip-badge{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.65);border-radius:3px;padding:2px 5px;font-size:.58rem;color:var(--muted);}
+.play-overlay{position:absolute;inset:0;background:rgba(0,0,0,.52);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .14s;}
+.game-card:hover .play-overlay{opacity:1;}
+.play-circle{width:40px;height:40px;background:var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.play-circle svg{width:16px;height:16px;fill:#fff;margin-left:3px;}
+.card-info{padding:.5rem .05rem .2rem;}
+.card-title{font-size:.8rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35;}
+.card-publisher{font-size:.66rem;color:var(--muted);margin-top:.12rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.card-sub{display:none !important;}
+.card-title{font-size:.75rem;font-weight:600;line-height:1.3;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.card-sub{font-size:.64rem;color:var(--muted);display:flex;gap:.4rem;}
+.card-year{color:var(--accent3);}
+.game-list{display:flex;flex-direction:column;padding:.5rem 1.5rem 1rem;}
+.list-row{display:grid;grid-template-columns:32px 1fr 90px 70px 60px 32px;align-items:center;gap:.75rem;padding:.45rem .65rem;border-radius:7px;cursor:pointer;transition:background .1s;border:1px solid transparent;}
+.list-row:hover{background:var(--surface2);border-color:var(--border);}
+.list-num{font-size:.65rem;color:var(--dim);text-align:right;}
+.list-title{font-size:.8rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.list-sys{font-family:'Press Start 2P',monospace;font-size:.38rem;padding:2px 5px;border-radius:3px;color:#fff;text-align:center;}
+.list-genre{font-size:.7rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.list-year{font-size:.7rem;color:var(--accent3);}
+.list-play{width:24px;height:24px;background:var(--accent);border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .1s;flex-shrink:0;}
+.list-row:hover .list-play{opacity:1;}
+.list-play svg{width:10px;height:10px;fill:#fff;margin-left:2px;}
+.list-header{display:grid;grid-template-columns:32px 1fr 90px 70px 60px 32px;gap:.75rem;padding:.3rem .65rem;font-size:.65rem;color:var(--dim);letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--border);margin-bottom:.35rem;}
+.empty{display:none;flex-direction:column;align-items:center;justify-content:center;padding:5rem 2rem;gap:1.5rem;text-align:center;}
+.empty.show{display:flex;}
+.empty-px{font-family:'Press Start 2P',monospace;font-size:.55rem;color:var(--dim);line-height:2.6;letter-spacing:.08em;}
+.empty-btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:.65rem 1.3rem;font-size:.78rem;font-family:inherit;font-weight:600;cursor:pointer;}
+.empty-btn:hover{opacity:.85;}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:500;align-items:center;justify-content:center;padding:.5rem;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:14px;display:flex;flex-direction:column;max-height:96vh;overflow:hidden;position:relative;}
+.modal-hdr{padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.75rem;flex-shrink:0;}
+.modal-hdr h2{font-family:'Press Start 2P',monospace;font-size:.55rem;letter-spacing:.1em;color:var(--accent2);flex:1;}
+.modal-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:2px 7px;border-radius:4px;line-height:1;}
+.modal-close:hover{color:var(--text);}
+.modal-body{overflow-y:auto;padding:1.1rem 1.25rem;flex:1;}
+.modal-footer{padding:.85rem 1.25rem;border-top:1px solid var(--border);display:flex;gap:.65rem;justify-content:flex-end;flex-shrink:0;}
+.btn-primary{background:var(--accent);color:#fff;border:none;border-radius:7px;padding:.5rem 1.15rem;font-size:.78rem;font-family:inherit;font-weight:600;cursor:pointer;}
+.btn-primary:hover{opacity:.85;}
+.btn-ghost{background:none;border:1px solid var(--border2);color:var(--muted);border-radius:7px;padding:.5rem 1.15rem;font-size:.78rem;font-family:inherit;cursor:pointer;}
+.btn-ghost:hover{color:var(--text);border-color:var(--border3);}
+.btn-danger{background:#8b1f1f;color:#ffb0b0;border:none;border-radius:7px;padding:.5rem 1.15rem;font-size:.78rem;font-family:inherit;cursor:pointer;}
+.stabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin:-1.1rem -1.25rem 1rem;padding:0 1.25rem;}
+.stab{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);cursor:pointer;padding:.65rem .9rem;font-size:.75rem;font-family:inherit;transition:all .15s;margin-bottom:-1px;}
+.stab:hover{color:var(--text);}
+.stab.active{color:var(--accent2);border-bottom-color:var(--accent2);}
+.stab-panel{display:none;}
+.stab-panel.active{display:block;}
+.form-row{display:flex;align-items:center;gap:.75rem;padding:.55rem 0;border-bottom:1px solid var(--border);}
+.form-row:last-child{border-bottom:none;}
+.form-label{font-size:.78rem;color:var(--text);flex:1;}
+.form-hint{font-size:.67rem;color:var(--dim);display:block;margin-top:2px;}
+.form-input{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:.35rem .65rem;font-size:.78rem;font-family:inherit;width:120px;}
+.form-input:focus{outline:none;border-color:var(--accent);}
+.form-select{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:.35rem .65rem;font-size:.78rem;font-family:inherit;cursor:pointer;width:140px;}
+.form-select:focus{outline:none;}
+.toggle-wrap{position:relative;width:38px;height:20px;flex-shrink:0;}
+.toggle-wrap input{opacity:0;width:0;height:0;position:absolute;}
+.toggle-slider{position:absolute;inset:0;background:var(--surface3);border-radius:999px;cursor:pointer;transition:background .2s;}
+.toggle-slider::before{content:'';position:absolute;left:2px;top:2px;width:16px;height:16px;background:var(--muted);border-radius:50%;transition:transform .2s,background .2s;}
+.toggle-wrap input:checked + .toggle-slider{background:var(--accent);}
+.toggle-wrap input:checked + .toggle-slider::before{transform:translateX(18px);background:#fff;}
+.sys-row{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.8rem 1rem;display:flex;align-items:center;gap:.85rem;margin-bottom:.6rem;}
+.sys-icon{width:34px;height:34px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:'Press Start 2P',monospace;font-size:.38rem;color:#fff;flex-shrink:0;letter-spacing:.03em;}
+.syi-NES{background:var(--nes);}.syi-SNES{background:var(--snes);}.syi-Genesis{background:var(--genesis);}.syi-GBA{background:var(--gba);}.syi-N64{background:var(--n64);}.syi-GB{background:var(--gb);}
+.sys-row-info{flex:1;min-width:0;}
+.sys-row-name{font-size:.8rem;font-weight:600;}
+.sys-row-path{font-size:.68rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
+.sys-row-count{font-size:.65rem;color:var(--accent2);margin-top:1px;}
+.folder-pick-btn{background:var(--surface);border:1px solid var(--border2);border-radius:6px;color:var(--text);cursor:pointer;padding:.38rem .8rem;font-size:.7rem;font-family:inherit;white-space:nowrap;transition:all .15s;display:flex;align-items:center;gap:.4rem;}
+.folder-pick-btn:hover{border-color:var(--accent);color:var(--accent2);}
+.folder-pick-btn svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.folder-pick-btn.busy{opacity:.5;pointer-events:none;}
+.scan-bar{display:none;align-items:center;gap:.75rem;padding:.65rem .9rem;background:var(--surface2);border-radius:7px;font-size:.72rem;color:var(--muted);margin-top:.5rem;}
+.scan-bar.show{display:flex;}
+.spin{width:12px;height:12px;background:var(--accent2);flex-shrink:0;animation:sp .5s steps(4) infinite;}
+@keyframes sp{to{transform:rotate(360deg);}}
+.ctrl-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;}
+.ctrl-row{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:.6rem .75rem;display:flex;align-items:center;justify-content:space-between;gap:.5rem;}
+.ctrl-label{font-size:.75rem;color:var(--text);}
+.ctrl-badge{background:var(--surface3);border:1px solid var(--border2);border-radius:5px;padding:.25rem .55rem;min-width:70px;text-align:center;cursor:pointer;transition:all .15s;font-family:'Press Start 2P',monospace;font-size:.42rem;letter-spacing:.05em;color:var(--muted);}
+.ctrl-badge:hover,.ctrl-badge.listening{background:var(--accent);color:#fff;border-color:var(--accent);}
+.ctrl-detect-btn{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--muted);cursor:pointer;padding:.4rem .8rem;font-size:.72rem;font-family:inherit;margin-bottom:.75rem;}
+.ctrl-detect-btn:hover{color:var(--text);border-color:var(--border3);}
+.ctrl-status{font-size:.7rem;color:var(--dim);margin-bottom:.65rem;}
+.detail-top{display:flex;gap:1rem;margin-bottom:1rem;}
+.detail-cover{width:110px;height:110px;border-radius:9px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:3rem;overflow:hidden;flex-shrink:0;}
+.detail-cover img{width:100%;height:100%;object-fit:cover;}
+.detail-info{flex:1;min-width:0;}
+.detail-title{font-size:.95rem;font-weight:600;line-height:1.35;margin-bottom:.4rem;}
+.detail-tags{display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.4rem;}
+.dtag{font-size:.62rem;padding:2px 8px;border-radius:999px;font-weight:600;}
+.detail-year{font-size:.7rem;color:var(--accent3);margin-top:.2rem;}
+.detail-file{font-size:.65rem;color:var(--dim);margin-top:.3rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.detail-desc{font-size:.78rem;color:var(--muted);line-height:1.7;border-top:1px solid var(--border);padding-top:.85rem;}
+.emu-topbar{background:var(--surface);padding:.55rem 1rem;display:flex;align-items:center;gap:.7rem;cursor:move;user-select:none;}
+.emu-t{font-size:.78rem;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.emu-actions{display:flex;gap:.3rem;}
+.emu-action-btn{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--muted);cursor:pointer;padding:.28rem .6rem;font-size:.68rem;font-family:inherit;transition:all .12s;display:flex;align-items:center;gap:.3rem;}
+.emu-action-btn:hover{background:var(--surface3);color:var(--text);}
+.emu-action-btn svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.emu-spinner{position:absolute;inset:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;font-family:'Press Start 2P',monospace;font-size:.5rem;color:var(--dim);letter-spacing:.1em;}
+.emu-bar{background:var(--surface);display:flex;gap:1rem;padding:.42rem 1rem;font-size:.68rem;color:var(--dim);flex-wrap:wrap;justify-content:center;}
+.emu-bar kbd{background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:1px 5px;font-family:inherit;font-size:.66rem;color:var(--text);}
+.emu-slot-row{display:flex;gap:.5rem;align-items:center;padding:.5rem 1rem;background:var(--surface);border-top:1px solid var(--border);}
+.emu-slot-label{font-size:.7rem;color:var(--muted);}
+.slot-select{background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:.28rem .5rem;font-size:.68rem;font-family:inherit;margin-left:.25rem;}
+.video-preview{background:#111;border-radius:7px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;font-size:2rem;margin-bottom:.85rem;overflow:hidden;}
+.filter-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin-bottom:.85rem;}
+.filter-opt{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:.55rem .65rem;cursor:pointer;text-align:center;transition:all .12s;}
+.filter-opt:hover{border-color:var(--border2);}
+.filter-opt.selected{border-color:var(--accent);background:rgba(124,92,191,.15);}
+.filter-opt .fo-name{font-size:.72rem;font-weight:600;margin-bottom:2px;}
+.filter-opt .fo-desc{font-size:.62rem;color:var(--muted);}
+.port-preview{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:.65rem 1rem;font-family:'Press Start 2P',monospace;font-size:.5rem;color:var(--accent2);margin:.65rem 0;letter-spacing:.06em;line-height:2;}
+#toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:.55rem 1rem;font-size:.76rem;color:var(--text);opacity:0;transition:all .22s;z-index:800;white-space:nowrap;pointer-events:none;}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+#toast.err{background:#2a1010;border-color:#803030;color:#ffaaaa;}
+
+.stats-row{display:flex;align-items:center;gap:.75rem;padding:.5rem .75rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;}
+.stats-rank{font-family:"Press Start 2P",monospace;font-size:.5rem;color:var(--dim);width:20px;text-align:center;flex-shrink:0;}
+.stats-art{width:40px;height:40px;border-radius:6px;background:var(--surface3);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.2rem;}
+.stats-art img{width:100%;height:100%;object-fit:cover;}
+.stats-info{flex:1;min-width:0;}
+.stats-title{font-size:.78rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.stats-meta{font-size:.65rem;color:var(--muted);margin-top:2px;}
+.stats-time{font-size:.72rem;color:var(--accent2);white-space:nowrap;text-align:right;}
+.stats-plays{font-size:.65rem;color:var(--dim);text-align:right;}
+.stats-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.6rem .75rem;display:flex;flex-direction:column;gap:.25rem;}
+.stats-card-title{font-size:.74rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.stats-card-sub{font-size:.64rem;color:var(--muted);}
+.stats-card-time{font-size:.7rem;color:var(--accent2);font-weight:600;}
+
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:4px;}
+
+/* Esteef.AI brand colors */
+:root{
+  --brand-pink:#ff6ec7;
+  --brand-cyan:#00f5ff;
+  --brand-yellow:#ffd700;
+  --brand-orange:#ff8c00;
+  --mame:#c62828;
+}
+
+/* Retro 80s glow effect for brand text */
+.brand-glow{
+  color:var(--brand-pink);
+  text-shadow:0 0 10px var(--brand-pink),0 0 20px var(--brand-pink),0 0 40px #ff00aa;
+  animation:brandpulse 2.5s ease-in-out infinite;
+}
+@keyframes brandpulse{
+  0%,100%{text-shadow:0 0 10px var(--brand-pink),0 0 20px var(--brand-pink),0 0 40px #ff00aa;}
+  50%{text-shadow:0 0 5px var(--brand-pink),0 0 10px var(--brand-pink);}
+}
+
+/* Boot splash */
+#brand-splash{
+  position:fixed;inset:0;z-index:99999;
+  background:#000;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:.75rem;
+  animation:splashfade 0.4s ease 2.2s forwards;
+}
+@keyframes splashfade{to{opacity:0;pointer-events:none;visibility:hidden;}}
+.splash-title{
+  font-family:'Press Start 2P',monospace;
+  font-size:2.2rem;
+  color:var(--brand-pink);
+  text-shadow:
+    4px 4px 0 #8b0055,
+    0 0 20px var(--brand-pink),
+    0 0 40px #ff00aa,
+    0 0 80px #cc0077;
+  letter-spacing:.15em;
+  animation:splashslide .5s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes splashslide{from{transform:translateY(-30px);opacity:0;}to{transform:none;opacity:1;}}
+.splash-sub{
+  font-family:'Press Start 2P',monospace;
+  font-size:.65rem;
+  color:var(--brand-cyan);
+  letter-spacing:.3em;
+  text-shadow:0 0 10px var(--brand-cyan);
+  animation:splashslide .5s .15s cubic-bezier(.22,1,.36,1) both;
+}
+.splash-product{
+  font-family:'Press Start 2P',monospace;
+  font-size:.5rem;
+  color:#555;
+  letter-spacing:.2em;
+  margin-top:.5rem;
+  animation:splashslide .5s .25s cubic-bezier(.22,1,.36,1) both;
+}
+.splash-scanlines{
+  position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.4) 2px,rgba(0,0,0,.4) 4px);
+  animation:splashfade 0.4s ease 2.2s forwards;
+}
+.splash-grid{
+  position:absolute;inset:0;pointer-events:none;
+  background-image:
+    linear-gradient(rgba(0,245,255,.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,245,255,.04) 1px,transparent 1px);
+  background-size:40px 40px;
+  animation:splashfade 0.4s ease 2.2s forwards;
+}
+.splash-bar{
+  width:220px;height:4px;
+  background:var(--surface2);
+  border-radius:2px;
+  overflow:hidden;
+  margin-top:.75rem;
+  animation:splashslide .5s .35s cubic-bezier(.22,1,.36,1) both;
+}
+.splash-bar-fill{
+  height:100%;
+  background:linear-gradient(90deg,var(--brand-pink),var(--brand-cyan));
+  border-radius:2px;
+  animation:barload 1.8s .4s cubic-bezier(.4,0,.2,1) forwards;
+  width:0%;
+}
+@keyframes barload{to{width:100%;}}
+/* PTT indicator */
+#ptt-indicator{
+  position:fixed;bottom:1rem;left:1rem;z-index:700;
+  background:rgba(0,0,0,.85);border:2px solid #2ea86e;border-radius:8px;
+  padding:.4rem .8rem;font-size:.72rem;font-family:inherit;
+  color:#2ea86e;display:none;align-items:center;gap:.5rem;
+  box-shadow:0 0 12px rgba(46,168,110,.4);
+}
+#ptt-indicator.active{display:flex;}
+#ptt-indicator .ptt-dot{width:8px;height:8px;border-radius:50%;background:#2ea86e;animation:pttblink .5s steps(1) infinite;}
+@keyframes pttblink{50%{opacity:0;}}
+/* Philibert: not on a drive */
+#mn-netplay,#tb-netplay,#emu-np-btn,#emu-lobby,#mn-upload,#tb-upload,#tb-restart,#ptt-indicator,#mn-open-folder,#tb-add-folder,#sidebar-add-folder,#empty-add-btn,.form-row:has(#opt-ejsurl),.form-row:has(#netplay-port-input),.np-online-badge{display:none!important}
+</style>
+</head>
+<body>
+<!-- Esteef.AI Boot Splash -->
+<div id="brand-splash">
+  <div class="splash-grid"></div>
+  <div class="splash-scanlines"></div>
+  <div class="splash-title">ESTEEF.AI</div>
+  <div class="splash-sub">RETRO VAULT</div>
+  <div class="splash-product">RETRO GAMING PLATFORM</div>
+  <div class="splash-bar"><div class="splash-bar-fill"></div></div>
+</div>
+
+<!-- PTT indicator -->
+<div id="ptt-indicator"><span class="ptt-dot"></span><span>PUSH TO TALK</span></div>
+
+<div class="app">
+<nav class="menubar">
+  <div class="menu-logo" style="display:flex;flex-direction:column;gap:0;padding:.35rem 1rem .35rem .5rem;">
+    <span style="font-family:'Press Start 2P',monospace;font-size:.55rem;color:var(--accent2);letter-spacing:.08em;line-height:1;">RETRO VAULT</span>
+    <span id="brand-tag" style="font-size:.42rem;color:#ff6ec7;letter-spacing:.15em;font-family:'Press Start 2P',monospace;line-height:1.4;text-shadow:0 0 8px #ff6ec7;">ESTEEF.AI</span>
+    <span style="font-size:.3rem;color:#444;letter-spacing:.08em;font-family:'Press Start 2P',monospace;">v1.3.0</span>
+  </div>
+  <div class="menu-item">
+    <button class="menu-btn" data-menu="file">File</button>
+    <div class="dropdown" id="menu-file">
+      <div class="dd-item" id="mn-open-folder"><svg class="dd-ico" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Add ROM Folder<span class="dd-shortcut">Ctrl+O</span></div>
+      <div class="dd-item" id="mn-upload"><svg class="dd-ico" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Upload ROM to Server</div>
+      <div class="dd-item" id="mn-refresh"><svg class="dd-ico" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Rescan Library<span class="dd-shortcut">F5</span></div>
+      <div class="dd-item" id="mn-clear-cache"><svg class="dd-ico" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>Clear Cache &amp; Reload</div>
+      <div class="dd-sep"></div>
+      <div class="dd-item danger" id="mn-clear"><svg class="dd-ico" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>Clear Library</div>
+    </div>
+  </div>
+  <div class="menu-item">
+    <button class="menu-btn" data-menu="emulator">Emulator</button>
+    <div class="dropdown" id="menu-emulator">
+      <div class="dd-sub-label">Save States</div>
+      <div class="dd-item" id="mn-save-state"><svg class="dd-ico" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>Save State<span class="dd-shortcut">F2</span></div>
+      <div class="dd-item" id="mn-load-state"><svg class="dd-ico" viewBox="0 0 24 24"><path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2v-4M17 9l-5 5-5-5M12 12.8V2.5"/></svg>Load State<span class="dd-shortcut">F4</span></div>
+      <div class="dd-sep"></div>
+      <div class="dd-item" id="mn-video-opts"><svg class="dd-ico" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>Video Options</div>
+      <div class="dd-item" id="mn-ctrl-map"><svg class="dd-ico" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><line x1="12" y1="7" x2="12" y2="4"/><circle cx="8" cy="12" r="1"/><circle cx="16" cy="12" r="1"/><circle cx="12" cy="12" r="1"/></svg>Controller Mapping</div>
+    </div>
+  </div>
+  <div class="menu-item">
+    <button class="menu-btn" data-menu="options">Options</button>
+    <div class="dropdown" id="menu-options">
+      <div class="dd-item" id="mn-profile"><svg class="dd-ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>My Profile</div>
+      <div class="dd-item" id="mn-stats"><svg class="dd-ico" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Usage Stats</div>
+      <div class="dd-item" id="mn-netplay"><svg class="dd-ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><line x1="2" y1="12" x2="22" y2="12"/></svg>Social &amp; Netplay</div>
+      <div class="dd-item" id="mn-settings"><svg class="dd-ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings &amp; Port</div>
+      <div class="dd-item" id="mn-metadata"><svg class="dd-ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Re-fetch All Metadata</div>
+      <div class="dd-item" id="mn-boxart"><svg class="dd-ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Re-fetch All Box Art</div>
+    </div>
+  </div>
+  <div class="menu-item">
+    <button class="menu-btn" data-menu="view">View</button>
+    <div class="dropdown" id="menu-view">
+      <div class="dd-item" id="mn-grid-view">Grid View</div>
+      <div class="dd-item" id="mn-list-view">List View</div>
+      <div class="dd-sep"></div>
+      <div class="dd-item" id="mn-sort-name">Sort by Name</div>
+      <div class="dd-item" id="mn-sort-year">Sort by Year</div>
+      <div class="dd-item" id="mn-sort-sys">Sort by System</div>
+      <div class="dd-sep"></div>
+      <div class="dd-item" id="mn-art-box">Show Box Art</div>
+      <div class="dd-item" id="mn-art-cart">Show Cartridge Art</div>
+      <div class="dd-item" id="mn-art-none">Hide Artwork</div>
+      <div class="dd-sep"></div>
+      <div class="dd-item" id="mn-download-art">&#11015; Download Box Art</div>
+    </div>
+  </div>
+</nav>
+<div class="toolbar">
+  <button class="tb-btn" id="tb-upload">
+    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    Upload ROM
+  </button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="tb-add-folder"><svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>Add Folder</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="tb-save-state"><svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>Save State</button>
+  <button class="tb-btn" id="tb-load-state"><svg viewBox="0 0 24 24"><path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2v-4M17 9l-5 5-5-5M12 12.8V2.5"/></svg>Load State</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="tb-video"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="12" y1="17" x2="12" y2="21"/></svg>Video</button>
+  <button class="tb-btn" id="tb-netplay"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><line x1="2" y1="12" x2="22" y2="12"/></svg>Netplay</button>
+  <button class="tb-btn" id="tb-controller"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><line x1="12" y1="7" x2="12" y2="4"/><circle cx="8" cy="12" r="1"/><circle cx="16" cy="12" r="1"/><circle cx="12" cy="12" r="1"/></svg>Controller</button>
+  <div class="tb-sep" style="margin-left:auto;"></div>
+  <button class="tb-btn" id="tb-restart" title="Restart Retro Vault — closes all windows, waits 3s, reloads" style="color:#ff7070;border-color:rgba(255,80,80,.25);background:rgba(255,50,50,.08);"><svg viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Restart</button>
+  <input id="tb-search" type="search" placeholder="Search games..." autocomplete="off">
+</div>
+<div class="body">
+  <aside class="sidebar">
+    <div class="sidebar-header">Library</div>
+    <div id="sys-nav"></div>
+    <div class="sidebar-footer">
+      <button class="add-folder-btn" id="sidebar-add-folder">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        Add ROM Folder
+      </button>
+    </div>
+  </aside>
+  <div class="content">
+    <div class="content-header">
+      <span class="content-title" id="content-title">ALL GAMES</span>
+      <span class="content-count" id="content-count"></span>
+      <select class="sort-select" id="sort-sel"><option value="name">Name</option><option value="year">Year</option><option value="system">System</option><option value="genre">Genre</option></select>
+      <div class="view-toggle">
+        <button class="vt-btn active" id="vt-grid" title="Grid"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>
+        <button class="vt-btn" id="vt-list" title="List"><svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button>
+      </div>
+    </div>
+    <div id="empty-state" class="empty show"><div class="empty-px">NO ROMS LOADED<br><br>PUT YOUR GAMES IN<br>ENTERTAINMENT/CARTRIDGES<br>ONE FOLDER PER SYSTEM</div><button class="empty-btn" id="empty-add-btn">+ Add ROM Folder</button></div>
+    <div id="game-grid" class="game-grid" style="display:none"></div>
+    <div id="game-list" class="game-list" style="display:none"></div>
+    <div id="no-results" class="empty" style="display:none"><div class="empty-px">NO RESULTS FOUND</div></div>
+  </div>
+</div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal" style="width:min(620px,100%)">
+    <div class="modal-hdr"><h2>SETTINGS</h2><button class="modal-close" data-close="settings-modal">x</button></div>
+    <div class="modal-body">
+      <div class="stabs">
+        <button class="stab" data-tab="tab-folders" hidden>ROM Folders</button>
+        <button class="stab" data-tab="tab-port" hidden>Network</button>
+        <button class="stab active" data-tab="tab-general">General</button>
+      </div>
+      <div class="stab-panel" id="tab-folders">
+        <div id="sys-folder-rows"></div>
+        <div class="scan-bar" id="scan-bar"><div class="spin"></div><span id="scan-msg">Scanning...</span></div>
+      </div>
+      <div class="stab-panel" id="tab-port">
+        <div class="form-row">
+          <div class="form-label">Server Port<span class="form-hint">Port Retro Vault listens on when running locally</span></div>
+          <input class="form-input" id="port-input" type="number" min="1024" max="65535" value="8080" style="width:90px">
+        </div>
+        <div class="form-row">
+          <div class="form-label">LAN IP / Hostname<span class="form-hint">Address others use to connect (auto if blank)</span></div>
+          <input class="form-input" id="host-input" type="text" placeholder="auto" style="width:160px">
+        </div>
+        <div class="port-preview" id="port-preview">http://localhost:8080</div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem;">
+          <button class="btn-ghost" id="copy-local-url">Copy Local URL</button>
+          <button class="btn-ghost" id="copy-lan-url">Copy LAN URL</button>
+        </div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:.85rem 1rem;font-size:.74rem;color:var(--muted);line-height:1.8;">
+          <strong style="color:var(--text);">Hosting for friends:</strong><br>
+          1. Serve this file: <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:.7rem;">npx serve . -p 8080</code><br>
+          2. Forward port 8080 on your router to this machine<br>
+          3. Or use a tunnel: <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:.7rem;">ngrok http 8080</code><br>
+          4. ROMs must be at: <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:.7rem;">/roms/[system]/filename.zip</code>
+        </div>
+        <div class="form-row">
+          <div class="form-label">Netplay Server Port<span class="form-hint">Port for netplay_server.py (default 3000)</span></div>
+          <input class="form-input" id="netplay-port-input" type="number" min="1024" max="65535" value="3000" style="width:90px">
+        </div>
+        <div class="form-row" style="margin-top:.75rem;">
+          <div class="form-label">Remote ROM Base URL<span class="form-hint">Base path where ROMs are served (e.g. /roms or http://192.168.1.10:8080/roms)</span></div>
+          <input class="form-input" id="rom-base-url" type="text" placeholder="/retro/roms" style="width:220px">
+        </div>
+      </div>
+      <div class="stab-panel active" id="tab-general">
+        <div class="form-row">
+          <div class="form-label">Auto-fetch metadata on scan<span class="form-hint">Look up game info automatically when a folder is added</span></div>
+          <label class="toggle-wrap"><input type="checkbox" id="opt-autometa" checked><span class="toggle-slider"></span></label>
+        </div>
+        <div class="form-row">
+          <div class="form-label">Show ZIP badge on cards<span class="form-hint">Indicate when a ROM is inside a ZIP archive</span></div>
+          <label class="toggle-wrap"><input type="checkbox" id="opt-zipbadge" checked><span class="toggle-slider"></span></label>
+        </div>
+        <div class="form-row">
+          <div class="form-label">Auto-start on click<span class="form-hint">Skip the detail panel and launch immediately</span></div>
+          <label class="toggle-wrap"><input type="checkbox" id="opt-autostart"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="form-row">
+          <div class="form-label">Artwork display<span class="form-hint">Show box art or cartridge art on game cards</span></div>
+          <select class="form-select" id="opt-artmode">
+            <option value="box">Box Art (front cover)</option>
+            <option value="cart">Cartridge Art</option>
+            <option value="none">No Artwork (emoji only)</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-label">EmulatorJS CDN<span class="form-hint">Change to self-hosted URL if needed</span></div>
+          <input class="form-input" id="opt-ejsurl" value="/retro/emulator/" style="width:270px;font-size:.68rem;">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-danger" id="btn-clear-lib">Clear Library</button>
+      <button class="btn-ghost" data-close="settings-modal">Cancel</button>
+      <button class="btn-primary" id="btn-settings-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- VIDEO OPTIONS MODAL -->
+<div class="modal-overlay" id="video-modal">
+  <div class="modal" style="width:min(460px,100%)">
+    <div class="modal-hdr"><h2>VIDEO OPTIONS</h2><button class="modal-close" data-close="video-modal">x</button></div>
+    <div class="modal-body">
+      <div class="video-preview"><div id="video-preview-emoji" style="font-size:2.5rem;">&#127918;&#128377;&#128126;</div></div>
+      <div style="font-size:.72rem;color:var(--dim);margin-bottom:.55rem;letter-spacing:.06em;text-transform:uppercase;">Filter / Shader</div>
+      <div class="filter-grid" id="filter-grid"></div>
+      <div class="form-row">
+        <div class="form-label">Aspect Ratio<span class="form-hint">How the game is scaled to fit the screen</span></div>
+        <select class="form-select" id="vid-aspect"><option value="4/3">4:3 (original)</option><option value="16/9">16:9 widescreen</option><option value="1/1">1:1 square pixels</option><option value="">Stretch</option></select>
+      </div>
+      <div class="form-row">
+        <div class="form-label">Brightness</div>
+        <input type="range" min="50" max="150" value="100" id="vid-brightness" style="width:120px">
+        <span id="vid-brightness-val" style="font-size:.7rem;color:var(--muted);min-width:32px;text-align:right;">100%</span>
+      </div>
+      <div class="form-row">
+        <div class="form-label">Contrast</div>
+        <input type="range" min="50" max="150" value="100" id="vid-contrast" style="width:120px">
+        <span id="vid-contrast-val" style="font-size:.7rem;color:var(--muted);min-width:32px;text-align:right;">100%</span>
+      </div>
+      <div class="form-row">
+        <div class="form-label">Saturation</div>
+        <input type="range" min="0" max="200" value="100" id="vid-saturation" style="width:120px">
+        <span id="vid-saturation-val" style="font-size:.7rem;color:var(--muted);min-width:32px;text-align:right;">100%</span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" id="vid-reset">Reset</button>
+      <button class="btn-primary" id="vid-apply">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONTROLLER MODAL -->
+<div class="modal-overlay" id="ctrl-modal">
+  <div class="modal" style="width:min(560px,100%)">
+    <div class="modal-hdr"><h2>CONTROLLER MAPPING</h2><button class="modal-close" data-close="ctrl-modal">x</button></div>
+    <div class="modal-body" style="padding:0;">
+      <div style="padding:.5rem 1.25rem;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.75rem;">
+        <div class="ctrl-status" id="ctrl-status" style="flex:1;font-size:.7rem;">No gamepad detected.</div>
+        <button class="btn-ghost" id="ctrl-detect-btn" style="font-size:.68rem;padding:.28rem .7rem;">Detect</button>
+      </div>
+      <div class="stabs" style="padding:0 1.25rem;">
+        <button class="stab active" data-tab="cp1kb">P1 Keys</button>
+        <button class="stab" data-tab="cp1gp">P1 Pad</button>
+        <button class="stab" data-tab="cp2kb">P2 Keys</button>
+        <button class="stab" data-tab="cp2gp">P2 Pad</button>
+        <button class="stab" data-tab="cassign">Assign</button>
+      </div>
+      <div id="cp1kb" class="stab-panel active"><div class="ctrl-grid" id="ctrl-kb-grid"></div></div>
+      <div id="cp1gp" class="stab-panel"><div class="ctrl-grid" id="ctrl-gp-grid"></div></div>
+      <div id="cp2kb" class="stab-panel">
+        <div style="padding:.45rem 1.25rem;font-size:.69rem;color:var(--muted);">P2 keyboard: WASD+LKJI+MN (override in P2 Keys tab)</div>
+        <div class="ctrl-grid" id="ctrl-p2kb-grid"></div>
+      </div>
+      <div id="cp2gp" class="stab-panel">
+        <div style="padding:.45rem 1.25rem;font-size:.69rem;color:var(--muted);">Assign a controller to P2 in the Assign tab</div>
+        <div class="ctrl-grid" id="ctrl-p2gp-grid"></div>
+      </div>
+      <div id="cassign" class="stab-panel" style="padding:1rem 1.25rem;">
+        <div style="font-size:.73rem;color:var(--muted);margin-bottom:.85rem;line-height:1.8;">
+          Assign USB/Bluetooth controllers to P1 and P2.<br>
+          <strong style="color:var(--text);">Auto:</strong> first detected = P1, second = P2.
+        </div>
+        <div id="gp-assign-list" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.75rem;"></div>
+        <button class="btn-ghost" id="gp-refresh-btn" style="font-size:.72rem;padding:.35rem .8rem;">&#x21BB; Refresh</button>
+        <div style="margin-top:.6rem;padding:.45rem .75rem;background:var(--surface2);border-radius:6px;font-size:.67rem;color:var(--dim);line-height:1.75;">
+          <strong style="color:var(--text);">Netplay:</strong> Host = P1, joining player picks their number.
+        </div>
+      </div>
+    </div>
+    <!-- PTT Section -->
+    <div hidden style="display:none!important;padding:.65rem 1.25rem;border-top:1px solid var(--border);">
+      <div style="font-family:'Press Start 2P',monospace;font-size:.48rem;color:var(--brand-pink,#ff6ec7);letter-spacing:.1em;margin-bottom:.65rem;">PUSH TO TALK (DISCORD)</div>
+      <div style="font-size:.74rem;color:var(--muted);margin-bottom:.65rem;line-height:1.75;">
+        Map a controller button to a real mouse button. Requires
+        <code style="background:var(--surface3);padding:1px 6px;border-radius:3px;font-size:.7rem;">ptt_helper.py</code>
+        running in the background (start.bat launches it automatically).
+      </div>
+      <div style="display:flex;align-items:center;gap:.85rem;flex-wrap:wrap;margin-bottom:.65rem;">
+        <div>
+          <div style="font-size:.7rem;color:var(--text);margin-bottom:.3rem;">Controller Button</div>
+          <span id="ptt-btn-badge" class="ctrl-badge" style="min-width:90px;cursor:pointer;" title="Click then press a button on your controller">Not set</span>
+        </div>
+        <div style="color:var(--dim);font-size:1.1rem;">&#x2192;</div>
+        <div>
+          <div style="font-size:.7rem;color:var(--text);margin-bottom:.3rem;">Mouse Button</div>
+          <select id="ptt-mouse-select" class="form-select" style="width:175px;">
+            <option value="">-- Select button --</option>
+            <option value="1">Mouse 1 &mdash; Left click</option>
+            <option value="2">Mouse 2 &mdash; Right click</option>
+            <option value="3">Mouse 3 &mdash; Middle / Scroll</option>
+            <option value="4">Mouse 4 &mdash; Back (side button)</option>
+            <option value="5">Mouse 5 &mdash; Forward (side button)</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:.7rem;color:var(--text);margin-bottom:.3rem;">Mode</div>
+          <select id="ptt-mode-select" class="form-select" style="width:100px;">
+            <option value="hold">Hold</option>
+            <option value="toggle">Toggle</option>
+          </select>
+        </div>
+        <div style="margin-top:1.1rem;">
+          <label style="display:flex;align-items:center;gap:.45rem;font-size:.74rem;cursor:pointer;">
+            <input type="checkbox" id="ptt-enabled"> Enable PTT
+          </label>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.65rem;margin-bottom:.65rem;">
+        <button class="btn-ghost" id="ptt-test-btn" style="font-size:.7rem;padding:.32rem .75rem;">Test PTT Click</button>
+        <span id="ptt-helper-status" style="font-size:.68rem;color:var(--dim);">Helper: checking...</span>
+      </div>
+      <div style="padding:.55rem .85rem;background:var(--surface2);border-radius:7px;font-size:.68rem;color:var(--dim);line-height:1.8;">
+        <strong style="color:var(--text);">Quick setup:</strong>
+        In Discord settings, set Push To Talk key to <em>Mouse 3, 4, or 5</em>. Then above, pick the
+        same mouse button and assign a controller button. The PTT helper sends a real OS mouse click
+        that Discord recognises, even while a game is running fullscreen.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" id="ctrl-reset">Reset Defaults</button>
+      <button class="btn-primary" id="ctrl-save">Save Mapping</button>
+    </div>
+  </div>
+</div>
+
+<!-- GAME DETAIL MODAL -->
+<div class="modal-overlay" id="detail-modal">
+  <div class="modal" style="width:min(520px,100%)">
+    <div class="modal-hdr"><h2 id="detail-hdr-sys">GAME</h2><button class="modal-close" data-close="detail-modal">x</button></div>
+    <div class="modal-body">
+      <div class="detail-top">
+        <div class="detail-cover" id="detail-cover"></div>
+        <div class="detail-info">
+          <div class="detail-title" id="detail-title"></div>
+          <div class="detail-tags" id="detail-tags"></div>
+          <div class="detail-year" id="detail-year"></div>
+          <div class="detail-file" id="detail-file"></div>
+        </div>
+      </div>
+      <div class="detail-desc" id="detail-desc" style="display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" data-close="detail-modal">Close</button>
+      <button class="btn-primary" id="detail-play-btn">Play Now</button>
+    </div>
+  </div>
+</div>
+
+<!-- EMULATOR MODAL -->
+<div class="modal-overlay" id="emu-modal" style="padding:0;align-items:stretch;justify-content:center;">
+  <div style="display:flex;flex-direction:column;width:min(900px,100vw);height:100vh;background:#000;position:relative;">
+    <!-- Topbar -->
+    <div class="emu-topbar" style="flex-shrink:0;">
+      <span id="emu-sys-badge" class="sys-badge"></span>
+      <span class="emu-t" id="emu-title"></span>
+      <div class="emu-actions">
+        <button class="emu-action-btn" id="emu-save-btn"><svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>Save</button>
+        <button class="emu-action-btn" id="emu-load-btn"><svg viewBox="0 0 24 24"><path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2v-4M17 9l-5 5-5-5M12 12.8V2.5"/></svg>Load</button>
+        <button class="emu-action-btn" id="emu-video-btn"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="12" y1="17" x2="12" y2="21"/></svg>Video</button>
+        <button class="emu-action-btn" id="emu-minimize-btn" title="Minimize (game keeps running)">
+          <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></svg>Minimize
+        </button>
+        <!-- PTT in emulator bar -->
+        <div hidden style="display:none!important;display:flex;align-items:center;gap:.4rem;padding:0 .5rem;border-left:1px solid var(--border);border-right:1px solid var(--border);">
+          <label style="display:flex;align-items:center;gap:.35rem;font-size:.65rem;color:var(--muted);cursor:pointer;white-space:nowrap;">
+            <input type="checkbox" id="emu-ptt-enabled" title="Enable Push To Talk">
+            <span>PTT</span>
+          </label>
+          <select id="emu-ptt-mouse" title="Mouse button to send" style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:.6rem;padding:1px 3px;cursor:pointer;">
+            <option value="">Off</option>
+            <option value="3">M3</option>
+            <option value="4">M4</option>
+            <option value="5">M5</option>
+          </select>
+          <button id="emu-ptt-test" class="emu-action-btn" style="font-size:.6rem;padding:.2rem .5rem;" title="Test PTT click">Test</button>
+        </div>
+        <div style="width:1px;height:16px;background:rgba(255,255,255,.15);margin:0 .2rem;"></div>
+        <button class="emu-action-btn" id="emu-np-btn" title="Netplay lobby"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Netplay</button>
+        <button class="emu-action-btn" id="emu-ctrl-btn" title="Controller mapping"><svg viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="10" rx="3"/><path d="M6 13h4M8 11v4"/><circle cx="16" cy="12" r=".7" fill="currentColor"/><circle cx="18" cy="14" r=".7" fill="currentColor"/></svg>Controls</button>
+        <div style="width:1px;height:16px;background:rgba(255,255,255,.15);margin:0 .2rem;"></div>
+        <button class="emu-action-btn" id="emu-close-btn" title="Close game">&#x2715; Close</button>
+      </div>
+    </div>
+    <!-- Game iframe fills remaining space -->
+    <div id="emu-container" style="flex:1;min-height:0;background:#000;position:relative;">
+      <div id="emu-lobby" style="display:none;position:absolute;top:0;right:0;width:230px;height:100%;background:rgba(8,8,18,.93);border-left:1px solid var(--border);z-index:20;flex-direction:column;font-size:.7rem;">
+  <div style="padding:.55rem .75rem;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+    <span style="font-family:'Press Start 2P',monospace;font-size:.45rem;color:var(--accent2);">NETPLAY</span>
+    <button id="emu-lobby-close" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem;">&#x2715;</button>
+  </div>
+  <div id="emu-lobby-room" style="padding:.4rem .75rem;font-size:.6rem;color:var(--muted);border-bottom:1px solid var(--border);flex-shrink:0;">Not connected</div>
+  <div style="padding:.4rem .75rem .2rem;font-size:.58rem;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;flex-shrink:0;">Player Slots</div>
+  <div id="emu-lobby-slots" style="display:flex;flex-direction:column;gap:.28rem;padding:0 .75rem .4rem;flex-shrink:0;"></div>
+  <div style="padding:.4rem .75rem .2rem;font-size:.58rem;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;border-top:1px solid var(--border);flex-shrink:0;">In Room</div>
+  <div id="emu-lobby-players" style="flex:1;overflow-y:auto;padding:0 .75rem .4rem;min-height:0;"></div>
+  <div style="border-top:1px solid var(--border);padding:.35rem .6rem;display:flex;gap:.35rem;flex-shrink:0;">
+    <input id="emu-lobby-chat" type="text" placeholder="Chat..." maxlength="80" style="flex:1;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:.6rem;padding:.22rem .38rem;">
+    <button id="emu-lobby-send" style="background:var(--accent);border:none;border-radius:4px;color:#fff;font-size:.58rem;padding:.22rem .45rem;cursor:pointer;">&#x23CE;</button>
+  </div>
+</div>
+<div id="emu-spinner" style="position:absolute;inset:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;font-family:'Press Start 2P',monospace;font-size:.5rem;color:var(--dim);letter-spacing:.1em;z-index:10;">
+        <div class="spin" style="width:18px;height:18px;"></div>
+        <div id="emu-spinner-txt">LOADING ROM...</div>
+      </div>
+      <iframe id="emu-iframe"
+        style="width:100%;height:100%;border:none;display:none;"
+        allow="fullscreen; gamepad; autoplay; clipboard-write"
+        sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-downloads allow-modals"></iframe>
+    </div>
+    <!-- Bottom bar: slot + controls -->
+    <div style="flex-shrink:0;background:var(--surface);border-top:1px solid var(--border);">
+      <div class="emu-slot-row">
+        <span class="emu-slot-label">State Slot:</span>
+        <select class="slot-select" id="state-slot-select" onchange="sendEmuCmd('setslot')">
+          <option value="0">Slot 1</option><option value="1">Slot 2</option>
+          <option value="2">Slot 3</option><option value="3">Slot 4</option>
+          <option value="4">Slot 5</option><option value="5">Slot 6</option>
+          <option value="6">Slot 7</option><option value="7">Slot 8</option>
+          <option value="8">Slot 9</option>
+        </select>
+      </div>
+      <div class="emu-bar">
+        <span><kbd>Z</kbd> A &nbsp;<kbd>X</kbd> B &nbsp;<kbd>A</kbd> Y &nbsp;<kbd>S</kbd> X</span>
+        <span><kbd>Arrows</kbd> D-pad</span>
+        <span><kbd>Enter</kbd> Start &nbsp;<kbd>Shift</kbd> Select</span>
+        <span><kbd>F2</kbd> Save &nbsp;<kbd>F4</kbd> Load</span>
+        <span><kbd>Esc</kbd> Close</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- NETPLAY STYLES -->
+<style>
+.np-online-badge{display:inline-flex;align-items:center;gap:.35rem;font-size:.68rem;color:var(--accent2);padding:.2rem .55rem;background:rgba(160,125,232,.12);border:1px solid rgba(160,125,232,.25);border-radius:999px;cursor:pointer;}
+.np-dot{width:6px;height:6px;border-radius:50%;background:#2ea86e;animation:pulse2 2s infinite;}
+@keyframes pulse2{0%,100%{opacity:1}50%{opacity:.35}}
+.np-user-row{display:flex;align-items:center;gap:.75rem;padding:.5rem .75rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;}
+.np-avatar{width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;color:#fff;flex-shrink:0;text-transform:uppercase;}
+.np-uinfo{flex:1;min-width:0;}
+.np-uname{font-size:.78rem;font-weight:600;color:var(--text);}
+.np-ustatus{font-size:.65rem;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.np-room-row{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.7rem 1rem;display:flex;align-items:center;gap:.75rem;}
+.np-rinfo{flex:1;min-width:0;}
+.np-rname{font-size:.8rem;font-weight:600;color:var(--text);}
+.np-rgame{font-size:.68rem;color:var(--muted);margin-top:2px;}
+.np-chat-line{font-size:.74rem;line-height:1.5;padding:.15rem 0;}
+.np-chat-from{color:var(--accent2);font-weight:600;margin-right:.4rem;}
+.np-chat-mine .np-chat-from{color:var(--gb);}
+.np-chat-sys{color:var(--dim);font-style:italic;}
+.np-rc-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;cursor:pointer;}
+.np-rc-card:hover{border-color:var(--border2);}
+.np-rc-img{width:100%;aspect-ratio:1;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:1.8rem;overflow:hidden;}
+.np-rc-img img{width:100%;height:100%;object-fit:cover;}
+.np-rc-title{font-size:.68rem;font-weight:600;padding:.4rem .5rem .1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.np-rc-sys{font-size:.6rem;color:var(--muted);padding:0 .5rem .4rem;}
+</style>
+
+<!-- NETPLAY / SOCIAL MODAL -->
+<div class="modal-overlay" id="netplay-modal">
+  <div class="modal" style="width:min(680px,100%);max-height:92vh">
+    <div class="modal-hdr"><h2>SOCIAL &amp; NETPLAY</h2><button class="modal-close" data-close="netplay-modal">x</button></div>
+    <div class="modal-body" style="padding:0;display:flex;flex-direction:column;">
+      <!-- Login -->
+      <div id="np-login-screen" style="padding:1.25rem;display:flex;flex-direction:column;gap:1rem;">
+        <div style="font-size:.78rem;color:var(--muted);line-height:1.75;">
+          Choose a display name to go online. No account needed.<br>
+          <strong style="color:var(--text);">Requires:</strong>
+          <code style="background:var(--surface2);padding:1px 6px;border-radius:4px;font-size:.72rem;">python netplay_server.py</code>
+          running on port <span id="np-port-hint">3000</span>.
+        </div>
+        <div style="display:flex;gap:.65rem;align-items:center;">
+          <input id="np-username-input" class="form-input" type="text" placeholder="Your display name..." maxlength="20" style="flex:1;width:auto"/>
+          <button class="btn-primary" id="np-login-btn">Connect</button>
+        </div>
+        <div id="np-connect-err" style="font-size:.72rem;color:#e05050;display:none;"></div>
+      </div>
+      <!-- Main (logged in) -->
+      <div id="np-main-screen" style="display:none;flex-direction:column;">
+        <div class="stabs" style="margin:0;padding:0 1.25rem;border-bottom:1px solid var(--border);">
+          <button class="stab active" data-np-tab="online">Online</button>
+          <button class="stab" data-np-tab="rooms">Rooms</button>
+          <button class="stab" data-np-tab="recent">Recent</button>
+          <button class="stab" data-np-tab="chat">Chat</button>
+        </div>
+        <div id="np-tab-online" class="np-panel" style="padding:1rem 1.25rem;overflow-y:auto;max-height:380px;">
+          <div id="np-online-list" style="display:flex;flex-direction:column;gap:.45rem;"></div>
+        </div>
+        <div id="np-tab-rooms" class="np-panel" style="display:none;padding:1rem 1.25rem;overflow-y:auto;max-height:380px;">
+          <div style="display:flex;gap:.65rem;margin-bottom:.85rem;align-items:center;flex-wrap:wrap;">
+            <button class="btn-primary" id="np-create-room-btn" style="font-size:.72rem;padding:.38rem .85rem;">+ Create Room</button>
+            <span style="font-size:.7rem;color:var(--dim);">Launch a game first, then create a room for friends to join</span>
+          </div>
+          <div id="np-rooms-list" style="display:flex;flex-direction:column;gap:.45rem;"></div>
+          <div id="np-no-rooms" style="font-size:.72rem;color:var(--dim);text-align:center;padding:2rem 0;display:none;">No open rooms right now.</div>
+        </div>
+        <div id="np-tab-recent" class="np-panel" style="display:none;padding:1rem 1.25rem;overflow-y:auto;max-height:380px;">
+          <div id="np-recent-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:.65rem;"></div>
+        </div>
+        <div id="np-tab-chat" class="np-panel" style="display:none;flex-direction:column;">
+          <div id="np-chat-msgs" style="overflow-y:auto;padding:.75rem 1.25rem;display:flex;flex-direction:column;gap:.2rem;max-height:300px;min-height:180px;"></div>
+          <div style="padding:.6rem 1.25rem;border-top:1px solid var(--border);display:flex;gap:.45rem;">
+            <input id="np-chat-input" class="form-input" type="text" placeholder="Message..." maxlength="200" style="flex:1;width:auto">
+            <button class="btn-primary" id="np-chat-send" style="font-size:.7rem;padding:.38rem .75rem;">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span id="np-status-bar" style="flex:1;font-size:.7rem;color:var(--dim);"></span>
+      <button class="btn-ghost" id="np-logout-btn" style="display:none;font-size:.7rem;">Disconnect</button>
+      <button class="btn-ghost" data-close="netplay-modal">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- INVITE POPUP -->
+<div id="np-invite-toast" style="display:none;position:fixed;bottom:5rem;right:1rem;z-index:610;background:var(--surface);border:2px solid var(--accent);border-radius:12px;padding:.85rem 1.1rem;box-shadow:0 4px 24px rgba(0,0,0,.6);max-width:300px;">
+  <div style="font-size:.75rem;font-weight:600;color:var(--accent2);margin-bottom:.35rem;">Game Invite!</div>
+  <div id="np-invite-msg" style="font-size:.72rem;color:var(--text);margin-bottom:.65rem;line-height:1.5;"></div>
+  <div style="display:flex;gap:.5rem;">
+    <button class="btn-primary" id="np-invite-accept" style="font-size:.7rem;padding:.32rem .75rem;">Accept</button>
+    <button class="btn-ghost" id="np-invite-decline" style="font-size:.7rem;padding:.32rem .75rem;">Decline</button>
+  </div>
+</div>
+
+<!-- USER ID MODAL (shown on first visit, and via menu) -->
+<div class="modal-overlay" id="uid-modal">
+  <div class="modal" style="width:min(440px,100%);max-height:90vh;">
+    <div class="modal-hdr"><h2>USER PROFILE</h2><button class="modal-close" data-close="uid-modal">x</button></div>
+    <div class="modal-body" style="padding:1.25rem;display:flex;flex-direction:column;gap:1.1rem;">
+      <div style="text-align:center;padding:.5rem 0;">
+        <div style="font-family:'Press Start 2P',monospace;font-size:.55rem;color:var(--brand-pink,#ff6ec7);letter-spacing:.1em;margin-bottom:.5rem;">ESTEEF.AI RETRO VAULT</div>
+        <div style="font-size:.75rem;color:var(--muted);line-height:1.75;">
+          Your User ID saves your game stats, settings, and controller layout on the server so you can access them from any device.
+        </div>
+      </div>
+      <div>
+        <div style="font-size:.7rem;color:var(--text);margin-bottom:.4rem;">Display Name</div>
+        <input id="uid-name-input" class="form-input" type="text" placeholder="e.g. Esteef" maxlength="24" style="width:100%;">
+      </div>
+      <div>
+        <div style="font-size:.7rem;color:var(--text);margin-bottom:.4rem;">User ID <span style="color:var(--dim);font-size:.65rem;">(auto-generated, save this to return to your profile)</span></div>
+        <div style="display:flex;gap:.5rem;">
+          <input id="uid-id-input" class="form-input" type="text" placeholder="Leave blank for new ID" maxlength="32" style="flex:1;font-family:monospace;font-size:.72rem;">
+          <button class="btn-ghost" id="uid-gen-btn" style="font-size:.7rem;padding:.38rem .75rem;" title="Generate new ID">New</button>
+        </div>
+        <div style="font-size:.65rem;color:var(--dim);margin-top:.3rem;">Paste an existing ID to load your saved profile</div>
+      </div>
+      <div id="uid-status" style="font-size:.72rem;display:none;padding:.5rem .75rem;border-radius:6px;"></div>
+    </div>
+    <div class="modal-footer">
+      <div style="flex:1;font-size:.68rem;color:var(--dim);">Your ID is stored in this browser and on the server</div>
+      <button class="btn-primary" id="uid-save-btn">Save Profile</button>
+    </div>
+  </div>
+</div>
+<!-- STATS MODAL -->
+<div class="modal-overlay" id="stats-modal">
+  <div class="modal" style="width:min(700px,100%);max-height:92vh">
+    <div class="modal-hdr"><h2>USAGE STATS</h2><button class="modal-close" data-close="stats-modal">x</button></div>
+    <div class="modal-body" style="padding:0">
+      <div style="padding:.7rem 1.25rem;border-bottom:1px solid var(--border);display:flex;gap:.65rem;align-items:center;">
+        <span id="stats-summary" style="font-size:.74rem;color:var(--muted);flex:1;"></span>
+        <button class="btn-ghost" id="stats-clear-btn" style="font-size:.7rem;padding:.32rem .75rem;">Clear All</button>
+      </div>
+      <div style="overflow-y:auto;max-height:calc(92vh - 130px);">
+        <div style="padding:.85rem 1.25rem .4rem;font-family:'Press Start 2P',monospace;font-size:.48rem;color:var(--brand-pink,#ff6ec7);letter-spacing:.1em;">TOP GAMES BY PLAYTIME</div>
+        <div id="stats-top-list" style="padding:0 1.25rem 1rem;display:flex;flex-direction:column;gap:.4rem;"></div>
+        <div style="padding:.85rem 1.25rem .4rem;font-family:'Press Start 2P',monospace;font-size:.48rem;color:var(--accent2);letter-spacing:.1em;">ALL PLAYED GAMES</div>
+        <div id="stats-all-list" style="padding:0 1.25rem 1rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:.5rem;"></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn-ghost" data-close="stats-modal">Close</button></div>
+  </div>
+</div>
+<!-- UPLOAD MODAL -->
+<div class="modal-overlay" id="upload-modal">
+  <div class="modal" style="width:min(520px,100%)">
+    <div class="modal-hdr">
+      <h2>UPLOAD ROM</h2>
+      <button class="modal-close" data-close="upload-modal">x</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:.78rem;color:var(--muted);margin-bottom:1rem;line-height:1.7;">
+        Upload a ROM file to the server so everyone can play it.
+        Files are saved to the correct system folder automatically.
+      </div>
+      <div class="form-row">
+        <div class="form-label">System<span class="form-hint">Which console this ROM is for</span></div>
+        <select class="form-select" id="upload-system">
+          <option value="NES">NES</option>
+          <option value="SNES">SNES</option>
+          <option value="Genesis">Genesis / Mega Drive</option>
+          <option value="GBA">Game Boy Advance</option>
+          <option value="N64">Nintendo 64</option>
+          <option value="GB">Game Boy / GBC</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-label">ROM File<span class="form-hint">ZIP, NES, SFC, BIN, GBA, Z64, GB, GBC</span></div>
+        <div style="flex:1">
+          <label id="upload-drop-zone" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;border:2px dashed var(--border2);border-radius:8px;padding:1.5rem;cursor:pointer;transition:all .2s;text-align:center;">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span id="upload-file-label" style="font-size:.78rem;color:var(--muted);">Click to choose file or drag and drop</span>
+            <input type="file" id="upload-file-input" style="display:none" accept=".zip,.nes,.sfc,.smc,.bin,.md,.gen,.gba,.gb,.gbc,.z64,.n64,.v64">
+          </label>
+        </div>
+      </div>
+      <div id="upload-progress" style="display:none;margin-top:.75rem;">
+        <div style="background:var(--surface2);border-radius:999px;height:6px;overflow:hidden;">
+          <div id="upload-progress-bar" style="height:100%;background:var(--accent);width:0%;transition:width .3s;border-radius:999px;"></div>
+        </div>
+        <div id="upload-progress-txt" style="font-size:.72rem;color:var(--muted);margin-top:.4rem;text-align:center;"></div>
+      </div>
+      <div id="upload-result" style="display:none;margin-top:.75rem;padding:.75rem 1rem;border-radius:8px;font-size:.75rem;line-height:1.7;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" data-close="upload-modal">Cancel</button>
+      <button class="btn-primary" id="upload-submit-btn">Upload ROM</button>
+    </div>
+  </div>
+</div>
+
+<!-- Emulator restore bar (shown when minimized) -->
+<div id="emu-restore-bar" style="display:none;position:fixed;bottom:1rem;right:1rem;z-index:600;background:var(--surface);border:1px solid var(--accent);border-radius:10px;padding:.5rem 1rem;display:none;align-items:center;gap:.75rem;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.5);" onclick="restoreEmu()">
+  <div class="spin" style="width:10px;height:10px;background:var(--accent2);flex-shrink:0;"></div>
+  <span id="emu-restore-title" style="font-size:.75rem;font-weight:600;color:var(--text);max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></span>
+  <span style="font-size:.7rem;color:var(--muted);">▶ Resume</span>
+</div>
+<div id="toast"></div>
+<script src="/retro/lib/jszip.min.js"></script>
+<script>
+const APP_VERSION = "1.3.0";
+const SYSTEMS=[
+  {id:"NES",label:"NES",color:"var(--nes)",exts:[".nes"],core:"nes",emoji:"🎮"},
+  {id:"SNES",label:"SNES",color:"var(--snes)",exts:[".sfc",".smc"],core:"snes",emoji:"🕹️"},
+  {id:"Genesis",label:"Genesis",color:"var(--genesis)",exts:[".bin",".md",".gen"],core:"segaMD",emoji:"🦔"},
+  {id:"SMS",label:"Master System",color:"var(--genesis)",exts:[".sms",".bin"],core:"segaMS",emoji:"🎮"},
+  {id:"GBA",label:"GBA",color:"var(--gba)",exts:[".gba"],core:"gba",emoji:"⭐"},
+  {id:"N64",label:"N64",color:"var(--n64)",exts:[".z64",".n64",".v64"],core:"n64",emoji:"🌟"},
+  {id:"GB",label:"GB/GBC",color:"var(--gb)",exts:[".gb",".gbc"],core:"gb",emoji:"🎲"},
+  {id:"MAME",label:"MAME/Arcade",color:"var(--mame,#c62828)",exts:[".zip"],core:"mame2003_plus",emoji:"🕹️",isMame:true},
+];
+const SYS_MAP=Object.fromEntries(SYSTEMS.map(s=>[s.id,s]));
+
+let LIBRARY=[],folderHandles={},activeSystem="All",viewMode="grid",sortKey="name",searchQ="",detailIdx=-1,activeGameIdx=-1;
+let CFG={port:8088,hostOverride:"",romBaseUrl:"/retro/roms",netplayPort:3000,autoMeta:true,showZipBadge:true,autoStart:false,ejsUrl:"/retro/emulator/",artMode:"box"};
+let VCFG={filter:"none",aspect:"4/3",brightness:100,contrast:100,saturation:100};
+const DEF_CTRL={Up:"ArrowUp",Down:"ArrowDown",Left:"ArrowLeft",Right:"ArrowRight",A:"z",B:"x",X:"a",Y:"s",L:"q",R:"w",Start:"Enter",Select:"Shift",GP_A:"button_0",GP_B:"button_1",GP_X:"button_2",GP_Y:"button_3",GP_L:"button_4",GP_R:"button_5",GP_Start:"button_9",GP_Select:"button_8"};
+let CTRL={...DEF_CTRL};
+const DEF_CTRL2={Up:"w",Down:"s",Left:"a",Right:"d",A:"l",B:"k",X:"j",Y:"i",L:"u",R:"o",Start:"m",Select:"n",GP_A:"BTN_0",GP_B:"BTN_1",GP_X:"BTN_2",GP_Y:"BTN_3",GP_L:"BTN_4",GP_R:"BTN_5",GP_Start:"BTN_9",GP_Select:"BTN_8",GP_Up:"BTN_12",GP_Down:"BTN_13",GP_Left:"BTN_14",GP_Right:"BTN_15",gamepadIndex:1};
+let CTRL2=Object.assign({},DEF_CTRL2);
+var GAMEPAD_ASSIGN={};
+
+function loadAll(){
+  try{const d=localStorage.getItem("rv_lib");if(d){
+    LIBRARY=JSON.parse(d);
+    // Restore fields stripped during compact save
+    LIBRARY.forEach(function(g){
+      var sys=SYS_MAP[g.system]||{};
+      if(!g.emoji) g.emoji=sys.emoji||"🎮";
+      if(!g.genre) g.genre="Unknown";
+      if(g.description===undefined) g.description="";
+      if(g.publisher===undefined) g.publisher="";
+      // Validate cached art URLs - if they point to /boxart/ check they exist
+      // (old sessions may have saved URLs that no longer resolve)
+      if(g.coverBox&&g.coverBox.startsWith("/boxart/")){
+        // Keep but will show broken img if not cached; onerror hides it
+      }
+      // cover will be regenerated by initArt()
+    });
+  }}catch(e){}
+  try{const d=localStorage.getItem("rv_cfg");if(d)Object.assign(CFG,JSON.parse(d));}catch(e){}
+  CFG.ejsUrl="/retro/emulator/"; CFG.romBaseUrl="/retro/roms";
+  try{const d=localStorage.getItem("rv_vid");if(d)Object.assign(VCFG,JSON.parse(d));}catch(e){}
+  try{const d=localStorage.getItem("rv_ctrl");if(d)Object.assign(CTRL,JSON.parse(d));}catch(e){}
+  try{const d2=localStorage.getItem("rv_ctrl2");if(d2)Object.assign(CTRL2,JSON.parse(d2));}catch(e){}
+  try{const ga=localStorage.getItem("rv_gp_assign");if(ga)Object.assign(GAMEPAD_ASSIGN,JSON.parse(ga));}catch(e){}
+}
+function saveLib(){
+  // Strip heavy fields before saving to stay under localStorage 5MB quota
+  // cover/SVG art is regenerated on load; description is re-fetched if needed
+  var compact=LIBRARY.map(function(g){
+    return {
+      filename:g.filename, title:g.title, system:g.system,
+      genre:g.genre||"", year:g.year||null, emoji:g.emoji||"",
+      publisher:g.publisher||"", developer:g.developer||"",
+      isZip:g.isZip||false, romPath:g.romPath||"",
+      coverBox:g.coverBox||null, coverCart:g.coverCart||null,
+      // Exclude: fileHandle, cover, _svgPlaceholder, description, metaDone
+    };
+  });
+  try{
+    localStorage.setItem("rv_lib",JSON.stringify(compact));
+  }catch(e){
+    // If still too large, save without cover art URLs
+    try{
+      var minimal=compact.map(function(g){
+        return {filename:g.filename,title:g.title,system:g.system,
+                genre:g.genre,year:g.year,isZip:g.isZip,romPath:g.romPath};
+      });
+      localStorage.setItem("rv_lib",JSON.stringify(minimal));
+      console.warn("[RV] Library too large for localStorage - saved without art URLs");
+    }catch(e2){
+      console.error("[RV] localStorage save failed:",e2.message);
+      toast("Library too large to cache locally. Games still work — paths saved on server.",true);
+    }
+  }
+}
+function saveCfg(){localStorage.setItem("rv_cfg",JSON.stringify(CFG));}
+function saveVid(){localStorage.setItem("rv_vid",JSON.stringify(VCFG));}
+function saveCtrl(){
+  try{localStorage.setItem("rv_ctrl",JSON.stringify(CTRL));
+  localStorage.setItem("rv_ctrl2",JSON.stringify(CTRL2));
+  localStorage.setItem("rv_gp_assign",JSON.stringify(GAMEPAD_ASSIGN));}catch(e){}
+}
+
+function cleanName(fn){
+  return fn.replace(/\.zip$/i,"").replace(/\.[a-z0-9]{1,4}$/i,"")
+    .replace(/[\(\[\{][^\)\]\}]{0,60}[\)\]\}]/g,"").replace(/[_\-]+/g," ").replace(/\s{2,}/g," ").trim();
+}
+
+async function fetchMeta(games){
+  const prompt=`You are a retro video game database. Return ONLY a valid JSON array, no markdown, no preamble, no explanation. One object per game in the same order as input.
+
+Each object must have exactly these fields:
+- "title": correct proper-case display title
+- "genre": one of: Platformer, RPG, Action, Fighting, Racing, Shooter, Sports, Puzzle, Adventure, Strategy, Simulation
+- "year": release year as integer or null
+- "description": 1-2 sentence description of the game
+- "emoji": single most fitting emoji
+
+Games:\n${games.map((g,i)=>`${i+1}. "${g.name}" (${g.system})`).join("\n")}`;
+  // Philibert describes the games itself, with its own model on the drive
+  const res=await fetch("/retro/api/describe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({games:games})});
+  if(!res.ok)throw new Error("Philibert "+res.status);
+  const data=await res.json();
+  if(!data.ok)throw new Error(data.error||"Philibert could not describe these games");
+  return data.items;
+}
+
+// ── Box Art ──────────────────────────────────────────────────────────────
+// Uses free Cover Art sources:
+//   1. cdn.thegamesdb.net (TheGamesDB - completely free, no key needed)
+//   2. archive.org scans
+// The Claude API returns a best-guess cover URL for each game
+
+// Box art colour palette per system for SVG placeholders
+const SYS_ART_COLORS={
+  NES:{bg:"#8B0000",bg2:"#CC2200",border:"#FF4422",label:"#FFDDCC"},
+  SNES:{bg:"#1A237E",bg2:"#283593",border:"#5C6BC0",label:"#C5CAE9"},
+  Genesis:{bg:"#1B5E20",bg2:"#2E7D32",border:"#66BB6A",label:"#C8E6C9"},
+  GBA:{bg:"#4A148C",bg2:"#6A1B9A",border:"#AB47BC",label:"#E1BEE7"},
+  N64:{bg:"#BF360C",bg2:"#D84315",border:"#FF7043",label:"#FBE9E7"},
+  GB:{bg:"#33691E",bg2:"#558B2F",border:"#9CCC65",label:"#DCEDC8"},
+};
+
+function getCoverForMode(g){
+  var mode=CFG.artMode||"box";
+  if(mode==="none") return g._svgPlaceholder||null; // still show placeholder
+  if(mode==="cart") return g.coverCart||g.coverBox||g._svgPlaceholder||null;
+  return g.coverBox||g.coverCart||g._svgPlaceholder||null;
+}
+
+function makeSvgArt(title, system){
+  // Render a box art SVG that mimics real NES/SNES/Genesis box styling
+  var t = (title||"Game").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+  // System-specific styling matching real box art
+  var cfg = {
+    NES:     {bg:"#12122a",    topBand:"#cc2200",  botBand:"#cc2200",  label:"#ffffff",
+              accent:"#ffd700", sysText:"Nintendo ENTERTAINMENT SYSTEM", logoColor:"#cc2200",
+              stripe:"#1a1a3a", icon:"&#9829;",  badge:"ACTION SERIES"},
+    SNES:    {bg:"#0d0d2e",    topBand:"#6c29b8",  botBand:"#1a1a3a",  label:"#ffffff",
+              accent:"#ffd700", sysText:"Super Nintendo",                logoColor:"#6c29b8",
+              stripe:"#1a1a3e", icon:"&#11088;", badge:"SUPER NES"},
+    Genesis: {bg:"#0a0a0a",    topBand:"#ff6600",  botBand:"#ff6600",  label:"#ffffff",
+              accent:"#ffffff", sysText:"SEGA GENESIS",                  logoColor:"#ff6600",
+              stripe:"#1a1a1a", icon:"&#9660;",  badge:"GENESIS"},
+    GBA:     {bg:"#1a0a2e",    topBand:"#7b1fa2",  botBand:"#4a148c",  label:"#ffffff",
+              accent:"#00e5ff", sysText:"Game Boy Advance",              logoColor:"#7b1fa2",
+              stripe:"#0d0020", icon:"&#9650;",  badge:"GBA"},
+    N64:     {bg:"#1a0500",    topBand:"#e64a19",  botBand:"#bf360c",  label:"#ffffff",
+              accent:"#ffd700", sysText:"Nintendo 64",                   logoColor:"#e64a19",
+              stripe:"#0a0200", icon:"&#10022;", badge:"N64"},
+    GB:      {bg:"#0a1a0a",    topBand:"#2e7d32",  botBand:"#1b5e20",  label:"#ffffff",
+              accent:"#a5d6a7", sysText:"Game Boy",                      logoColor:"#33691e",
+              stripe:"#051005", icon:"&#9670;",  badge:"GAME BOY"},
+  };
+  var c = cfg[system] || cfg.NES;
+
+  // Word-wrap the title into lines
+  var words = t.split(" ");
+  var lines = []; var cur = "";
+  words.forEach(function(w){
+    var test = cur ? cur+" "+w : w;
+    if(test.length > 16 && cur){ lines.push(cur); cur=w; }
+    else cur=test;
+  });
+  if(cur) lines.push(cur);
+  lines = lines.slice(0,3);
+
+  // Build title tspans
+  var titleY = lines.length===1 ? 108 : lines.length===2 ? 100 : 92;
+  var tspans = lines.map(function(l,i){
+    return '<tspan x="75" dy="'+(i===0?0:22)+'" font-size="'+(l.length>12?11:l.length>9?13:15)+'">'+l+'</tspan>';
+  }).join("");
+
+  var svg = [
+    '<svg xmlns="http://www.w3.org/2000/svg" width="150" height="210" viewBox="0 0 150 210">',
+    '<defs>',
+    '  <linearGradient id="bgG" x1="0" y1="0" x2="0" y2="1">',
+    '    <stop offset="0%" stop-color="'+c.stripe+'"/>',
+    '    <stop offset="100%" stop-color="'+c.bg+'"/>',
+    '  </linearGradient>',
+    '  <linearGradient id="bandG" x1="0" y1="0" x2="1" y2="0">',
+    '    <stop offset="0%" stop-color="'+c.topBand+'" stop-opacity=".9"/>',
+    '    <stop offset="50%" stop-color="'+c.topBand+'"/>',
+    '    <stop offset="100%" stop-color="'+c.topBand+'" stop-opacity=".8"/>',
+    '  </linearGradient>',
+    '  <filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/>',
+    '    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>',
+    '</defs>',
+    // Main background
+    '<rect width="150" height="210" fill="url(#bgG)"/>',
+    // Border
+    '<rect x="1" y="1" width="148" height="208" rx="3" ry="3" fill="none" stroke="'+c.topBand+'" stroke-width="2.5"/>',
+    '<rect x="4" y="4" width="142" height="202" rx="2" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="1"/>',
+    // Top band
+    '<rect x="0" y="0" width="150" height="36" fill="url(#bandG)" rx="3"/>',
+    // Top band shine
+    '<rect x="0" y="0" width="150" height="8" fill="rgba(255,255,255,.12)" rx="3"/>',
+    // System text in top band
+    '<text x="75" y="14" text-anchor="middle" font-family="Arial,sans-serif" font-size="6" font-weight="700" fill="rgba(255,255,255,.9)" letter-spacing="1">'+c.sysText+'</text>',
+    // Nintendo / Sega logo area
+    '<rect x="12" y="18" width="60" height="13" rx="6" fill="rgba(255,255,255,.15)" stroke="rgba(255,255,255,.3)" stroke-width=".5"/>',
+    '<text x="42" y="28" text-anchor="middle" font-family="Arial,sans-serif" font-size="7.5" font-weight="900" fill="#fff" letter-spacing=".3">'+system+'</text>',
+    // Rating badge
+    '<rect x="125" y="18" width="14" height="13" rx="2" fill="rgba(0,0,0,.5)" stroke="rgba(255,255,255,.3)" stroke-width=".5"/>',
+    '<text x="132" y="28" text-anchor="middle" font-family="Arial Black,sans-serif" font-size="7" font-weight="900" fill="#fff">E</text>',
+    // Art area - dark background with grid lines for depth
+    '<rect x="8" y="40" width="134" height="100" rx="2" fill="rgba(0,0,0,.5)" stroke="rgba(255,255,255,.05)" stroke-width="1"/>',
+    // Subtle grid
+    '<line x1="8" y1="70" x2="142" y2="70" stroke="rgba(255,255,255,.04)" stroke-width="1"/>',
+    '<line x1="8" y1="100" x2="142" y2="100" stroke="rgba(255,255,255,.04)" stroke-width="1"/>',
+    '<line x1="50" y1="40" x2="50" y2="140" stroke="rgba(255,255,255,.04)" stroke-width="1"/>',
+    '<line x1="100" y1="40" x2="100" y2="140" stroke="rgba(255,255,255,.04)" stroke-width="1"/>',
+    // Large system icon accent
+    '<text x="75" y="105" text-anchor="middle" font-size="52" fill="'+c.topBand+'" opacity=".18" filter="url(#glow)">'+c.icon+'</text>',
+    // Decorative corner accents
+    '<polygon points="8,40 24,40 8,56" fill="'+c.topBand+'" opacity=".4"/>',
+    '<polygon points="142,40 126,40 142,56" fill="'+c.topBand+'" opacity=".4"/>',
+    // Bottom title band
+    '<rect x="0" y="144" width="150" height="66" fill="rgba(0,0,0,.85)" rx="0"/>',
+    '<rect x="0" y="144" width="150" height="3" fill="'+c.topBand+'"/>',
+    // Title text
+    '<text x="75" y="'+titleY+'" text-anchor="middle" font-family="Arial Black,Impact,sans-serif" font-weight="900" fill="'+c.accent+'" filter="url(#glow)">'+tspans+'</text>',
+    // System badge bottom
+    '<rect x="8" y="178" width="86" height="16" rx="3" fill="'+c.topBand+'" opacity=".25" stroke="'+c.topBand+'" stroke-width=".5"/>',
+    '<text x="51" y="190" text-anchor="middle" font-family="Arial,sans-serif" font-size="7" font-weight="700" fill="rgba(255,255,255,.8)" letter-spacing="1.5">'+c.badge+'</text>',
+    // Stars/decorative dots
+    '<circle cx="108" cy="186" r="2" fill="'+c.accent+'" opacity=".5"/>',
+    '<circle cx="116" cy="186" r="2" fill="'+c.accent+'" opacity=".5"/>',
+    '<circle cx="124" cy="186" r="2" fill="'+c.accent+'" opacity=".5"/>',
+    '<circle cx="132" cy="186" r="2" fill="'+c.accent+'" opacity=".5"/>',
+    '<circle cx="140" cy="186" r="2" fill="'+c.accent+'" opacity=".5"/>',
+    // Bottom edge stripe
+    '<rect x="0" y="200" width="150" height="10" fill="'+c.botBand+'" opacity=".6" rx="0"/>',
+    '</svg>'
+  ].join("");
+
+  try{
+    return "data:image/svg+xml;base64,"+btoa(unescape(encodeURIComponent(svg)));
+  }catch(e){
+    return "data:image/svg+xml;base64,"+btoa(svg);
+  }
+}
+
+async function fetchBoxArt(indices){
+  if(!indices||!indices.length) return;
+  if(window.location.protocol==="file:") return;
+
+  for(var b=0; b<indices.length; b+=8){
+    var batch=indices.slice(b, b+8);
+    await Promise.all(batch.map(async function(i){
+      var g=LIBRARY[i]; if(!g) return;
+      if(g.coverBox&&g.coverCart) return; // already have both
+
+      // POST to /api/fetch-art - server downloads and caches, returns URL
+      async function fetchArtType(type){
+        try{
+          var r=await fetch("/retro/api/fetch-art",{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({system:g.system, title:g.title, type:type})
+          });
+          var d=await r.json();
+          return d.ok ? d.url : null;
+        }catch(e){ return null; }
+      }
+
+      if(!g.coverBox){
+        var url=await fetchArtType("box");
+        if(url){ g.coverBox=url; g.cover=url; }
+      }
+      if(!g.coverCart){
+        var url2=await fetchArtType("snap");
+        if(url2){ g.coverCart=url2; if(!g.coverBox) g.cover=url2; }
+      }
+      if(g.coverBox||g.coverCart){
+        // Regenerate SVG placeholder with real art (hide emoji)
+        g.cover=getCoverForMode(g);
+      }
+    }));
+    // Re-render after each batch so art appears progressively
+    saveLib(); renderGames();
+    // Small delay between batches
+    if(b+8<indices.length) await new Promise(function(r){ setTimeout(r,200); });
+  }
+}
+
+async function enrichBatch(indices,onProg){
+  const BATCH=15;
+  for(let i=0;i<indices.length;i+=BATCH){
+    const batch=indices.slice(i,i+BATCH);
+    const input=batch.map(idx=>({name:cleanName(LIBRARY[idx].filename||LIBRARY[idx].title),system:LIBRARY[idx].system}));
+    if(onProg)onProg(`Fetching metadata... ${Math.min(i+BATCH,indices.length)}/${indices.length}`);
+    try{
+      const results=await fetchMeta(input);
+      if(Array.isArray(results)){
+        results.forEach((meta,j)=>{
+          const idx=batch[j];if(idx===undefined)return;
+          const g=LIBRARY[idx];
+          if(meta&&meta.title)g.title=meta.title;
+          if(meta&&meta.genre)g.genre=meta.genre;
+          if(meta&&meta.year)g.year=meta.year;
+          if(meta&&meta.description)g.description=meta.description;
+          if(meta&&meta.emoji)g.emoji=meta.emoji;
+          g.metaDone=true;
+        });
+        saveLib();renderGames();
+      }
+    }catch(e){console.warn("Meta batch error",e);batch.forEach(idx=>{if(LIBRARY[idx])LIBRARY[idx].metaDone=true;});}
+    await new Promise(r=>setTimeout(r,400));
+  }
+}
+
+async function scanFolder(sysId,dh){
+  const sys=SYS_MAP[sysId];
+  LIBRARY=LIBRARY.filter(g=>!(g.system===sysId&&!g.manual));
+  const games=[];
+  for await(const entry of dh.values()){
+    if(entry.kind!=="file")continue;
+    const low=entry.name.toLowerCase();
+    const isZip=low.endsWith(".zip");
+    const isRom=sys.exts.some(e=>low.endsWith(e));
+    if(!isZip&&!isRom)continue;
+    games.push({filename:entry.name,title:cleanName(entry.name),system:sysId,genre:"Unknown",year:null,description:"",emoji:sys.emoji,cover:null,isZip,metaDone:false,fileHandle:entry});
+  }
+  games.sort((a,b)=>a.title.localeCompare(b.title));
+  LIBRARY.push(...games);
+  saveLib();
+  return games.length;
+}
+
+async function getRomBlob(g){
+  const file=await g.fileHandle.getFile();
+  if(!g.isZip)return new Blob([await file.arrayBuffer()],{type:"application/octet-stream"});
+  const sys=SYS_MAP[g.system];
+  const zip=await JSZip.loadAsync(await file.arrayBuffer());
+  let romEntry=null;
+  zip.forEach((path,entry)=>{if(romEntry)return;const lp=path.toLowerCase();if(sys.exts.some(e=>lp.endsWith(e)))romEntry=entry;});
+  if(!romEntry)throw new Error("No ROM found in ZIP: "+g.filename);
+  return new Blob([await romEntry.async("arraybuffer")],{type:"application/octet-stream"});
+}
+
+function buildSidebar(){
+  const counts={All:LIBRARY.length};
+  LIBRARY.forEach(g=>{counts[g.system]=(counts[g.system]||0)+1;});
+  let html=`<div class="sys-nav-item${activeSystem==="All"?" active":""}" data-sys="All"><span class="sys-dot" style="background:var(--accent2)"></span>All Systems<span class="sys-count-badge">${counts.All}</span></div>`;
+  SYSTEMS.forEach(s=>{
+    if(!counts[s.id])return;
+    html+=`<div class="sys-nav-item${activeSystem===s.id?" active":""}" data-sys="${s.id}"><span class="sys-dot" style="background:${s.color}"></span>${s.label}<span class="sys-count-badge">${counts[s.id]}</span></div>`;
+  });
+  document.getElementById("sys-nav").innerHTML=html;
+  document.querySelectorAll(".sys-nav-item").forEach(el=>{
+    el.addEventListener("click",()=>{
+      activeSystem=el.dataset.sys;
+      document.getElementById("content-title").textContent=activeSystem==="All"?"ALL GAMES":(SYS_MAP[activeSystem]?.label||activeSystem).toUpperCase();
+      buildSidebar();renderGames();
+    });
+  });
+}
+
+function renderGames(){
+  const gridEl=document.getElementById("game-grid"),listEl=document.getElementById("game-list");
+  const emptyEl=document.getElementById("empty-state"),noResEl=document.getElementById("no-results");
+  let games=LIBRARY.filter(g=>{
+    const ms=activeSystem==="All"||g.system===activeSystem;
+    const mq=!searchQ||g.title.toLowerCase().includes(searchQ)||(g.genre||"").toLowerCase().includes(searchQ)||g.system.toLowerCase().includes(searchQ)||String(g.year||"").includes(searchQ);
+    return ms&&mq;
+  });
+  games=games.slice().sort((a,b)=>{
+    if(sortKey==="name")return a.title.localeCompare(b.title);
+    if(sortKey==="year")return(b.year||0)-(a.year||0);
+    if(sortKey==="system")return a.system.localeCompare(b.system)||a.title.localeCompare(b.title);
+    if(sortKey==="genre")return(a.genre||"").localeCompare(b.genre||"")||a.title.localeCompare(b.title);
+    return 0;
+  });
+  const isEmpty=LIBRARY.length===0,noMatch=!isEmpty&&games.length===0;
+  emptyEl.classList.toggle("show",isEmpty);
+  noResEl.style.display=noMatch?"flex":"none";
+  document.getElementById("content-count").textContent=isEmpty?"":(games.length===LIBRARY.length?`${games.length} games`:`${games.length} of ${LIBRARY.length}`);
+  if(isEmpty||noMatch){gridEl.style.display="none";listEl.style.display="none";return;}
+  if(viewMode==="grid"){
+    gridEl.style.display="grid";listEl.style.display="none";
+    gridEl.innerHTML=games.map(g=>{
+      const idx=LIBRARY.indexOf(g),sys=SYS_MAP[g.system]||{};
+      const pub=g.publisher||g.developer||'';
+      return`<div class="game-card" data-idx="${idx}" tabindex="0" role="button" aria-label="${g.title}">
+        <div class="game-art">
+          ${(g.coverBox||g.coverCart||g._svgPlaceholder)
+            ?`<img src="${g.coverBox||g.coverCart||g._svgPlaceholder||''}" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.opacity='1')" alt="">`
+            :''}}
+          <span style="position:absolute;opacity:${(g.coverBox||g.coverCart)?'0':'1'};transition:opacity .2s;font-size:3rem">${g.emoji||sys.emoji||'🎮'}</span>
+          <span class="sys-badge" style="background:${sys.color||'#7c5cbf'}">${g.system}</span>
+          <div class="play-overlay"><div class="play-circle"><svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg></div></div>
+        </div>
+        <div class="card-info">
+          <div class="card-title">${g.title}</div>
+          ${pub?`<div class="card-publisher">${pub}</div>`:''}
+        </div>
+      </div>`;
+    })
+    .join("");
+    gridEl.querySelectorAll(".game-card").forEach(c=>{
+      c.addEventListener("click",()=>openDetail(+c.dataset.idx));
+      c.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" ")openDetail(+c.dataset.idx);});
+    });
+  }else{
+    gridEl.style.display="none";listEl.style.display="block";
+    listEl.innerHTML=`<div class="list-header"><span>#</span><span>Title</span><span>System</span><span>Genre</span><span>Year</span><span></span></div>`+
+    games.map((g,i)=>{
+      const idx=LIBRARY.indexOf(g),sys=SYS_MAP[g.system]||{};
+      return`<div class="list-row" data-idx="${idx}" tabindex="0" role="button">
+        <span class="list-num">${i+1}</span>
+        <span class="list-title">${g.title}${g.isZip&&CFG.showZipBadge?' <span style="font-size:.6rem;color:var(--dim)">[Z]</span>':""}</span>
+        <span class="list-sys" style="background:${sys.color||"#7c5cbf"}">${g.system}</span>
+        <span class="list-genre">${g.genre||"—"}</span>
+        <span class="list-year">${g.year||"—"}</span>
+        <button class="list-play" aria-label="Play ${g.title}"><svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg></button>
+      </div>`;
+    }).join("");
+    listEl.querySelectorAll(".list-row").forEach(r=>{
+      r.addEventListener("click",e=>{if(e.target.closest(".list-play"))launchGame(+r.dataset.idx);else openDetail(+r.dataset.idx);});
+      r.addEventListener("keydown",e=>{if(e.key==="Enter")openDetail(+r.dataset.idx);});
+    });
+  }
+}
+
+function openDetail(idx){
+  const g=LIBRARY[idx];if(!g)return;
+  detailIdx=idx;
+  const sys=SYS_MAP[g.system]||{};
+  document.getElementById("detail-hdr-sys").textContent=(sys.label||g.system).toUpperCase();
+  document.getElementById("detail-title").textContent=g.title;
+  document.getElementById("detail-year").textContent=g.year?`Released ${g.year}`:"";
+  document.getElementById("detail-file").textContent=g.filename||"";
+  const cv=document.getElementById("detail-cover");
+  cv.innerHTML=g.cover?`<img src="${g.cover}" alt="${g.title}" style="width:100%;height:100%;object-fit:cover;">`:`<span style="font-size:3rem">${g.emoji||sys.emoji||"🎮"}</span>`;
+  document.getElementById("detail-tags").innerHTML=`<span class="dtag" style="background:${sys.color||"var(--accent)"};color:#fff">${g.system}</span>${g.genre&&g.genre!=="Unknown"?`<span class="dtag" style="background:var(--surface3);color:var(--muted);border:1px solid var(--border2)">${g.genre}</span>`:""}${g.isZip?`<span class="dtag" style="background:var(--surface3);color:var(--dim);border:1px solid var(--border)">ZIP</span>`:""}`;
+  const dd=document.getElementById("detail-desc");
+  if(g.description){dd.textContent=g.description;dd.style.display="block";}else dd.style.display="none";
+  if(CFG.autoStart){launchGame(idx);return;}
+  openModal("detail-modal");
+}
+
+async function launchGame(idx){
+  const g=LIBRARY[idx]; if(!g){ toast("Game not found",true); return; }
+  closeModal("detail-modal");
+  activeGameIdx=idx;
+  const sys=SYS_MAP[g.system]||{};
+
+  document.getElementById("emu-title").textContent=g.title;
+  const badge=document.getElementById("emu-sys-badge");
+  badge.textContent=g.system; badge.style.background=sys.color||"var(--accent)";
+
+  // Reset iframe
+  const iframe=document.getElementById("emu-iframe");
+  iframe.style.display="none";
+  iframe.src="about:blank";
+  const spinner=document.getElementById("emu-spinner");
+  const spinnerTxt=document.getElementById("emu-spinner-txt");
+  spinner.style.display="flex";
+  spinnerTxt.textContent="Loading ROM...";
+  openModal("emu-modal");
+
+  // Block if opened as file://
+  if(window.location.protocol==="file:"){
+    spinner.style.display="none";
+    showEmuError("Open via the server:\n\n  Philibert\n\nDo NOT open retro-vault.html directly.");
+    return;
+  }
+
+  // ── Get ROM bytes and create blob URL ─────────────────────────────────
+  let romBlobUrl;
+  // isMame: MAME ZIPs are passed as-is (not extracted) — declared here for full scope
+  const isMame = g.system === "MAME";
+  try{
+    let romBytes;
+    if(g.fileHandle){
+      spinnerTxt.textContent="Reading local file...";
+      const blob=await getRomBlob(g);
+      romBytes=await blob.arrayBuffer();
+    } else if(isMame) {
+      // MAME: skip fetch entirely — use direct server URL so core reads filename
+      romBlobUrl = (g.romPath
+        ? (g.romPath.startsWith("http") ? g.romPath : window.location.origin+g.romPath)
+        : window.location.origin+"/retro/roms/MAME/"+encodeURIComponent(g.filename));
+    } else {
+      const url=g.romPath
+        ? (g.romPath.startsWith("http") ? g.romPath : window.location.origin+g.romPath)
+        : window.location.origin+"/retro/roms/"+g.system+"/"+encodeURIComponent(g.filename);
+      spinnerTxt.textContent="Fetching: "+g.filename;
+      console.log("[RV] Fetching:",url);
+      let resp;
+      try{ resp=await fetch(url,{mode:"cors"}); }
+      catch(e){ throw new Error("Network error — is server.js/server.py running?\n\nURL: "+url+"\n\nError: "+e.message); }
+      if(!resp.ok) throw new Error("Server returned "+resp.status+" "+resp.statusText+"\nURL: "+url);
+      const raw=await resp.arrayBuffer();
+      const isZip=g.isZip||g.filename.toLowerCase().endsWith(".zip");
+      if(isZip && !isMame){
+        spinnerTxt.textContent="Extracting ZIP...";
+        const zip=await JSZip.loadAsync(raw);
+        const exts=sys.exts||[];
+        let entry=null;
+        // Try to find ROM by known extensions
+        zip.forEach((p,e)=>{ if(entry)return; if(exts.some(x=>p.toLowerCase().endsWith(x))) entry=e; });
+        // Fallback: find largest file (usually the ROM)
+        if(!entry){
+          let biggest=null, biggestSize=0;
+          zip.forEach((p,e)=>{ if(!e.dir && e._data && (e._data.uncompressedSize||0)>biggestSize){ biggest=e; biggestSize=e._data.uncompressedSize||0; } });
+          entry=biggest;
+        }
+        if(!entry){ let names=[]; zip.forEach(p=>names.push(p)); throw new Error("No ROM found in ZIP.\nContents: "+names.join(", ")); }
+        spinnerTxt.textContent="Extracting: "+entry.name;
+        romBytes=await entry.async("arraybuffer");
+      } else { romBytes=raw; }
+    }
+    spinnerTxt.textContent="Starting emulator...";
+    if(!isMame){
+      // Non-MAME: create blob URL from extracted ROM bytes
+      if(window._romBlobUrl) URL.revokeObjectURL(window._romBlobUrl);
+      window._romBlobUrl=URL.createObjectURL(new Blob([romBytes],{type:"application/octet-stream"}));
+      romBlobUrl=window._romBlobUrl;
+    }    // MAME: romBlobUrl was set above as direct server URL
+  } catch(e){
+    spinner.style.display="none";
+    showEmuError(e.message);
+    console.error("[RV]",e);
+    return;
+  }
+
+  // ── Build the video CSS filter ────────────────────────────────────────
+  const filt=buildFilter();
+  const ejsBase=CFG.ejsUrl.replace(/\/$/,"");
+
+  // ── Write a full HTML document into the iframe via srcdoc ────────────
+  // This gives EmulatorJS its own document context so the canvas sizes correctly
+  // MAME: gameName must be the ROM set ID (filename without .zip, lowercase)
+  // Other systems: cleaned title works fine
+  const safeName = isMame
+    ? (g.filename||g.title||"game").replace(/\.zip$/i,"").replace(/[^a-zA-Z0-9_-]/g,"").toLowerCase().trim()||"game"
+    : (g.title||g.filename||"game").replace(/[^a-zA-Z0-9 _-]/g,"").trim()||"game";
+  var stateKey = "rvstate_" + g.system + "_" + safeName;
+  var _t = "scr"+"ipt";
+  var _dl = [];
+  _dl.push("<!DOCTYPE html><html><head><meta charset='UTF-8'>");
+  _dl.push("<style>*{margin:0;padding:0;box-sizing:border-box;}html,body{width:100%;height:100%;background:#000;overflow:hidden;}#game{width:100%;height:100%;display:flex;align-items:center;justify-content:center;}#game canvas,#game video{max-width:100%;max-height:100%;image-rendering:pixelated;}</style></head><body>");
+  _dl.push("<div id='game'></div><"+_t+">");
+  _dl.push("EJS_player='#game';EJS_core='"+( sys.core||"nes" )+"';EJS_gameUrl='"+romBlobUrl+"';");
+  _dl.push("EJS_gameName='"+safeName+"';EJS_pathtodata='"+ejsBase+"/';EJS_startOnLoaded=true;");
+  _dl.push("EJS_color='#7c5cbf';EJS_backgroundColor='#000000';EJS_disableAutoLang=false;EJS_threads=false;")
+;
+  // EJS auto-configures controls (custom mapping set via EJS_Buttons)
+  _dl.push("EJS_VirtualGamepadSettings={enabled:true};");
+  _dl.push("EJS_Buttons={playPause:true,restart:true,mute:true,settings:true,fullscreen:true,");
+  _dl.push("  saveState:{visible:true,callback:function(){window._doSave();}},");
+  _dl.push("  loadState:{visible:true,callback:function(){window._doLoad();}},");
+  _dl.push("  quickSave:{visible:true,callback:function(){window._doSave();}},");
+  _dl.push("  quickLoad:{visible:true,callback:function(){window._doLoad();}},");
+  _dl.push("  volume:true,screenshot:true,screenRecord:false,cheat:false};");
+  _dl.push("EJS_onGameStart=function(){ window._ejsReady=true; window.parent.postMessage({type:'ejs_started'},'*'); };");
+  _dl.push("EJS_onSaveState=function(){ window.parent.postMessage({type:'ejs_saved'},'*'); };");
+  _dl.push("EJS_onLoadState=function(){ window.parent.postMessage({type:'ejs_loaded'},'*'); };");
+  _dl.push("window._ejsReady=false; window._slot=1; window._stateKey='"+stateKey+"';");
+  _dl.push("window._doSave=function(){");
+  _dl.push("  if(!window._ejsReady||!window.EJS_emulator||!window.EJS_emulator.gameManager)return;");
+  _dl.push("  try{");
+  _dl.push("    var d=window.EJS_emulator.gameManager.getState();");
+  _dl.push("    if(!d||!d.length){window.parent.postMessage({type:'ejs_save_err',msg:'No data'},'*');return;}");
+  _dl.push("    var k=window._stateKey+'_'+window._slot;");
+  _dl.push("    fetch('/retro/state/'+encodeURIComponent(k),{method:'POST',body:d}).then(function(r){");
+  _dl.push("      if(!r.ok)throw new Error('drive said '+r.status);");
+  _dl.push("      window.parent.postMessage({type:'ejs_saved',slot:window._slot},'*');");
+  _dl.push("    }).catch(function(err){window.parent.postMessage({type:'ejs_save_err',msg:String(err)},'*');});");
+  _dl.push("  }catch(err){window.parent.postMessage({type:'ejs_save_err',msg:String(err)},'*');}");
+  _dl.push("};");
+  _dl.push("window._doLoad=function(){");
+  _dl.push("  if(!window._ejsReady||!window.EJS_emulator||!window.EJS_emulator.gameManager)return;");
+  _dl.push("  var k=window._stateKey+'_'+window._slot;");
+  _dl.push("  fetch('/retro/state/'+encodeURIComponent(k)).then(function(r){return r.ok?r.arrayBuffer():null;}).then(function(buf){");
+  _dl.push("      var data=buf?new Uint8Array(buf):null;");
+  _dl.push("      if(!data||!data.length){window.parent.postMessage({type:'ejs_load_empty',slot:window._slot},'*');return;}");
+  _dl.push("      try{window.EJS_emulator.gameManager.loadState(data);");
+  _dl.push("        window.parent.postMessage({type:'ejs_loaded',slot:window._slot},'*');}");
+  _dl.push("      catch(err){window.parent.postMessage({type:'ejs_load_err',msg:String(err)},'*');}});");
+  _dl.push("};");
+  _dl.push("window.addEventListener('message',function(e){");
+  _dl.push("  if(!e.data||e.data.type!=='retrovault_cmd')return;");
+  _dl.push("  window._slot=parseInt(e.data.slot||1);");
+  _dl.push("  if(e.data.cmd==='save')window._doSave();");
+  _dl.push("  else if(e.data.cmd==='load')window._doLoad();");
+  _dl.push("});");
+  _dl.push("</"+_t+"><"+_t+" src='"+ejsBase+"/loader.js'></"+_t+"></body></html>");
+  var doc = _dl.join("");
+
+  // Set srcdoc — preserves localhost origin so EJS can load CDN cores
+  // Brave compatibility: handled via Permissions-Policy server header
+  iframe.removeAttribute("src");
+  iframe.srcdoc = doc;
+  iframe.style.display = "block";
+
+  // Listen for messages from the iframe
+  window._emuMsgHandler=function(e){
+    if(!e.data) return;
+    var t=e.data.type;
+    var sl=e.data.slot||activeSlot();
+    if(t==="ejs_started"){
+      spinner.style.display="none";
+      var ifr=document.getElementById("emu-iframe");
+      if(ifr) ifr.style.filter=buildFilter();
+    } else if(t==="ejs_saved"){   toast("Saved ✓ Slot "+sl);
+    } else if(t==="ejs_loaded"){  toast("Loaded ✓ Slot "+sl);
+    } else if(t==="ejs_save_err"){ toast("Save failed: "+e.data.msg, true);
+    } else if(t==="ejs_load_err"){ toast("Load failed: "+e.data.msg, true);
+    } else if(t==="ejs_load_empty"){ toast("No save in Slot "+sl, true);
+    }
+  };
+  window.removeEventListener("message",window._emuMsgHandlerRef);
+  window._emuMsgHandlerRef=window._emuMsgHandler;
+  window.addEventListener("message",window._emuMsgHandlerRef);
+
+  // Fallback: hide spinner after 15s
+  clearTimeout(window._emuSpinnerTimer);
+  window._emuSpinnerTimer=setTimeout(function(){
+    spinner.style.display="none";
+    var _ifr=document.getElementById("emu-iframe");
+    if(_ifr) _ifr.style.filter=buildFilter();
+  },isMame?12000:8000); // MAME cores take longer to initialize
+}
+
+function showEmuError(msg){
+  const container=document.getElementById("emu-container");
+  document.getElementById("emu-spinner").style.display="none";
+  // Remove old error panel
+  const old=document.getElementById("emu-error-panel"); if(old) old.remove();
+  const errEl=document.createElement("div");
+  errEl.id="emu-error-panel";
+  errEl.style.cssText="position:absolute;inset:0;background:#0d0008;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1.5rem;gap:.75rem;z-index:20;";
+  container.appendChild(errEl);
+  errEl.style.display="flex";
+  errEl.innerHTML=`
+    <div style="font-family:'Press Start 2P',monospace;font-size:.55rem;color:#e05050;letter-spacing:.08em;">LOAD ERROR</div>
+    <pre style="background:#1a0010;border:1px solid #803030;border-radius:7px;padding:.85rem 1rem;font-size:.7rem;color:#ffaaaa;max-width:100%;white-space:pre-wrap;word-break:break-all;line-height:1.7;max-height:200px;overflow-y:auto;">${msg.replace(/</g,"&lt;")}</pre>
+    <div style="font-size:.7rem;color:#888;text-align:center;line-height:1.7;">
+      Make sure <strong style="color:#ccc">server.py is running</strong> (via start.bat) and ROMs are in the correct folder.<br>
+      Open browser DevTools (F12) → Console for more details.
+    </div>
+    <button onclick="closeEmu()" style="background:#7c5cbf;color:#fff;border:none;border-radius:7px;padding:.5rem 1.2rem;font-size:.75rem;font-family:inherit;cursor:pointer;margin-top:.25rem;">Close</button>
+  `;
+}
+
+function buildFilter(){
+  const v=VCFG,FMAP={none:"",crt:"contrast(1.1) brightness(0.95)",scanline:"contrast(1.05)",sharp:"contrast(1.15) saturate(1.1)",warm:"sepia(0.25) saturate(1.2)",cool:"hue-rotate(10deg) saturate(0.9)",grayscale:"grayscale(1)"};
+  const parts=[];if(v.brightness!==100)parts.push(`brightness(${v.brightness}%)`);if(v.contrast!==100)parts.push(`contrast(${v.contrast}%)`);if(v.saturation!==100)parts.push(`saturate(${v.saturation}%)`);
+  return[FMAP[v.filter]||"",...parts].filter(Boolean).join(" ")||"none";
+}
+
+function emuTeardown(){
+  const iframe=document.getElementById("emu-iframe");
+  if(iframe){ iframe.srcdoc=""; iframe.src="about:blank"; iframe.style.display="none"; }
+  if(window._romBlobUrl){ URL.revokeObjectURL(window._romBlobUrl); window._romBlobUrl=null; }
+  if(window._emuMsgHandlerRef){ window.removeEventListener("message",window._emuMsgHandlerRef); window._emuMsgHandlerRef=null; }
+  clearTimeout(window._emuSpinnerTimer);
+  const ep=document.getElementById("emu-error-panel"); if(ep) ep.remove();
+}
+function closeEmu(){
+  emuTeardown();
+  closeModal("emu-modal");
+  hideRestoreBar();
+  activeGameIdx=-1;
+}
+function minimizeEmu(){
+  // Hide modal but keep iframe running
+  document.getElementById("emu-modal").classList.remove("open");
+  document.body.style.overflow="";
+  showRestoreBar();
+}
+function restoreEmu(){
+  document.getElementById("emu-modal").classList.add("open");
+  document.body.style.overflow="hidden";
+  hideRestoreBar();
+  // Refocus iframe so keyboard input works again
+  setTimeout(()=>{
+    const iframe=document.getElementById("emu-iframe");
+    if(iframe) iframe.focus();
+  },100);
+}
+function showRestoreBar(){
+  const bar=document.getElementById("emu-restore-bar");
+  const title=document.getElementById("emu-restore-title");
+  if(bar&&title){
+    const g=LIBRARY[activeGameIdx];
+    title.textContent=g?g.title:"Game Running";
+    bar.style.display="flex";
+  }
+}
+function hideRestoreBar(){
+  const bar=document.getElementById("emu-restore-bar");
+  if(bar) bar.style.display="none";
+}
+function activeSlot(){ var el=document.getElementById("state-slot-select"); return el ? (+el.value+1) : 1; }
+function sendEmuCmd(cmd){
+  if(!document.getElementById("emu-modal").classList.contains("open")){ toast("No game running",true); return; }
+  var iframe=document.getElementById("emu-iframe");
+  if(!iframe||!iframe.contentWindow){ toast("Emulator not ready",true); return; }
+  var slot=activeSlot();
+  try{
+    var iw=iframe.contentWindow;
+    iw.postMessage({type:"retrovault_cmd",cmd:cmd,slot:slot},"*");
+    if(cmd==="save"||cmd==="load"){
+      // Also try direct call if available
+      if(cmd==="save" && typeof iw._doSave==="function") iw._doSave();
+      else if(cmd==="load" && typeof iw._doLoad==="function") iw._doLoad();
+    }
+  }catch(err){ toast("Emulator error: "+err.message,true); }
+}
+// Legacy alias used elsewhere
+function sendKey(k){
+  if(!document.getElementById("emu-modal").classList.contains("open")){
+    toast("No game running"); return;
+  }
+  if(k==="F2") sendEmuCmd("save");
+  else if(k==="F4") sendEmuCmd("load");
+  else sendEmuCmd(k);
+}
+
+document.getElementById("emu-save-btn").onclick=()=>{
+  if(!document.getElementById("emu-modal").classList.contains("open")){toast("No game running");return;}
+  sendEmuCmd("save"); toast("Saving state...");
+};
+document.getElementById("emu-load-btn").onclick=()=>{
+  if(!document.getElementById("emu-modal").classList.contains("open")){toast("No game running");return;}
+  sendEmuCmd("load"); toast("Loading state...");
+};
+document.getElementById("emu-video-btn").onclick=()=>openVideoModal();
+document.getElementById("emu-close-btn").onclick=closeEmu;
+document.getElementById("emu-np-btn").onclick=openEmuLobby;
+document.getElementById("emu-ctrl-btn").onclick=function(){closeModal("emu-modal");openModal("ctrl-modal");};
+document.getElementById("emu-minimize-btn").onclick=minimizeEmu;
+// Wire in-emulator PTT controls - sync with main PTT settings
+(function(){
+  var ec=document.getElementById("emu-ptt-enabled");
+  var em=document.getElementById("emu-ptt-mouse");
+  var et=document.getElementById("emu-ptt-test");
+  if(!ec) return;
+  // Sync from PTT state when emulator opens
+  var _origOpen=openModal;
+  openModal=function(id){
+    _origOpen(id);
+    if(id==="emu-modal"){
+      if(ec) ec.checked=PTT.enabled;
+      if(em) em.value=PTT.mouseBtn||"4";
+    }
+  };
+  if(ec) ec.onchange=function(){ PTT.enabled=ec.checked; pttSave(); toast(PTT.enabled?"PTT on":"PTT off"); };
+  if(em) em.onchange=function(){ PTT.mouseBtn=em.value; pttSave(); };
+  if(et) et.onclick=function(){
+    var btn=parseInt(PTT.mouseBtn||em&&em.value||"4");
+    if(!btn){ toast("Select PTT mouse button first",true); return; }
+    pttSendMouse(btn,true);
+    setTimeout(function(){ pttSendMouse(btn,false); },200);
+    toast("PTT test → Mouse "+btn);
+  };
+})();
+document.getElementById("mn-save-state").onclick=()=>{if(!document.getElementById("emu-modal").classList.contains("open")){toast("No game running");return;}sendEmuCmd("save");};
+document.getElementById("mn-load-state").onclick=()=>{if(!document.getElementById("emu-modal").classList.contains("open")){toast("No game running");return;}sendEmuCmd("load");};
+document.getElementById("tb-save-state").onclick=()=>{if(!document.getElementById("emu-modal").classList.contains("open")){toast("No game running");return;}sendEmuCmd("save");toast("Saving state...");};
+document.getElementById("tb-load-state").onclick=()=>{if(!document.getElementById("emu-modal").classList.contains("open")){toast("No game running");return;}sendEmuCmd("load");toast("Loading state...");};
+document.getElementById("detail-play-btn").onclick=()=>launchGame(detailIdx);
+
+// VIDEO
+const VF=[{id:"none",name:"None",desc:"Original"},{id:"crt",name:"CRT",desc:"Monitor glow"},{id:"scanline",name:"Scanlines",desc:"TV lines"},{id:"sharp",name:"Sharpen",desc:"Crisp edges"},{id:"warm",name:"Warm",desc:"Sepia tone"},{id:"cool",name:"Cool",desc:"Blue shift"},{id:"grayscale",name:"Greyscale",desc:"B&W"}];
+
+function openVideoModal(){
+  document.getElementById("filter-grid").innerHTML=VF.map(f=>`<div class="filter-opt${VCFG.filter===f.id?" selected":""}" data-fid="${f.id}"><div class="fo-name">${f.name}</div><div class="fo-desc">${f.desc}</div></div>`).join("");
+  document.querySelectorAll(".filter-opt").forEach(el=>{el.addEventListener("click",()=>{VCFG.filter=el.dataset.fid;document.querySelectorAll(".filter-opt").forEach(x=>x.classList.remove("selected"));el.classList.add("selected");updVidPreview();});});
+  document.getElementById("vid-aspect").value=VCFG.aspect||"4/3";
+  ["brightness","contrast","saturation"].forEach(k=>{
+    const el=document.getElementById("vid-"+k),out=document.getElementById("vid-"+k+"-val");
+    el.value=VCFG[k];out.textContent=VCFG[k]+"%";
+    el.oninput=()=>{VCFG[k]=+el.value;out.textContent=el.value+"%";updVidPreview();};
+  });
+  document.getElementById("vid-aspect").onchange=e=>{VCFG.aspect=e.target.value;};
+  updVidPreview();openModal("video-modal");
+}
+function updVidPreview(){document.getElementById("video-preview-emoji").style.filter=buildFilter();}
+document.getElementById("vid-reset").onclick=()=>{Object.assign(VCFG,{filter:"none",aspect:"4/3",brightness:100,contrast:100,saturation:100});openVideoModal();};
+document.getElementById("vid-apply").onclick=()=>{
+  saveVid();
+  // Apply filter to the live iframe without restarting the game
+  const iframe=document.getElementById("emu-iframe");
+  if(iframe){
+    iframe.style.filter=buildFilter();
+  }
+  closeModal("video-modal");
+};
+document.getElementById("tb-video").onclick=openVideoModal;
+document.getElementById("mn-video-opts").onclick=openVideoModal;
+
+// CONTROLLER
+
+
+document.getElementById("ctrl-reset").onclick=function(){
+  Object.assign(CTRL,DEF_CTRL);Object.assign(CTRL2,DEF_CTRL2);
+  GAMEPAD_ASSIGN={};buildCtrlGrids();toast("Mappings reset");
+};
+document.getElementById("ctrl-save").onclick=()=>{saveCtrl();closeModal("ctrl-modal");toast("Controller mapping saved.");};
+document.getElementById("tb-controller").onclick=openCtrlModal;
+document.getElementById("mn-ctrl-map").onclick=openCtrlModal;
+
+// SETTINGS
+// ═══════════════════════════════════════════════════════════
+// PER-SYSTEM ROM PATH MANAGEMENT
+// Paths saved server-side to T:\RetroVaultMedia\sys_paths.json
+// ═══════════════════════════════════════════════════════════
+var SYS_PATH_CACHE = {}; // {sysId: {override, resolved, count}}
+
+function loadSysPathsFromServer(){
+  if(window.location.protocol==="file:") return;
+  fetch("/retro/api/get-sys-paths")
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      SYS_PATH_CACHE = data;
+      buildSysFolderRows();
+    })
+    .catch(function(){});
+}
+
+function setSysPath(sysId, path){
+  if(window.location.protocol==="file:"){ toast("Requires server",true); return; }
+  if(!path){ toast("Enter a path first",true); return; }
+  return fetch("/retro/api/set-sys-path",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({system:sysId, path:path})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if(data.ok){
+      toast(sysId+" path saved ✓ Scanning ROMs...");
+      SYS_PATH_CACHE[sysId]={override:path,resolved:path,count:0};
+      buildSysFolderRows();
+      // Immediately scan this system
+      return fetch("/retro/api/roms?system="+sysId)
+        .then(function(r){ return r.json(); })
+        .then(function(resp){
+          var files=Array.isArray(resp)?resp:(resp[sysId]||[]);
+          var sys=SYS_MAP[sysId]||{};
+          // Remove existing entries for this system (re-scan replaces them)
+          LIBRARY=LIBRARY.filter(function(g){ return g.system!==sysId; });
+          files.forEach(function(f){
+            LIBRARY.push({
+              filename:f.name, title:cleanName(f.name), system:sysId,
+              genre:"Unknown", year:null, description:"", emoji:sys.emoji||"🎮",
+              cover:null, isZip:f.isZip||false, metaDone:false, romPath:f.path
+            });
+          });
+          LIBRARY.sort(function(a,b){
+            if(a.system!==b.system) return a.system.localeCompare(b.system);
+            return a.title.localeCompare(b.title);
+          });
+          SYS_PATH_CACHE[sysId].count=files.length;
+          saveLib(); buildSidebar(); renderGames(); buildSysFolderRows();
+          toast(sysId+": "+files.length+" ROM"+(files.length!==1?"s":"")+" loaded ✓");
+        });
+    } else {
+      toast("Path error: "+(data.error||"unknown"),true);
+    }
+  })
+  .catch(function(e){ toast("Failed: "+e.message,true); });
+}
+
+function buildSysFolderRows(){
+  const counts={};LIBRARY.forEach(g=>{counts[g.system]=(counts[g.system]||0)+1;});
+  document.getElementById("sys-folder-rows").innerHTML=SYSTEMS.map(s=>{
+    var cache=SYS_PATH_CACHE[s.id]||{};
+    var resolvedPath=cache.resolved||"";
+    var overridePath=cache.override||"";
+    var srvCount=cache.count||0;
+    var localCount=counts[s.id]||0;
+    var displayCount=Math.max(srvCount,localCount);
+    var shortPath=resolvedPath.length>40?"..."+resolvedPath.slice(-37):resolvedPath;
+    var label=s.id==="Genesis"?"GEN":s.id==="MAME"?"MAME":s.id;
+    return `<div class="sys-row">
+      <div class="sys-icon syi-${s.id}" style="background:${s.color||"var(--accent)"}">${label}</div>
+      <div class="sys-row-info" style="flex:1;min-width:0;">
+        <div class="sys-row-name">${s.label}</div>
+        <div class="sys-row-path" id="spath-${s.id}" style="font-size:.63rem;color:${resolvedPath?"var(--accent2)":"var(--dim)"};">
+          ${shortPath||"No path set — enter path below or use folder picker"}
+        </div>
+        <div style="display:flex;gap:.4rem;margin-top:.35rem;align-items:center;">
+          <input type="text" id="syspath-input-${s.id}" placeholder="e.g. G:\\Roms\\${s.id.toLowerCase()}" value="${overridePath}"
+            style="flex:1;background:var(--surface3);border:1px solid var(--border);border-radius:5px;
+            padding:.3rem .55rem;color:var(--text);font-size:.67rem;font-family:monospace;">
+          <button class="btn-ghost sys-path-save-btn" data-sys="${s.id}"
+            style="font-size:.65rem;padding:.28rem .65rem;white-space:nowrap;">&#x2713; Save Path</button>
+        </div>
+        <div class="sys-row-count" id="scount-${s.id}" style="margin-top:.25rem;">${displayCount?displayCount+" game"+(displayCount!==1?"s":""):""}</div>
+      </div>
+      <button class="folder-pick-btn" data-sys="${s.id}" title="Browse for folder"
+        style="flex-shrink:0;margin-left:.5rem;">
+        <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        Browse
+      </button>
+    </div>`;
+  }).join("");
+  document.querySelectorAll(".folder-pick-btn").forEach(btn=>btn.addEventListener("click",()=>pickFolder(btn.dataset.sys)));
+  document.querySelectorAll(".sys-path-save-btn").forEach(btn=>btn.addEventListener("click",function(){
+    var sysId=btn.dataset.sys;
+    var pathVal=document.getElementById("syspath-input-"+sysId).value.trim();
+    setSysPath(sysId, pathVal);
+  }));
+}
+
+async function pickFolder(sysId){
+  if(!window.showDirectoryPicker){toast("Requires Chrome or Edge",true);return;}
+  try{
+    const dh=await window.showDirectoryPicker({mode:"read"});
+    folderHandles[sysId]=dh;
+    const btn=document.querySelector(`.folder-pick-btn[data-sys="${sysId}"]`);
+    if(btn){btn.classList.add("busy");btn.textContent="Scanning...";}
+    setScan(true,"Scanning "+dh.name+"...");
+    const count=await scanFolder(sysId,dh);
+    document.getElementById("spath-"+sysId).textContent=dh.name;
+    document.getElementById("scount-"+sysId).textContent=count+" game"+(count!==1?"s":"");
+    if(btn){btn.classList.remove("busy");btn.textContent="Change";}
+    toast(`Found ${count} ROM${count!==1?"s":""} in ${dh.name}`);
+    buildSidebar();renderGames();
+    if(CFG.autoMeta){
+      const need=LIBRARY.map((g,i)=>({g,i})).filter(({g})=>g.system===sysId&&!g.metaDone).map(({i})=>i);
+      if(need.length){ await enrichBatch(need,msg=>setScan(true,msg)); }
+      // Box art not auto-downloaded on folder add; use View > Download Box Art
+    }
+    setScan(false);buildSidebar();renderGames();buildSysFolderRows();
+  }catch(e){if(e.name!=="AbortError"){toast("Error: "+e.message,true);console.error(e);}setScan(false);}
+}
+
+function setScan(show,msg){
+  document.getElementById("scan-bar").classList.toggle("show",show);
+  if(msg)document.getElementById("scan-msg").textContent=msg;
+}
+
+function openSettingsModal(tab){
+  buildSysFolderRows();
+  document.getElementById("port-input").value=CFG.port;
+  document.getElementById("host-input").value=CFG.hostOverride;
+  document.getElementById("rom-base-url").value=CFG.romBaseUrl;
+  document.getElementById("opt-autometa").checked=CFG.autoMeta;
+  document.getElementById("opt-zipbadge").checked=CFG.showZipBadge;
+  document.getElementById("opt-autostart").checked=CFG.autoStart;
+  document.getElementById("opt-artmode").value=CFG.artMode||"box";
+  document.getElementById("opt-ejsurl").value=CFG.ejsUrl;
+  updPortPreview();
+  if(tab)switchTab(tab);
+  openModal("settings-modal");
+}
+function updPortPreview(){
+  const port=document.getElementById("port-input").value||"8080",host=document.getElementById("host-input").value||"localhost";
+  document.getElementById("port-preview").textContent="http://"+host+":"+port;
+}
+document.getElementById("port-input").addEventListener("input",updPortPreview);
+document.getElementById("host-input").addEventListener("input",updPortPreview);
+document.getElementById("copy-local-url").onclick=()=>{const u="http://localhost:"+(document.getElementById("port-input").value||8080);navigator.clipboard.writeText(u).then(()=>toast("Copied: "+u)).catch(()=>toast("Copy failed"));};
+document.getElementById("copy-lan-url").onclick=()=>{const h=document.getElementById("host-input").value||window.location.hostname,u="http://"+h+":"+(document.getElementById("port-input").value||8080);navigator.clipboard.writeText(u).then(()=>toast("Copied: "+u)).catch(()=>toast("Copy failed"));};
+document.getElementById("btn-settings-save").onclick=()=>{
+  CFG.port=+document.getElementById("port-input").value||8080;
+  CFG.hostOverride=document.getElementById("host-input").value;
+  CFG.romBaseUrl=document.getElementById("rom-base-url").value||"/retro/roms";
+  CFG.autoMeta=document.getElementById("opt-autometa").checked;
+  CFG.showZipBadge=document.getElementById("opt-zipbadge").checked;
+  CFG.autoStart=document.getElementById("opt-autostart").checked;
+  CFG.artMode=document.getElementById("opt-artmode").value||"box";
+  CFG.ejsUrl="/retro/emulator/";   // always the drive's copy
+  saveCfg();closeModal("settings-modal");toast("Settings saved.");renderGames();
+  // Sync sys path overrides from server
+  loadSysPathsFromServer();
+};
+document.getElementById("btn-clear-lib").onclick=()=>{if(!confirm("Remove all games from library?"))return;LIBRARY=[];folderHandles={};saveLib();buildSidebar();renderGames();buildSysFolderRows();toast("Library cleared.");};
+
+["tb-add-folder","sidebar-add-folder","mn-open-folder","empty-add-btn"].forEach(id=>{const el=document.getElementById(id);if(el)el.onclick=()=>openSettingsModal("tab-folders");});
+document.getElementById("mn-settings").onclick=()=>openSettingsModal();
+
+function switchTab(tabId){
+  document.querySelectorAll(".stab,.stab-panel").forEach(el=>el.classList.remove("active"));
+  document.querySelector(`.stab[data-tab="${tabId}"]`)?.classList.add("active");
+  document.getElementById(tabId)?.classList.add("active");
+}
+document.querySelectorAll(".stab").forEach(t=>t.addEventListener("click",()=>switchTab(t.dataset.tab)));
+var gpRefBtn=document.getElementById("gp-refresh-btn");
+if(gpRefBtn)gpRefBtn.onclick=function(){btStart();buildGpAssign();toast("Controllers refreshed");};
+
+// MENU DROPDOWNS
+document.querySelectorAll(".menu-btn").forEach(btn=>{
+  btn.addEventListener("click",e=>{
+    e.stopPropagation();const mid="menu-"+btn.dataset.menu;
+    const isOpen=document.getElementById(mid).classList.contains("open");
+    closeAllMenus();if(!isOpen){document.getElementById(mid).classList.add("open");btn.classList.add("open");}
+  });
+});
+document.addEventListener("click",closeAllMenus);
+function closeAllMenus(){document.querySelectorAll(".dropdown").forEach(d=>d.classList.remove("open"));document.querySelectorAll(".menu-btn").forEach(b=>b.classList.remove("open"));}
+
+document.getElementById("mn-refresh").onclick=function(){
+  toast("Refreshing library...");
+  serverAutoLoad();
+};
+document.getElementById("mn-clear").onclick=()=>document.getElementById("btn-clear-lib").click();
+document.getElementById("mn-clear-cache").onclick=()=>{
+  if(!confirm("Clear all cached game data and reload from server?\n\nThis fixes stale filenames (e.g. .bin vs .zip). Your metadata will be re-fetched.")) return;
+  localStorage.removeItem("rv_lib");
+  toast("Cache cleared — reloading...");
+  setTimeout(()=>window.location.reload(), 800);
+};
+document.getElementById("mn-grid-view").onclick=()=>{viewMode="grid";document.getElementById("vt-grid").classList.add("active");document.getElementById("vt-list").classList.remove("active");renderGames();};
+document.getElementById("mn-list-view").onclick=()=>{viewMode="list";document.getElementById("vt-list").classList.add("active");document.getElementById("vt-grid").classList.remove("active");renderGames();};
+document.getElementById("mn-sort-name").onclick=()=>{sortKey="name";document.getElementById("sort-sel").value="name";renderGames();};
+document.getElementById("mn-sort-year").onclick=()=>{sortKey="year";document.getElementById("sort-sel").value="year";renderGames();};
+document.getElementById("mn-sort-sys").onclick=()=>{sortKey="system";document.getElementById("sort-sel").value="system";renderGames();};
+
+function setArtMode(mode){
+  CFG.artMode=mode; saveCfg();
+  LIBRARY.forEach(g=>{ g.cover=getCoverForMode(g); });
+  saveLib(); renderGames();
+  toast("Artwork: "+(mode==="box"?"Box Art":mode==="cart"?"Cartridge Art":"Hidden"));
+}
+document.getElementById("mn-art-box").onclick=()=>setArtMode("box");
+document.getElementById("mn-art-cart").onclick=()=>setArtMode("cart");
+document.getElementById("mn-art-none").onclick=()=>setArtMode("none");
+document.getElementById("mn-download-art").onclick=function(){
+  closeAllMenus();
+  var missing=[];
+  LIBRARY.forEach(function(g,i){ if(!g.coverBox&&!g.coverCart) missing.push(i); });
+  if(!missing.length){ toast("All box art already downloaded ✓"); return; }
+  toast("Downloading box art for "+missing.length+" games… (View > Download Box Art to cancel reload)");
+  for(var b=0;b<missing.length;b+=20){
+    (function(batch,delay){
+      setTimeout(function(){ fetchBoxArt(batch); },delay);
+    })(missing.slice(b,b+20), b*150);
+  }
+};
+document.getElementById("mn-metadata").onclick=async()=>{
+  const need=LIBRARY.map((g,i)=>i);if(!need.length){toast("No games in library.");return;}
+  LIBRARY.forEach(g=>g.metaDone=false);saveLib();
+  toast("Re-fetching metadata for all games...");
+  await enrichBatch(need,msg=>toast(msg));
+  toast("Metadata updated!");
+};
+document.getElementById("mn-boxart").onclick=async()=>{
+  const all=LIBRARY.map((g,i)=>i);if(!all.length){toast("No games in library.");return;}
+  LIBRARY.forEach(g=>g.cover=null);saveLib();
+  toast("Fetching box art for all games...");
+  for(let i=0;i<all.length;i+=20){
+    await fetchBoxArt(all.slice(i,i+20));
+    toast(`Box art: ${Math.min(i+20,all.length)}/${all.length}`);
+  }
+  renderGames();toast("Box art updated!");
+};
+
+document.getElementById("vt-grid").onclick=()=>{viewMode="grid";document.getElementById("vt-grid").classList.add("active");document.getElementById("vt-list").classList.remove("active");renderGames();};
+document.getElementById("vt-list").onclick=()=>{viewMode="list";document.getElementById("vt-list").classList.add("active");document.getElementById("vt-grid").classList.remove("active");renderGames();};
+document.getElementById("sort-sel").onchange=e=>{sortKey=e.target.value;renderGames();};
+document.getElementById("tb-search").addEventListener("input",e=>{searchQ=e.target.value.toLowerCase();renderGames();});
+
+// MODAL HELPERS
+function openModal(id){
+  // Close any open dropdown menus first
+  document.querySelectorAll(".dropdown").forEach(function(d){ d.classList.remove("open"); });
+  document.querySelectorAll(".menu-btn").forEach(function(b){ b.classList.remove("open"); });
+  document.getElementById(id).classList.add("open");
+  document.body.style.overflow="hidden";
+}
+function closeModal(id){document.getElementById(id).classList.remove("open");document.body.style.overflow="";}
+document.querySelectorAll("[data-close]").forEach(el=>el.addEventListener("click",()=>closeModal(el.dataset.close)));
+document.querySelectorAll(".modal-overlay").forEach(ov=>ov.addEventListener("click",e=>{
+  if(e.target!==ov) return;
+  // Never close the emulator by clicking outside - minimize it instead
+  if(ov.id==="emu-modal"){ minimizeEmu(); return; }
+  closeModal(ov.id);
+}));
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"){const open=[...document.querySelectorAll(".modal-overlay.open")];if(open.length){const last=open[open.length-1];if(last.id==="emu-modal")closeEmu();else closeModal(last.id);}}
+  if(e.key==="F2")sendKey("F2");if(e.key==="F4")sendKey("F4");
+  if((e.ctrlKey||e.metaKey)&&e.key==="o"){e.preventDefault();openSettingsModal("tab-folders");}
+  if(e.key==="F5"&&!document.querySelector(".modal-overlay.open")){e.preventDefault();document.getElementById("mn-refresh").click();}
+});
+
+// ── UPLOAD ──────────────────────────────────────────────────────────────
+function openUploadModal(){
+  document.getElementById("upload-result").style.display="none";
+  document.getElementById("upload-progress").style.display="none";
+  document.getElementById("upload-progress-bar").style.width="0%";
+  document.getElementById("upload-file-label").textContent="Click to choose file or drag and drop";
+  document.getElementById("upload-file-input").value="";
+  openModal("upload-modal");
+}
+
+// Wire open triggers
+["tb-upload","mn-upload"].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el) el.onclick=()=>openUploadModal();
+});
+
+// File input label update
+const uploadInput=document.getElementById("upload-file-input");
+const uploadZone=document.getElementById("upload-drop-zone");
+const uploadLabel=document.getElementById("upload-file-label");
+
+uploadInput.addEventListener("change",()=>{
+  if(uploadInput.files[0]) uploadLabel.textContent=uploadInput.files[0].name+" ("+Math.round(uploadInput.files[0].size/1024)+" KB)";
+});
+
+// Drag and drop
+uploadZone.addEventListener("dragover",e=>{ e.preventDefault(); uploadZone.style.borderColor="var(--accent)"; });
+uploadZone.addEventListener("dragleave",()=>{ uploadZone.style.borderColor="var(--border2)"; });
+uploadZone.addEventListener("drop",e=>{
+  e.preventDefault();
+  uploadZone.style.borderColor="var(--border2)";
+  const f=e.dataTransfer.files[0];
+  if(f){
+    // Use DataTransfer to set files on input
+    const dt=new DataTransfer();
+    dt.items.add(f);
+    uploadInput.files=dt.files;
+    uploadLabel.textContent=f.name+" ("+Math.round(f.size/1024)+" KB)";
+  }
+});
+
+document.getElementById("upload-submit-btn").onclick=async()=>{
+  if(window.location.protocol==="file:"){
+    toast("Upload requires the server to be running (Philibert)",true); return;
+  }
+  const file=uploadInput.files[0];
+  if(!file){ toast("Please select a ROM file first",true); return; }
+  const system=document.getElementById("upload-system").value;
+  
+  const resultEl=document.getElementById("upload-result");
+  const progressEl=document.getElementById("upload-progress");
+  const barEl=document.getElementById("upload-progress-bar");
+  const txtEl=document.getElementById("upload-progress-txt");
+  
+  resultEl.style.display="none";
+  progressEl.style.display="block";
+  barEl.style.width="0%";
+  txtEl.textContent="Uploading "+file.name+"...";
+  document.getElementById("upload-submit-btn").disabled=true;
+
+  try{
+    const fd=new FormData();
+    fd.append("system", system);
+    fd.append("rom", file, file.name);
+
+    // Use XMLHttpRequest for upload progress
+    const result=await new Promise((resolve,reject)=>{
+      const xhr=new XMLHttpRequest();
+      xhr.open("POST", "/upload");
+      xhr.upload.onprogress=e=>{
+        if(e.lengthComputable){
+          const pct=Math.round(e.loaded/e.total*100);
+          barEl.style.width=pct+"%";
+          txtEl.textContent=pct+"% — "+Math.round(e.loaded/1024)+" / "+Math.round(e.total/1024)+" KB";
+        }
+      };
+      xhr.onload=()=>{
+        try{ resolve(JSON.parse(xhr.responseText)); }
+        catch(e){ reject(new Error("Invalid server response: "+xhr.responseText.slice(0,100))); }
+      };
+      xhr.onerror=()=>reject(new Error("Network error during upload"));
+      xhr.send(fd);
+    });
+
+    barEl.style.width="100%";
+
+    if(result.ok && result.saved && result.saved.length > 0){
+      const s=result.saved[0];
+      txtEl.textContent="Upload complete!";
+      resultEl.style.cssText="display:block;background:rgba(46,168,110,.12);border:1px solid #2ea86e;border-radius:8px;padding:.75rem 1rem;font-size:.75rem;color:#7ddfaa;line-height:1.8;";
+      resultEl.innerHTML="<strong style='color:#a0ffcc'>Upload successful!</strong><br>"+
+        "File: "+s.name+"<br>System: "+s.system+"<br>Size: "+Math.round(s.size/1024)+" KB<br><br>"+
+        "<span style='color:#7ddfaa;font-size:.7rem'>The game is now available to all users. Refresh the library to see it.</span>";
+      // Auto-add to library
+      const sys=SYS_MAP[s.system]||{};
+      const isZip=s.name.toLowerCase().endsWith(".zip");
+      const exists=LIBRARY.some(g=>g.system===s.system&&g.filename===s.name);
+      if(!exists){
+        LIBRARY.push({filename:s.name,title:cleanName(s.name),system:s.system,
+          genre:"Unknown",year:null,description:"",emoji:sys.emoji||"🎮",
+          cover:null,isZip,metaDone:false,romPath:s.path});
+        saveLib(); buildSidebar(); renderGames();
+        // Fetch metadata for new game
+        const newIdx=LIBRARY.length-1;
+        if(CFG.autoMeta){ await enrichBatch([newIdx],msg=>toast(msg)); }
+        await fetchBoxArt([LIBRARY.length-1]);
+      }
+      toast("ROM uploaded: "+s.name);
+      if(result.errors&&result.errors.length) toast("Warnings: "+result.errors.join(", "),true);
+    } else {
+      const errs=(result.errors||[]).join("\n")||(result.error||"Unknown error");
+      resultEl.style.cssText="display:block;background:rgba(217,79,79,.1);border:1px solid #d94f4f;border-radius:8px;padding:.75rem 1rem;font-size:.75rem;color:#ffaaaa;line-height:1.8;";
+      resultEl.innerHTML="<strong>Upload failed</strong><br>"+errs;
+      txtEl.textContent="Upload failed.";
+    }
+  }catch(e){
+    barEl.style.width="0%";
+    txtEl.textContent="Error: "+e.message;
+    resultEl.style.cssText="display:block;background:rgba(217,79,79,.1);border:1px solid #d94f4f;border-radius:8px;padding:.75rem 1rem;font-size:.75rem;color:#ffaaaa;";
+    resultEl.innerHTML="<strong>Upload error</strong><br>"+e.message;
+    toast("Upload failed: "+e.message, true);
+  }finally{
+    document.getElementById("upload-submit-btn").disabled=false;
+  }
+};
+
+
+// ===================================================
+// NETPLAY CLIENT
+// ===================================================
+let npWs=null,npMyId=null,npMyUser=null,npMyPlayerNum=1,npPendingInvite=null,npCurrentRoom=null;
+
+// NETPLAY LOBBY
+var _lobbySlots={};
+function updateLobbySlots(obj){
+  _lobbySlots={};
+  if(obj) Object.keys(obj).forEach(function(k){ _lobbySlots[parseInt(k)]=obj[k]; });
+  renderEmuLobbySlots(); renderEmuLobbyPlayers();
+}
+function renderEmuLobbySlots(){
+  var el=document.getElementById("emu-lobby-slots"); if(!el) return;
+  var html="";
+  for(var p=1;p<=4;p++){
+    var name=_lobbySlots[p]||"";
+    var isMe=!!(name&&npMyUser&&name===npMyUser);
+    var taken=!!name&&!isMe;
+    var bc=isMe?"var(--accent2)":"var(--border)";
+    var nc=isMe?"var(--text)":name?"var(--muted)":"var(--dim)";
+    html+="<div style='display:flex;align-items:center;gap:.35rem;padding:.28rem .4rem;"
+      +"border-radius:5px;background:var(--surface2);border:1px solid "+bc+";'>"
+      +"<span style='font-size:.6rem;font-weight:700;color:var(--accent);min-width:20px;'>P"+p+"</span>"
+      +"<span style='flex:1;font-size:.63rem;color:"+nc+";'>"+(name||"<em style='opacity:.4'>empty</em>")+"</span>"
+      +(!taken?"<button onclick='claimSlot("+p+")' style='font-size:.52rem;padding:.12rem .3rem;"
+        +"background:"+(isMe?"var(--accent2)":"var(--surface3)")+";border:1px solid var(--border);"
+        +"border-radius:3px;color:var(--text);cursor:pointer;'>"+(isMe?"\u2713":"Take")+"</button>":"")
+      +"</div>";
+  }
+  el.innerHTML=html;
+}
+function renderEmuLobbyPlayers(){
+  var el=document.getElementById("emu-lobby-players"); if(!el) return;
+  var keys=Object.keys(_lobbySlots).sort();
+  if(!keys.length){el.innerHTML="<div style='font-size:.6rem;color:var(--dim);'>No players yet</div>";return;}
+  el.innerHTML=keys.map(function(k){
+    var name=_lobbySlots[k]||""; if(!name) return "";
+    var isme=(name===npMyUser);
+    return "<div style='padding:.22rem 0;font-size:.63rem;display:flex;align-items:center;gap:.35rem;'>"
+      +"<span style='font-size:.55rem;color:var(--accent);min-width:18px;'>P"+k+"</span>"
+      +"<span style='color:"+(isme?"var(--text)":"var(--muted)")+";'>"+esc(name)+"</span>"
+      +(isme?"<span style='font-size:.48rem;color:var(--accent2);'>(you)</span>":"")
+      +"</div>";
+  }).join("");
+}
+function claimSlot(num){
+  if(!npWs||npWs.readyState!==1){toast("Not in netplay room",true);return;}
+  npSend({type:"claim_slot",slot:num});
+  npMyPlayerNum=num;
+  renderEmuLobbySlots();
+}
+function openEmuLobby(){
+  var el=document.getElementById("emu-lobby"); if(!el) return;
+  var rEl=document.getElementById("emu-lobby-room");
+  if(rEl) rEl.textContent=npCurrentRoom?(npMyUser||"?")+" \u00B7 Room \u00B7 P"+npMyPlayerNum:"Not in a room \u2014 open Netplay first";
+  renderEmuLobbySlots(); renderEmuLobbyPlayers();
+  el.style.display="flex";
+  var cb=document.getElementById("emu-lobby-close");
+  if(cb) cb.onclick=function(){el.style.display="none";};
+  var ci=document.getElementById("emu-lobby-chat");
+  var sb=document.getElementById("emu-lobby-send");
+  function doChat(){var t=ci&&ci.value.trim();if(!t)return;npSend({type:"chat",text:t});if(ci)ci.value="";}
+  if(sb) sb.onclick=doChat;
+  if(ci) ci.onkeydown=function(e){if(e.key==="Enter")doChat();};
+}
+function npWsUrl(){
+  const host=CFG.hostOverride||window.location.hostname||"localhost";
+  const port=CFG.netplayPort||3000;
+  const proto=window.location.protocol==="https:"?"wss:":"ws:";
+  return proto+"//"+host+":"+port;
+}
+
+function npConnect(username){
+  const errEl=document.getElementById("np-connect-err");
+  errEl.style.display="none";
+  try{ npWs=new WebSocket(npWsUrl()); }
+  catch(e){ errEl.textContent="Could not connect: "+e.message; errEl.style.display="block"; return; }
+  npWs.onopen=()=>{ npSend({type:"login",username}); };
+  npWs.onmessage=e=>{ try{npHandleMsg(JSON.parse(e.data));}catch(ex){} };
+  npWs.onerror=function(ev){
+    var port = CFG.netplayPort||3000;
+    var host = CFG.hostOverride||window.location.hostname||"localhost";
+    errEl.innerHTML = "Connection failed to <strong>ws://"+host+":"+port+"</strong><br>"
+      + "Make sure <strong>netplay_server.py</strong> is running and port "+port+" is not blocked by firewall."
+      + "<br><span style='color:var(--dim);font-size:.68rem;'>If you just started start.bat, wait 2-3 seconds then try again.</span>";
+    errEl.style.display="block";
+    npWs=null;
+  };
+  npWs.onclose=()=>{
+    npMyId=null; npMyUser=null;
+    document.getElementById("np-login-screen").style.display="flex";
+    document.getElementById("np-main-screen").style.display="none";
+    document.getElementById("np-logout-btn").style.display="none";
+    npUpdateBadge(false);
+    document.getElementById("np-status-bar").textContent="Disconnected";
+  };
+}
+
+function npSend(obj){ if(npWs&&npWs.readyState===1) npWs.send(JSON.stringify(obj)); }
+
+function npHandleMsg(msg){
+  const t=msg.type;
+  if(t==="logged_in"){
+    npMyId=msg.id; npMyUser=msg.username;
+    document.getElementById("np-login-screen").style.display="none";
+    document.getElementById("np-main-screen").style.display="flex";
+    document.getElementById("np-logout-btn").style.display="inline-flex";
+    document.getElementById("np-status-bar").textContent="Online as "+npMyUser;
+    document.getElementById("np-connect-err").style.display="none";
+    npUpdateBadge(true);
+    if(msg.recent&&msg.recent.length) npRenderRecent(msg.recent);
+    toast("Connected as "+npMyUser);
+    if(activeGameIdx>=0&&LIBRARY[activeGameIdx]){
+      const g=LIBRARY[activeGameIdx];
+      npSend({type:"playing",game:{title:g.title,system:g.system,cover:g.cover,filename:g.filename,
+        romPath:g.romPath||("/retro/roms/"+g.system+"/"+encodeURIComponent(g.filename||""))}});
+    }
+  } else if(t==="state"){
+    npRenderOnline(msg.online||[]);
+    npRenderRooms(msg.rooms||[]);
+  } else if(t==="room_created"){
+    npCurrentRoom=msg.roomId;
+    npMyPlayerNum=msg.playerNumber||1;
+    var _ms={}; _ms[npMyPlayerNum]=npMyUser||"Host";
+    updateLobbySlots(_ms);
+    npAddChat({type:"sys",text:"Room created. You are Player "+npMyPlayerNum+"."});
+    toast("★ Room created! You are Player "+npMyPlayerNum);
+    npSwitchTab("rooms");
+  } else if(t==="room_joined"){
+    npMyPlayerNum=msg.playerNumber||2;
+    npCurrentRoom=msg.roomId;
+    if(msg.playerSlots) updateLobbySlots(msg.playerSlots);
+    toast("✅ Connected to "+esc(msg.hostName||"host")+"'s room as Player "+npMyPlayerNum);
+    if(msg.game){
+      const found=LIBRARY.findIndex(g=>g.system===msg.game.system&&g.title===msg.game.title);
+      if(found>=0) launchGame(found);
+    }
+    npSwitchTab("rooms");
+  } else if(t==="room_closed"){ npCurrentRoom=null; toast("Room closed by host"); }
+  else if(t==="player_joined"){
+    npAddChat({type:"sys",text:esc(msg.user)+" joined as P"+(msg.playerNum||"?")});
+    toast("👤 "+esc(msg.user)+" joined as Player "+(msg.playerNum||"?"));
+    if(msg.playerSlots) updateLobbySlots(msg.playerSlots);
+  }
+  else if(t==="player_left"){   npAddChat({type:"sys",text:esc(msg.user)+" left"}); toast("🚪 "+esc(msg.user)+" left"); }
+  else if(t==="slots_updated"){if(msg.playerSlots)updateLobbySlots(msg.playerSlots);}
+  else if(t==="kicked"){        npCurrentRoom=null; toast("Kicked by "+esc(msg.by),true); }
+  else if(t==="invite"){
+    npPendingInvite=msg;
+    document.getElementById("np-invite-msg").textContent=
+      esc(msg.from)+" invites you to play "+esc(msg.game?.title||"a game");
+    document.getElementById("np-invite-toast").style.display="block";
+    setTimeout(()=>{document.getElementById("np-invite-toast").style.display="none";npPendingInvite=null;},30000);
+  } else if(t==="chat"){ npAddChat(msg); }
+}
+
+
+
+
+
+
+
+function npRenderOnline(users){
+  var el=document.getElementById("np-online-list");
+  if(!el) return;
+  if(!users.length){
+    el.innerHTML='<div style="font-size:.72rem;color:var(--dim);text-align:center;padding:2rem 0;">No one else online yet</div>';
+    return;
+  }
+  el.innerHTML=users.map(function(u){
+    var isMe=u.id===npMyId;
+    var init=(u.user||"?").substring(0,2).toUpperCase();
+    var playing=u.playing?"Playing: "+esc(u.playing.title)+" ("+esc(u.playing.system||"")+")":" Browsing";
+    var invBtn=(!isMe)?'<button class="btn-ghost np-invite-btn" data-uid="'+u.id+'" style="font-size:.67rem;padding:.25rem .6rem;">Invite</button>':'';
+    return '<div class="np-user-row">'+
+      '<div class="np-avatar" style="background:'+(isMe?"var(--accent)":"var(--snes)")+'">'+init+'</div>'+
+      '<div class="np-uinfo"><div class="np-uname">'+esc(u.user||"?")+(isMe?" (you)":"")+'</div>'+
+      '<div class="np-ustatus">'+playing+'</div></div>'+
+      invBtn+'</div>';
+  }).join("");
+  // Event delegation for invite buttons
+  el.querySelectorAll(".np-invite-btn").forEach(function(btn){
+    btn.onclick=function(){ npInvite(btn.dataset.uid); };
+  });
+  document.getElementById("np-status-bar").textContent="Online as "+npMyUser+" · "+users.length+" online";
+}
+
+function npRenderRooms(rooms){
+  var el=document.getElementById("np-rooms-list");
+  var none=document.getElementById("np-no-rooms");
+  if(!el) return;
+  var open=rooms.filter(function(r){ return r.host!==npMyId; });
+  if(!open.length){ el.innerHTML=""; none.style.display="block"; return; }
+  none.style.display="none";
+  el.innerHTML=open.map(function(r){
+    var full=r.players>=r.maxPlayers;
+    var joinBtn=(!full)?'<button class="btn-primary np-join-btn" data-rid="'+r.id+'" style="font-size:.7rem;padding:.32rem .7rem;margin-left:.5rem;">Join</button>':
+      '<span style="font-size:.68rem;color:var(--dim);margin-left:.5rem;">Full</span>';
+    return '<div class="np-room-row">'+
+      '<div class="np-rinfo">'+
+        '<div class="np-rname">'+esc(r.name||"Room")+'</div>'+
+        '<div class="np-rgame">'+esc(r.game&&r.game.title||"Unknown")+" · "+esc(r.game&&r.game.system||"")+'</div>'+
+        '<div class="np-rgame">Host: '+esc(r.hostName||"?")+'</div>'+
+      '</div>'+
+      '<span style="font-size:.65rem;color:var(--accent2);">'+r.players+'/'+r.maxPlayers+'</span>'+
+      joinBtn+'</div>';
+  }).join("");
+  el.querySelectorAll(".np-join-btn").forEach(function(btn){
+    btn.onclick=function(){ npJoin(btn.dataset.rid); };
+  });
+}
+
+function npRenderRecent(list){
+  var el=document.getElementById("np-recent-list");
+  if(!el||!list) return;
+  el.innerHTML=list.map(function(e){
+    var mi=LIBRARY.findIndex(function(g){ return g.title===e.title&&g.system===e.system; });
+    var cover=e.cover||(mi>=0?LIBRARY[mi].cover:null);
+    return '<div class="np-rc-card np-recent-btn" data-mi="'+mi+'">'+
+      '<div class="np-rc-img">'+(cover?'<img src="'+cover+'" alt="">':'&#127918;')+'</div>'+
+      '<div class="np-rc-title">'+esc(e.title)+'</div>'+
+      '<div class="np-rc-sys">'+esc(e.system)+'</div></div>';
+  }).join("");
+  el.querySelectorAll(".np-recent-btn").forEach(function(btn){
+    btn.onclick=function(){
+      var mi=parseInt(btn.dataset.mi);
+      if(mi>=0){ openDetail(mi); closeModal("netplay-modal"); }
+    };
+  });
+}
+
+function npAddChat(msg){
+  const el=document.getElementById("np-chat-msgs");
+  if(!el) return;
+  const d=document.createElement("div");
+  d.className="np-chat-line"+(msg.from===npMyUser?" np-chat-mine":"")+(msg.type==="sys"?" np-chat-sys":"");
+  if(msg.type==="sys") d.textContent="— "+(msg.text||"");
+  else d.innerHTML='<span class="np-chat-from">'+esc(msg.from||"")+'</span>'+esc(msg.text||"");
+  el.appendChild(d); el.scrollTop=el.scrollHeight;
+  const tab=document.querySelector('[data-np-tab="chat"]');
+  if(tab&&!tab.classList.contains("active")){ tab.style.color="var(--accent2)"; }
+}
+
+function npInvite(targetId){
+  if(!npCurrentRoom){ toast("Create a room first (launch a game, then Rooms tab)",true); return; }
+  npSend({type:"invite",targetId}); toast("Invite sent!");
+}
+function npJoin(rid){ npSend({type:"join_room",roomId:rid}); }
+
+function npSwitchTab(tabId){
+  document.querySelectorAll("[data-np-tab]").forEach(t=>{
+    const on=t.dataset.npTab===tabId;
+    t.classList.toggle("active",on);
+    if(on){ t.style.color=""; }
+  });
+  document.querySelectorAll(".np-panel").forEach(p=>{
+    const id=p.id.replace("np-tab-","");
+    const isChat=id==="chat";
+    p.style.display=id===tabId?(isChat?"flex":"block"):"none";
+  });
+}
+
+function npUpdateBadge(on){
+  let b=document.getElementById("np-hdr-badge");
+  if(!on){ if(b) b.remove(); return; }
+  if(!b){
+    b=document.createElement("span"); b.id="np-hdr-badge";
+    b.className="np-online-badge"; b.onclick=openNetplay;
+    document.querySelector(".header-right")?.prepend(b);
+  }
+  b.innerHTML='<span class="np-dot"></span>'+esc(npMyUser||"Online");
+}
+
+function openNetplay(){
+  // Pre-fill username from profile if not already set
+  var inp = document.getElementById("np-username-input");
+  if(inp && !inp.value && typeof USER !== "undefined" && USER.name && USER.name !== "Player"){
+    inp.value = USER.name;
+  }
+  openModal("netplay-modal");
+  if(npMyId) npSwitchTab("online");
+}
+
+function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+// Wire events
+document.getElementById("np-login-btn").onclick=()=>{
+  const u=document.getElementById("np-username-input").value.trim();
+  if(!u){ toast("Enter a name",true); return; }
+  document.getElementById("np-port-hint").textContent=CFG.netplayPort||3000;
+  npConnect(u);
+};
+document.getElementById("np-username-input").onkeydown=e=>{ if(e.key==="Enter") document.getElementById("np-login-btn").click(); };
+document.getElementById("np-logout-btn").onclick=()=>{
+  if(npWs){npWs.close();npWs=null;}
+  npMyId=null; npMyUser=null;
+  document.getElementById("np-login-screen").style.display="flex";
+  document.getElementById("np-main-screen").style.display="none";
+  document.getElementById("np-logout-btn").style.display="none";
+  npUpdateBadge(false);
+};
+document.getElementById("np-create-room-btn").onclick=()=>{
+  if(activeGameIdx<0){ toast("Launch a game first",true); return; }
+  const g=LIBRARY[activeGameIdx];
+  npSend({type:"create_room",maxPlayers:4,name:(npMyUser||"Player")+"'s Room",
+    game:{title:g.title,system:g.system,filename:g.filename,
+          romPath:g.romPath||("/retro/roms/"+g.system+"/"+encodeURIComponent(g.filename||""))}});
+};
+document.getElementById("np-chat-send").onclick=()=>{
+  const inp=document.getElementById("np-chat-input");
+  const text=inp.value.trim(); if(!text) return;
+  npSend({type:"chat",text}); inp.value="";
+};
+document.getElementById("np-chat-input").onkeydown=e=>{ if(e.key==="Enter") document.getElementById("np-chat-send").click(); };
+document.querySelectorAll("[data-np-tab]").forEach(t=>t.addEventListener("click",()=>npSwitchTab(t.dataset.npTab)));
+document.getElementById("np-invite-accept").onclick=()=>{
+  if(npPendingInvite){ npJoin(npPendingInvite.roomId); openNetplay(); }
+  document.getElementById("np-invite-toast").style.display="none"; npPendingInvite=null;
+};
+document.getElementById("np-invite-decline").onclick=()=>{
+  document.getElementById("np-invite-toast").style.display="none"; npPendingInvite=null;
+};
+["mn-netplay","tb-netplay"].forEach(id=>{ const el=document.getElementById(id); if(el) el.onclick=openNetplay; });
+
+// Wrap launchGame to broadcast presence
+const _npOrigLaunch=launchGame;
+launchGame=async function(idx){
+  await _npOrigLaunch(idx);
+  if(npMyId&&idx>=0&&LIBRARY[idx]){
+    const g=LIBRARY[idx];
+    npSend({type:"playing",game:{title:g.title,system:g.system,cover:g.cover,filename:g.filename,
+      romPath:g.romPath||("/retro/roms/"+g.system+"/"+encodeURIComponent(g.filename||""))}});
+  }
+};
+const _npOrigClose=closeEmu;
+closeEmu=function(){ _npOrigClose(); if(npMyId) npSend({type:"stopped_playing"}); };
+
+// Save netplayPort in settings
+const _npOrigSave=document.getElementById("btn-settings-save").onclick;
+document.getElementById("btn-settings-save").onclick=function(){
+  const el=document.getElementById("netplay-port-input");
+  if(el) CFG.netplayPort=+(el.value)||3000;
+  if(_npOrigSave) _npOrigSave.call(this);
+};
+const _npOrigOpen=openSettingsModal;
+openSettingsModal=function(tab){
+  _npOrigOpen(tab);
+  const el=document.getElementById("netplay-port-input");
+  if(el) el.value=CFG.netplayPort||3000;
+};
+
+// ===================================================
+// BLUETOOTH / USB CONTROLLER (Web Gamepad API)
+// ===================================================
+let btGamepads={}, btTimer=null, btListening=null;
+
+function btStart(){
+  if(btTimer) return;
+  btTimer=setInterval(btPoll,50);
+}
+function btPoll(){
+  const gps=navigator.getGamepads?[...navigator.getGamepads()].filter(Boolean):[];
+  gps.forEach(gp=>{
+    const prev=btGamepads[gp.index]||{buttons:[],axes:[]};
+    if(btListening){
+      gp.buttons.forEach((btn,i)=>{
+        if(btn.pressed&&!(prev.buttons[i]?.pressed)){
+          btListening.resolve("BTN_"+i); btListening=null;
+        }
+      });
+      gp.axes.forEach((val,i)=>{
+        if(Math.abs(val)>0.8&&Math.abs(prev.axes[i]||0)<0.5){
+          btListening.resolve("AXIS_"+i+(val>0?"+":"-")); btListening=null;
+        }
+      });
+    }
+    btGamepads[gp.index]={
+      buttons:gp.buttons.map(b=>({pressed:b.pressed,value:b.value})),
+      axes:[...gp.axes]
+    };
+  });
+}
+
+window.addEventListener("gamepadconnected",e=>{
+  btGamepads[e.gamepad.index]={buttons:[],axes:[]};
+  btStart();
+  toast("Controller connected: "+e.gamepad.id.substring(0,45));
+  updCtrlStatus(); buildCtrlGrids();
+});
+window.addEventListener("gamepaddisconnected",e=>{
+  delete btGamepads[e.gamepad.index];
+  toast("Controller disconnected");
+  updCtrlStatus();
+});
+
+function updCtrlStatus(){
+  const gps=navigator.getGamepads?[...navigator.getGamepads()].filter(Boolean):[];
+  const el=document.getElementById("ctrl-status");
+  if(!el) return;
+  if(gps.length){
+    el.innerHTML=gps.map(g=>'<div style="color:var(--accent2);font-size:.7rem;margin-bottom:3px;">'
+      +esc(g.id.substring(0,55))
+      +' <span style="color:var(--dim);">('+g.buttons.length+' btn, '+g.axes.length+' axes)</span></div>').join("");
+  } else {
+    el.textContent="No gamepad. Connect via USB or Bluetooth and press a button.";
+    el.style.color="var(--dim)";
+  }
+}
+
+function btListen(){
+  return new Promise(resolve=>{
+    btListening={resolve};
+    btStart();
+    setTimeout(()=>{ if(btListening){btListening=null; resolve(null);} },10000);
+  });
+}
+
+function buildCtrlGrids(){
+  var KB=[{id:"Up",l:"D-pad Up"},{id:"Down",l:"D-pad Down"},{id:"Left",l:"D-pad Left"},{id:"Right",l:"D-pad Right"},
+    {id:"A",l:"Button A"},{id:"B",l:"Button B"},{id:"X",l:"Button X"},{id:"Y",l:"Button Y"},
+    {id:"L",l:"L Shoulder"},{id:"R",l:"R Shoulder"},{id:"Start",l:"Start"},{id:"Select",l:"Select"}];
+  var GP=[{id:"GP_A",l:"A/Cross"},{id:"GP_B",l:"B/Circle"},{id:"GP_X",l:"X/Square"},{id:"GP_Y",l:"Y/Triangle"},
+    {id:"GP_L",l:"LB/L1"},{id:"GP_R",l:"RB/R1"},{id:"GP_Start",l:"Start"},{id:"GP_Select",l:"Select"},
+    {id:"GP_Up",l:"D-Up"},{id:"GP_Down",l:"D-Down"},{id:"GP_Left",l:"D-Left"},{id:"GP_Right",l:"D-Right"}];
+  function makeGrid(cid,buttons,ctrlObj){
+    var el=document.getElementById(cid); if(!el) return;
+    el.innerHTML=buttons.map(function(b){
+      return "<div class='ctrl-row'><span class='ctrl-label'>"+b.l+"</span>"+
+        "<span class='ctrl-badge' data-action='"+b.id+"' data-cid='"+cid+"'>"+(ctrlObj[b.id]||"—")+"</span></div>";
+    }).join("");
+    el.querySelectorAll(".ctrl-badge").forEach(function(badge){
+      badge.addEventListener("click",async function(){
+        if(badge.classList.contains("listening")){badge.classList.remove("listening");badge.textContent=ctrlObj[badge.dataset.action]||"—";return;}
+        document.querySelectorAll(".ctrl-badge.listening").forEach(function(b){b.classList.remove("listening");});
+        btListening=null; badge.classList.add("listening");
+        var action=badge.dataset.action;
+        if(action.startsWith("GP_")){
+          badge.textContent="Press button…";
+          var r=await btListen(); badge.classList.remove("listening");
+          if(r){ctrlObj[action]=r;badge.textContent=r;}else{badge.textContent=ctrlObj[action]||"—";}
+        }else{badge.textContent="Press key…";}
+      });
+    });
+  }
+  makeGrid("ctrl-kb-grid",KB,CTRL); makeGrid("ctrl-gp-grid",GP,CTRL);
+  makeGrid("ctrl-p2kb-grid",KB,CTRL2); makeGrid("ctrl-p2gp-grid",GP,CTRL2);
+  buildGpAssign();
+}
+function buildGpAssign(){
+  var el=document.getElementById("gp-assign-list"); if(!el) return;
+  var gps=navigator.getGamepads?Array.from(navigator.getGamepads()).filter(Boolean):[];
+  if(!gps.length){el.innerHTML="<div style='font-size:.72rem;color:var(--dim);'>No controllers found. Connect, press a button, then Refresh.</div>";return;}
+  el.innerHTML=gps.map(function(gp){
+    var asgn=GAMEPAD_ASSIGN[gp.index];
+    var auto=gp.index===0?" (auto P1)":gp.index===1?" (auto P2)":"";
+    var lbl=(gp.id||"Controller").substring(0,48);
+    return "<div style='background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.55rem .85rem;display:flex;align-items:center;gap:.75rem;'>"+
+      "<div style='flex:1;min-width:0;'><div style='font-size:.74rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>"+lbl+"</div>"+
+      "<div style='font-size:.63rem;color:var(--dim);margin-top:1px;'>Index "+gp.index+" · "+gp.buttons.length+" btns"+auto+"</div></div>"+
+      "<select data-gpidx='"+gp.index+"' class='gp-asgn form-select' style='width:115px;font-size:.7rem;'>"+
+        "<option value=''>Auto</option>"+
+        "<option value='0'"+(asgn===0?" selected":"")+">Player 1</option>"+
+        "<option value='1'"+(asgn===1?" selected":"")+">Player 2</option>"+
+      "</select></div>";
+  }).join("");
+  el.querySelectorAll(".gp-asgn").forEach(function(sel){
+    sel.onchange=function(){
+      var gi=parseInt(sel.dataset.gpidx),pl=sel.value===""?undefined:parseInt(sel.value);
+      Object.keys(GAMEPAD_ASSIGN).forEach(function(k){if(GAMEPAD_ASSIGN[k]===pl)delete GAMEPAD_ASSIGN[k];});
+      if(pl!==undefined){GAMEPAD_ASSIGN[gi]=pl;if(pl===0)CTRL.gamepadIndex=gi;if(pl===1)CTRL2.gamepadIndex=gi;toast("Controller "+gi+" → Player "+(pl+1));}
+      else{delete GAMEPAD_ASSIGN[gi];toast("Controller "+gi+" auto");}
+    };
+  });
+}
+
+document.addEventListener("keydown",function(e){
+  var badge=document.querySelector(".ctrl-badge.listening");
+  if(!badge) return;
+  var action=badge.dataset.action;
+  if(action.startsWith("GP_")) return;
+  var isP2=(badge.dataset.cid||"").startsWith("ctrl-p2");
+  if(isP2) CTRL2[action]=e.key; else CTRL[action]=e.key;
+  badge.textContent=e.key; badge.classList.remove("listening");
+  e.preventDefault();
+});
+
+// Add BT pairing help to controller modal
+(function(){
+  const m=document.getElementById("ctrl-modal");
+  if(!m) return;
+  const footer=m.querySelector(".modal-footer");
+  if(!footer) return;
+  const h=document.createElement("div");
+  h.style.cssText="padding:.55rem 1.25rem;border-top:1px solid var(--border);font-size:.67rem;color:var(--dim);line-height:1.75;";
+  h.innerHTML='<strong style="color:var(--text);">Bluetooth pairing:</strong> '
+    +'PS4/PS5: Hold Share+PS until light flashes, then pair in Windows Bluetooth. '
+    +'Xbox: Hold sync button on top, then pair in Windows Bluetooth. '
+    +'Switch Pro: Hold sync button on back, then pair in Windows Bluetooth. '
+    +'After pairing, press any button to activate.';
+  footer.before(h);
+})();
+
+document.getElementById("ctrl-detect-btn").onclick=()=>{
+  updCtrlStatus(); btStart();
+  const gps=navigator.getGamepads?[...navigator.getGamepads()].filter(Boolean):[];
+  toast(gps.length?gps.length+" controller"+(gps.length>1?"s":"")+" found":"No controllers found - connect and press a button");
+};
+document.getElementById("ctrl-save").onclick=function(){ saveCtrl(); pttSave(); closeModal("ctrl-modal"); toast("Controller mapping + PTT saved."); };
+document.getElementById("ctrl-reset").onclick=()=>{ Object.assign(CTRL,DEF_CTRL); buildCtrlGrids(); };
+document.getElementById("tb-controller").onclick=openCtrlModal;
+document.getElementById("mn-ctrl-map").onclick=openCtrlModal;
+
+function openCtrlModal(){ updCtrlStatus(); buildCtrlGrids(); openModal("ctrl-modal"); }
+
+
+// ===================================================
+// PUSH TO TALK (PTT) - Controller button -> keyboard key
+// ===================================================
+let PTT = {
+  enabled:   false,
+  ctrlBtn:   null,    // e.g. "BTN_9"
+  mouseBtn:  "4",     // "1"=Left "2"=Right "3"=Middle "4"=Back "5"=Forward
+  mode:      "hold",
+  active:    false
+};
+
+function pttLoad(){
+  try{
+    const saved = localStorage.getItem("rv_ptt");
+    if(saved) Object.assign(PTT, JSON.parse(saved));
+  }catch(e){}
+  pttUpdateUI();
+}
+
+function pttSave(){
+  localStorage.setItem("rv_ptt", JSON.stringify({
+    enabled:PTT.enabled, ctrlBtn:PTT.ctrlBtn,
+    mouseBtn:PTT.mouseBtn, mode:PTT.mode
+  }));
+}
+
+function pttUpdateUI(){
+  var b=document.getElementById("ptt-btn-badge");
+  var m=document.getElementById("ptt-mouse-select");
+  var e=document.getElementById("ptt-enabled");
+  var s=document.getElementById("ptt-mode-select");
+  if(b) b.textContent = PTT.ctrlBtn  || "Not set";
+  if(m) m.value       = PTT.mouseBtn || "4";
+  if(e) e.checked     = PTT.enabled;
+  if(s) s.value       = PTT.mode     || "hold";
+}
+
+function pttSendMouse(btn, down){
+  // Send via XHR for reliability (fetch no-cors can't confirm success)
+  var xhr = new XMLHttpRequest();
+  xhr.open("GET","/retro/no-ptt/mouse?btn="+btn+"&action="+(down?"down":"up"),true);
+  xhr.timeout = 500;
+  try{ xhr.send(); }catch(e){}
+}
+
+function pttPress(){
+  if(!PTT.enabled||!PTT.mouseBtn) return;
+  var btn=parseInt(PTT.mouseBtn);
+  if(PTT.mode==="toggle"){
+    PTT.active=!PTT.active;
+    pttSendMouse(btn, PTT.active);
+  } else {
+    PTT.active=true;
+    pttSendMouse(btn, true);
+  }
+  pttShowIndicator(PTT.active);
+}
+
+function pttRelease(){
+  if(!PTT.enabled||!PTT.mouseBtn||PTT.mode!=="hold") return;
+  if(PTT.active){
+    PTT.active=false;
+    pttSendMouse(parseInt(PTT.mouseBtn), false);
+    pttShowIndicator(false);
+  }
+}
+
+function pttShowIndicator(on){
+  const el = document.getElementById("ptt-indicator");
+  if(el) el.classList.toggle("active", on);
+}
+
+// Gamepad PTT polling - hook into btPoll to detect PTT button
+var _btPollOrigPTT = btPoll;
+btPoll = function(){
+  _btPollOrigPTT();
+  if(!PTT.enabled || !PTT.ctrlBtn || !PTT.mouseBtn) return; // check mouseBtn not key
+  var gps = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
+  if(!gps.length) return;
+  var gp = gps[0];
+  var prev = btGamepads[gp.index];
+  var m = PTT.ctrlBtn.match(/^BTN_(\d+)$/);
+  if(!m) return;
+  var btnIdx = parseInt(m[1]);
+  var isPressed  = gp.buttons[btnIdx] && gp.buttons[btnIdx].pressed;
+  var wasPressed = prev && prev.buttons[btnIdx] && prev.buttons[btnIdx].pressed;
+  if(isPressed && !wasPressed)  pttPress();
+  if(!isPressed && wasPressed)  pttRelease();
+};;
+
+// Wire PTT UI events
+(function wirePTT(){
+  var btnBadge  = document.getElementById("ptt-btn-badge");
+  var mouseSel  = document.getElementById("ptt-mouse-select");
+  var modeSel   = document.getElementById("ptt-mode-select");
+  var enabledCb = document.getElementById("ptt-enabled");
+  var testBtn   = document.getElementById("ptt-test-btn");
+  var helperStat= document.getElementById("ptt-helper-status");
+  if(!btnBadge) return;
+
+  function checkHelper(){
+    // Use XHR instead of fetch - more reliable for cross-port localhost checks
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET","/retro/no-ptt/ping",true);
+    xhr.timeout = 2000;
+    xhr.onload = function(){
+      if(helperStat){ helperStat.textContent="✓ PTT Helper connected"; helperStat.style.color="var(--genesis,#2ea86e)"; }
+    };
+    xhr.onerror = xhr.ontimeout = function(){
+      if(helperStat){ helperStat.textContent="Helper not detected — start.bat should launch it automatically"; helperStat.style.color="var(--muted)"; }
+    };
+    try{ xhr.send(); }catch(e){ if(helperStat) helperStat.textContent="Helper check failed: "+e.message; }
+  }
+  setTimeout(checkHelper, 1000);
+
+  // Listen for gamepad button to assign as PTT controller button
+  btnBadge.onclick = async function(){
+    if(btnBadge.classList.contains("listening")){
+      btnBadge.classList.remove("listening");
+      btnBadge.textContent = PTT.ctrlBtn||"Not set"; return;
+    }
+    document.querySelectorAll(".ctrl-badge.listening").forEach(function(b){
+      b.classList.remove("listening"); b.textContent=CTRL[b.dataset.action]||"—";
+    });
+    btnBadge.classList.add("listening");
+    btnBadge.textContent = "Press controller button…";
+    btStart();
+    var result = await btListen();
+    btnBadge.classList.remove("listening");
+    if(result && result.startsWith("BTN_")){
+      PTT.ctrlBtn = result;
+      btnBadge.textContent = result;
+      toast("PTT controller button: " + result);
+    } else {
+      btnBadge.textContent = PTT.ctrlBtn||"Not set";
+    }
+  };
+
+  if(mouseSel) mouseSel.onchange = function(){ PTT.mouseBtn = mouseSel.value; };
+  if(modeSel)  modeSel.onchange  = function(){ PTT.mode     = modeSel.value; };
+  if(enabledCb) enabledCb.onchange = function(){
+    PTT.enabled = enabledCb.checked; pttSave();
+    toast(PTT.enabled ? "PTT enabled" : "PTT disabled");
+    if(PTT.enabled) btStart();
+  };
+  if(testBtn) testBtn.onclick = function(){
+    var btn = parseInt(PTT.mouseBtn||"0");
+    if(!btn){ toast("Select a mouse button first", true); return; }
+    pttSendMouse(btn, true);
+    setTimeout(function(){ pttSendMouse(btn, false); }, 200);
+    toast("Test sent: Mouse " + btn + " click");
+  };
+})();;
+
+
+// ===================================================
+// USAGE STATS
+// ===================================================
+var STATS = {};
+var _sSess = null;
+
+function statsLoad(){ try{ var s=localStorage.getItem("rv_stats"); if(s) STATS=JSON.parse(s); }catch(e){ STATS={}; } }
+function statsSave(){ try{ localStorage.setItem("rv_stats",JSON.stringify(STATS)); }catch(e){} }
+
+function statsStart(game){
+  statsEnd();
+  if(!game) return;
+  _sSess={key:game.system+"__"+(game.title||game.filename||"?"), startTime:Date.now(), game:game};
+}
+
+function statsEnd(){
+  if(!_sSess) return;
+  var secs=Math.round((Date.now()-_sSess.startTime)/1000);
+  if(secs<3){_sSess=null;return;}
+  var k=_sSess.key;
+  if(!STATS[k]) STATS[k]={plays:0,totalSecs:0,lastPlayed:0,title:_sSess.game.title||_sSess.game.filename,system:_sSess.game.system,cover:null};
+  STATS[k].plays++;
+  STATS[k].totalSecs+=secs;
+  STATS[k].lastPlayed=Date.now();
+  if(_sSess.game.cover) STATS[k].cover=_sSess.game.cover;
+  statsSave();
+  _sSess=null;
+  // Sync to server after each session
+  setTimeout(userSyncToServer, 500);
+}
+
+function statsFmt(s){
+  if(s<60) return s+"s";
+  if(s<3600) return Math.floor(s/60)+"m "+Math.round(s%60)+"s";
+  return Math.floor(s/3600)+"h "+Math.floor((s%3600)/60)+"m";
+}
+
+// Wrap launchGame and closeEmu for stats
+var _sOrigLaunch=launchGame;
+launchGame=async function(idx){ await _sOrigLaunch(idx); if(idx>=0&&LIBRARY[idx]) statsStart(LIBRARY[idx]); };
+var _sOrigClose=closeEmu;
+closeEmu=function(){ statsEnd(); _sOrigClose(); };
+window.addEventListener("beforeunload",statsEnd);
+
+function openStats(){
+  var all=Object.values(STATS).sort(function(a,b){return b.totalSecs-a.totalSecs;});
+  var totalSecs=all.reduce(function(s,g){return s+g.totalSecs;},0);
+  var totalPlays=all.reduce(function(s,g){return s+g.plays;},0);
+  var uname=(typeof USER!=="undefined"&&USER.name&&USER.name!=="Player")?USER.name:"Player";
+  document.getElementById("stats-summary").textContent=
+    uname+" · Playtime: "+statsFmt(totalSecs)+" · Sessions: "+totalPlays+" · Games: "+all.length;
+  var topEl=document.getElementById("stats-top-list");
+  var allEl=document.getElementById("stats-all-list");
+  if(!all.length){
+    topEl.innerHTML='<div style="font-size:.72rem;color:var(--dim);padding:.5rem 0;">No games played yet.</div>';
+    allEl.innerHTML="";
+  } else {
+    topEl.innerHTML=all.slice(0,10).map(function(g,i){
+      return '<div class="stats-row">'+
+        '<span class="stats-rank">'+(i+1)+'</span>'+
+        '<div class="stats-art">'+(g.cover?'<img src="'+esc(g.cover)+'" alt="">':'<span>&#127918;</span>')+'</div>'+
+        '<div class="stats-info"><div class="stats-title">'+esc(g.title||"?")+'</div>'+
+        '<div class="stats-meta">'+esc(g.system)+'</div></div>'+
+        '<div><div class="stats-time">'+statsFmt(g.totalSecs)+'</div>'+
+        '<div class="stats-plays">'+g.plays+' session'+(g.plays!==1?"s":"")+'</div></div>'+
+      '</div>';
+    }).join("");
+    allEl.innerHTML=all.map(function(g){
+      return '<div class="stats-card">'+
+        '<div class="stats-card-title">'+esc(g.title||"?")+'</div>'+
+        '<div class="stats-card-sub">'+esc(g.system)+' · '+g.plays+' play'+(g.plays!==1?"s":"")+'</div>'+
+        '<div class="stats-card-time">'+statsFmt(g.totalSecs)+'</div>'+
+        '<div class="stats-card-sub">Last: '+new Date(g.lastPlayed).toLocaleDateString()+'</div>'+
+      '</div>';
+    }).join("");
+  }
+  document.getElementById("stats-clear-btn").onclick=function(){
+    if(!confirm("Clear all usage stats?")) return;
+    STATS={}; statsSave(); openStats(); toast("Stats cleared.");
+  };
+  openModal("stats-modal");
+}
+
+// ===================================================
+// PTT KEYBOARD / MOUSE ENHANCEMENT
+// Added: keyboard key capture + mouse button support info
+// ===================================================
+
+
+// ===================================================
+// USER PROFILE & SERVER SYNC
+// ===================================================
+var USER = {
+  id:       null,   // unique user ID (stored in localStorage + T drive)
+  name:     "Player",
+  loaded:   false
+};
+
+function userGenId(){
+  // Generate a short memorable ID: 3 words + 4 digits
+  var adj=["retro","neon","pixel","turbo","hyper","cyber","mega","ultra","super","blast"];
+  var noun=["gamer","player","hero","ranger","knight","wizard","ninja","racer","boss","ace"];
+  var a=adj[Math.floor(Math.random()*adj.length)];
+  var n=noun[Math.floor(Math.random()*noun.length)];
+  var d=String(Math.floor(1000+Math.random()*9000));
+  return a+"-"+n+"-"+d;
+}
+
+function userLoad(){
+  try{
+    var saved=localStorage.getItem("rv_user");
+    if(saved){ var u=JSON.parse(saved); USER.id=u.id||null; USER.name=u.name||"Player"; }
+  }catch(e){}
+  if(!USER.id){
+    USER.id=userGenId();
+    userSave();
+    // Show profile modal on first visit
+    setTimeout(function(){ openModal("uid-modal"); populateUidModal(); },1200);
+  }
+  populateUidModal();
+  // Sync from server
+  userSyncFromServer();
+}
+
+function userSave(){
+  try{ localStorage.setItem("rv_user",JSON.stringify({id:USER.id,name:USER.name})); }catch(e){}
+}
+
+function populateUidModal(){
+  var ni=document.getElementById("uid-name-input");
+  var ii=document.getElementById("uid-id-input");
+  if(ni) ni.value=USER.name||"";
+  if(ii) ii.value=USER.id||"";
+}
+
+// Sync profile + stats to/from server via /profile/ endpoint
+function userSyncToServer(){
+  if(!USER.id||window.location.protocol==="file:") return;
+  var payload={
+    id:USER.id, name:USER.name,
+    stats:STATS,
+    ctrl:CTRL,
+    ptt:{enabled:PTT.enabled,ctrlBtn:PTT.ctrlBtn,mouseBtn:PTT.mouseBtn,mode:PTT.mode},
+    cfg:{artMode:CFG.artMode,autoMeta:CFG.autoMeta}
+  };
+  fetch("/retro/profile/"+encodeURIComponent(USER.id),{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(payload)
+  }).then(function(r){ return r.json(); })
+    .then(function(){ console.log("[RV] Profile synced to server"); })
+    .catch(function(e){ console.warn("[RV] Profile sync failed:",e.message); });
+}
+
+function userSyncFromServer(){
+  if(!USER.id||window.location.protocol==="file:") return;
+  fetch("/retro/profile/"+encodeURIComponent(USER.id))
+    .then(function(r){ if(!r.ok) return null; return r.json(); })
+    .then(function(data){
+      if(!data||!data.id) return;
+      // Merge server stats (server wins for played time)
+      if(data.stats){
+        Object.keys(data.stats).forEach(function(k){
+          var srv=data.stats[k];
+          if(!STATS[k]||srv.totalSecs>STATS[k].totalSecs) STATS[k]=srv;
+        });
+        statsSave();
+      }
+      // Apply server name if set and different
+      if(data.name&&data.name!=="Player"&&data.name!==USER.name){
+        USER.name=data.name; userSave();
+      }
+      USER.loaded=true;
+    })
+    .catch(function(){});
+}
+
+// Wire User ID modal
+(function wireUid(){
+  var nameEl=document.getElementById("uid-name-input");
+  var idEl=document.getElementById("uid-id-input");
+  var genBtn=document.getElementById("uid-gen-btn");
+  var saveBtn=document.getElementById("uid-save-btn");
+  var statusEl=document.getElementById("uid-status");
+  if(!saveBtn) return;
+
+  if(genBtn) genBtn.onclick=function(){
+    var newId=userGenId();
+    if(idEl) idEl.value=newId;
+  };
+
+  if(saveBtn) saveBtn.onclick=function(){
+    var name=(nameEl?nameEl.value.trim():"")||"Player";
+    var id=(idEl?idEl.value.trim():"")||userGenId();
+    USER.name=name; USER.id=id; userSave();
+    // If ID changed, sync stats from that profile
+    userSyncFromServer();
+    if(statusEl){
+      statusEl.textContent="✓ Profile saved! ID: "+id;
+      statusEl.style.cssText="display:block;background:rgba(46,168,110,.12);color:#7ddfaa;border:1px solid #2ea86e;border-radius:6px;padding:.5rem .75rem;font-size:.72rem;";
+    }
+    // Update netplay name
+    if(npMyUser) npSend({type:"rename",username:name});
+    setTimeout(function(){ closeModal("uid-modal"); },1200);
+    // Sync settings to server
+    userSyncToServer();
+  };
+})();
+
+// Wire profile menu
+document.getElementById("mn-profile").onclick=function(){
+  populateUidModal(); openModal("uid-modal");
+};
+// Auto-sync when closing emulator
+var _uOrigClose2=closeEmu;
+closeEmu=function(){ _uOrigClose2(); setTimeout(userSyncToServer,500); };
+
+
+// ═══════════════════════════════════════════════════════════
+// DRAGGABLE MODALS
+// Makes all modal windows draggable by their header bar
+// ═══════════════════════════════════════════════════════════
+function makeDraggable(overlayId) {
+  var overlay = document.getElementById(overlayId);
+  if(!overlay) return;
+  var modal = overlay.querySelector('.modal') || overlay.querySelector('[style*="flex-direction:column"]');
+  if(!modal) return;
+  var header = modal.querySelector('.modal-hdr') || modal.querySelector('.emu-topbar');
+  if(!header) return;
+
+  var isDragging = false, startX = 0, startY = 0, dx = 0, dy = 0;
+  var currentX = 0, currentY = 0;
+
+  header.addEventListener('mousedown', function(e) {
+    if(e.target.closest('button') || e.target.closest('input') || e.target.closest('select')) return;
+    isDragging = true;
+    startX = e.clientX - currentX;
+    startY = e.clientY - currentY;
+    modal.style.transition = 'none';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if(!isDragging) return;
+    currentX = e.clientX - startX;
+    currentY = e.clientY - startY;
+    // Constrain to viewport
+    var rect = modal.getBoundingClientRect();
+    var maxX = window.innerWidth  - rect.width;
+    var maxY = window.innerHeight - rect.height;
+    currentX = Math.max(-rect.width/2, Math.min(currentX, maxX + rect.width/2));
+    currentY = Math.max(0, Math.min(currentY, maxY));
+    modal.style.transform = 'translate(' + currentX + 'px,' + currentY + 'px)';
+  });
+
+  document.addEventListener('mouseup', function() {
+    if(isDragging) {
+      isDragging = false;
+      modal.style.transition = '';
+    }
+  });
+
+  // Touch support for mobile
+  header.addEventListener('touchstart', function(e) {
+    if(e.target.closest('button')) return;
+    var t = e.touches[0];
+    isDragging = true;
+    startX = t.clientX - currentX;
+    startY = t.clientY - currentY;
+    e.preventDefault();
+  }, {passive:false});
+
+  document.addEventListener('touchmove', function(e) {
+    if(!isDragging) return;
+    var t = e.touches[0];
+    currentX = t.clientX - startX;
+    currentY = t.clientY - startY;
+    modal.style.transform = 'translate(' + currentX + 'px,' + currentY + 'px)';
+  }, {passive:false});
+
+  document.addEventListener('touchend', function() {
+    isDragging = false;
+  });
+}
+
+// Reset modal position when closed (so it starts centered next time)
+var _origCloseModal = closeModal;
+closeModal = function(id) {
+  _origCloseModal(id);
+  var overlay = document.getElementById(id);
+  if(overlay) {
+    var modal = overlay.querySelector('.modal');
+    if(modal) {
+      modal.style.transform = '';
+      modal.style.transition = '';
+    }
+  }
+};
+
+// Make all modals draggable after DOM ready
+(function initDraggable() {
+  var modalIds = ['settings-modal','ctrl-modal','detail-modal','video-modal',
+                  'upload-modal','netplay-modal','stats-modal','uid-modal'];
+  modalIds.forEach(function(id) { makeDraggable(id); });
+})();
+
+// ═══════════════════════════════════════════════════════════
+// MODAL MINIMIZE / MAXIMIZE
+// Double-click header to minimize a modal to its title bar
+// ═══════════════════════════════════════════════════════════
+document.addEventListener('dblclick', function(e) {
+  var hdr = e.target.closest('.modal-hdr');
+  if(!hdr) return;
+  var modal = hdr.closest('.modal');
+  if(!modal) return;
+  // Toggle minimized class
+  modal.classList.toggle('minimized');
+});
+
+// Add minimized CSS
+
+
+// ═══════════════════════════════════════════════════════════
+// RESTART
+// Signals server to close all windows, waits 3s, reloads page
+// ═══════════════════════════════════════════════════════════
+function doRestart(){
+  if(!confirm("Restart Retro Vault?\n\nThis will:\n• Close all server windows\n• Wait 3 seconds\n• Reload the application")) return;
+  toast("Restarting Retro Vault...");
+  // Signal the server to restart (server.py will call itself)
+  fetch("/retro/api/restart", {method:"POST"})
+    .then(function(){ })
+    .catch(function(){ }); // ignore errors - server is restarting
+  // Reload page after 3 seconds regardless
+  setTimeout(function(){
+    window.location.reload();
+  }, 3200);
+}
+document.getElementById("tb-restart").onclick = doRestart;
+
+// TOAST
+let toastT;
+function toast(msg,err=false){
+  const el=document.getElementById("toast");el.textContent=msg;el.classList.toggle("err",err);el.classList.add("show");
+  clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove("show"),3200);
+}
+
+
+// ── Wire buttons that were missing handlers ─────────────────────────────
+
+// File menu & toolbar folder/upload
+["mn-open-folder","tb-add-folder","sidebar-add-folder","empty-add-btn"].forEach(function(id){
+  var el=document.getElementById(id);
+  if(el) el.onclick=function(){ openSettingsModal("tab-folders"); };
+});
+
+// Upload buttons
+["mn-upload","tb-upload"].forEach(function(id){
+  var el=document.getElementById(id);
+  if(el) el.onclick=function(){
+    if(window.location.protocol==="file:"){
+      toast("Upload requires the server (Philibert)",true); return;
+    }
+    openModal("upload-modal");
+  };
+});
+
+// Netplay buttons
+["mn-netplay","tb-netplay"].forEach(function(id){
+  var el=document.getElementById(id);
+  if(el) el.onclick=openNetplay;
+});
+
+// Search input
+var searchEl=document.getElementById("tb-search");
+if(searchEl){
+  searchEl.oninput=function(e){ searchQ=e.target.value.toLowerCase(); renderGames(); };
+}
+
+// BOOT
+loadAll();buildSidebar();renderGames();pttLoad();statsLoad();userLoad();
+loadSysPathsFromServer();
+// Pre-fill netplay username from profile
+(function(){
+  var inp=document.getElementById("np-username-input");
+  if(inp && typeof USER!=="undefined" && USER.name && USER.name!=="Player"){
+    inp.value=USER.name;
+  }
+})();
+document.getElementById("mn-stats").onclick=openStats;
+// Generate SVG placeholders for games missing art
+
+// Fetch publisher/year metadata for games in background
+var _pubQueue=[]; var _pubTimer=null;
+function queuePublisherFetch(g){
+  if(g.publisher||g.developer||g._pubFetched) return;
+  g._pubFetched=true;
+  _pubQueue.push(g);
+  if(_pubTimer) return;
+  _pubTimer=setTimeout(function(){
+    var batch=_pubQueue.splice(0,20);
+    _pubTimer=null;
+    if(!batch.length||window.location.protocol==="file:") return;
+    batch.forEach(function(game){
+      fetch("/retro/api/meta?system="+encodeURIComponent(game.system)+"&title="+encodeURIComponent(game.title))
+        .then(function(r){return r.ok?r.json():null;})
+        .then(function(d){
+          if(!d) return;
+          var changed=false;
+          if(d.publisher&&!game.publisher){game.publisher=d.publisher;changed=true;}
+          if(d.developer&&!game.developer){game.developer=d.developer;changed=true;}
+          if(d.year&&!game.year){game.year=d.year;changed=true;}
+          if(d.genre&&game.genre==="Unknown"){game.genre=d.genre;changed=true;}
+          if(changed) renderGames();
+        }).catch(function(){});
+    });
+  },500);
+}
+
+(function initArt(){
+  var changed=false;
+  LIBRARY.forEach(function(g){
+    // Always regenerate SVG placeholder (picks up style updates)
+    g._svgPlaceholder=makeSvgArt(g.title||g.filename||"Game",g.system);
+    if(!g.cover||g.cover===g._svgPlaceholder){
+      g.cover=getCoverForMode(g)||g._svgPlaceholder;
+    }
+    changed=true;
+  });
+  if(changed){saveLib();renderGames();}
+  // Art is fetched only on user request via "Download Box Art"
+})();
+
+// Show banner if opened as a local file instead of through the server
+if(window.location.protocol === "file:") {
+  const banner = document.createElement("div");
+  banner.style.cssText = "background:#0a1a2a;border-bottom:2px solid #4f67d9;padding:.75rem 1.5rem;font-size:.78rem;color:#a0c0f0;display:flex;align-items:center;gap:1rem;flex-shrink:0;flex-wrap:wrap;";
+  banner.innerHTML =
+    '<span style="font-weight:700;color:#c4d8ff;">⚠ Opened as a file — server not active.</span>' +
+    '<span>To play games: run <code style="background:rgba(255,255,255,.1);padding:1px 6px;border-radius:3px;font-size:.75rem;">start.bat</code> then open ' +
+    '<strong>Philibert</strong> in your browser.</span>' +
+    '<span style="margin-left:auto;font-size:.72rem;color:#6080a0;">You can still browse your library using Add Folder.</span>';
+  const toolbar = document.querySelector(".toolbar");
+  if(toolbar) toolbar.insertAdjacentElement("afterend", banner);
+}
+
+// If running on a server (not file://), auto-fetch ROM list from /api/roms
+// This lets remote users see the library without selecting folders manually
+(async function serverAutoLoad(){
+  if(window.location.protocol==="file:") return;
+  try{
+    const ping = await fetch("/retro/ping", {signal:AbortSignal.timeout(2000)});
+    if(!ping.ok) return;
+  }catch(e){ return; }
+
+  try{
+    // Fetch all systems at once
+    const resp = await fetch("/retro/api/roms?system=all");
+    if(!resp.ok) return;
+    const data = await resp.json();
+
+    let added = 0;
+    Object.keys(data).forEach(function(sysId){
+      var sys = SYS_MAP[sysId];
+      var files = Array.isArray(data[sysId]) ? data[sysId] : [];
+      files.forEach(function(f){
+        // Only add if not already in library (avoid duplicates)
+        var exists = LIBRARY.some(function(g){
+          return g.system===sysId && g.filename===f.name;
+        });
+        if(!exists){
+          LIBRARY.push({
+            filename: f.name,
+            title:    cleanName(f.name),
+            system:   sysId,
+            genre:    f.genre||"Unknown",
+            year:     f.year||null,
+            description: f.description||"",
+            publisher:f.publisher||f.developer||"",
+            emoji:    sys ? sys.emoji : "🎮",
+            cover:    null,
+            isZip:    f.isZip||false,
+            metaDone: false,
+            romPath:  f.path
+          });
+          added++;
+        }
+      });
+    });
+
+    if(added > 0){
+      // Sort each system alphabetically
+      LIBRARY.sort(function(a,b){
+        if(a.system!==b.system) return a.system.localeCompare(b.system);
+        return a.title.localeCompare(b.title);
+      });
+      buildSidebar();
+      renderGames();
+      saveLib(); // compact save - won't exceed quota
+    }
+  }catch(e){
+    console.warn("[RV] serverAutoLoad error:",e.message);
+  }
+})();
+</script>
+</body>
+</html>
