@@ -202,7 +202,8 @@ def philibert_prompt():
     answered that California has no capital."""
     out = ("\n\nYOU ARE PHILIBERT by Esteef.Ai, a private assistant for musicians - gigs, "
            "venues, tours, merch, budget, bills and reminders - plus files, folders and simple "
-           "coding. You run from the user's drive on their own computer.\n")
+           "coding. You run from the user's drive on their own computer. Be warm, direct and "
+           "brief: a simple question gets a short answer.\n")
     try:                                   # the Band Manager's settings, shared with its page
         import nd_band
         _bc = nd_band.connect(_CONFIG_DIR / "band.db")
@@ -2091,6 +2092,17 @@ def _nvidia_sample():
                 "watts": float(parts[4]) if len(parts) > 4 else 0.0}
     except Exception:
         return None
+
+
+def _model_resident(name):
+    """Is this model already loaded in Ollama (so the answer starts at once)?"""
+    try:
+        with urllib.request.urlopen(f"{OLLAMA_URL}/api/ps", timeout=2) as r:
+            models = json.loads(r.read()).get("models") or []
+    except Exception:
+        return True                      # can't tell: don't claim a load that may not happen
+    base = str(name or "").split(":latest")[0]
+    return any(str(m.get("name") or m.get("model") or "").split(":latest")[0] == base for m in models)
 
 
 def _ollama_vram_gb():
@@ -13050,7 +13062,7 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
             "user says yes. Anything you CAN do with the tools you have, just do — do not ask for "
             "tools you do not need.\n")
 
-    if agent_mode:
+    if agent_mode and not PORTABLE:     # Philibert names itself in philibert_prompt(), and has none of these tools
         system_content += (
             "\n\nYOU ARE ELENA. That is your name — use it when you introduce yourself. You are the "
             "user's personal AI assistant running on their own Windows PC, with real control of it. "
@@ -13074,7 +13086,7 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
             "- A tool result that starts with FAILED or BLOCKED means it did NOT work. Never report "
             "such a thing as done. [BLOCKED] is the hard blocklist — tell the user ADMIN MODE in Setup "
             "would lift it and move on; do not try to work around it.\n")
-    if agent_mode and wants_pc_control(_last_user, workspace):
+    if agent_mode and not PORTABLE and wants_pc_control(_last_user, workspace):
         system_content += (
             "\nHOW TO ACTUALLY DRIVE WINDOWS APPS — read this before launching anything:\n"
             "- `exit 0` from a launcher means the command was ACCEPTED, not that it worked. Never treat "
@@ -13243,6 +13255,11 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
         _set_status("thinking", _slow, 15)
     else:
         _set_status("thinking", "Sending to model...", 20)
+    # From a USB drive a 3 GB model takes 20-40 s to load; say so, not a bare "think"
+    _cold_load = PORTABLE and not _model_resident(model)
+    _LOADING = "Loading the model from the drive - the first answer after a start takes up to a minute"
+    if _cold_load:
+        _set_status("loading", _LOADING, 18)
 
     # ── Unified agent loop: native structured tool calls first, TOOL: text fallback ──
     import re
@@ -14216,9 +14233,12 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
         # happening does.
         _fit_context()
         _approx = sum(len(m.get("content") or "") for m in convo) // 4
-        _set_status("thinking",
-                    f"Round {rnd}: reading ~{_approx:,} tokens of context "
-                    f"— no output until this finishes", 35)
+        if _cold_load and rnd == 1:
+            _set_status("loading", _LOADING, 30)      # the first round waits for the load
+        else:
+            _set_status("thinking",
+                        f"Round {rnd}: reading ~{_approx:,} tokens of context "
+                        f"— no output until this finishes", 35)
         agent_activity(req_id, "think", f"round {rnd}", "model reasoning")
         calls, content = [], ""
         # Set when THIS round has to be redone as text. Kept separate from

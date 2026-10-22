@@ -303,6 +303,9 @@ button:disabled{color:var(--dim); border-color:var(--s2); cursor:default}
 .embed .thread{padding-left:44px;}
 .embed .thread::before, .embed .thread.live::after{left:16px;}
 .embed .tip canvas{width:40px; height:40px;}
+/* the 60px gutter tip, centred on the embedded line (left 16px): at -80px it sat
+   36px past the edge and its label ("think") was cut off by the history column */
+.embed .tip{width:40px; margin-left:-48px;}
 .embed .cin{max-width:none; padding:10px 12px 6px;}
 
 /* ── the end-user view (embedded in Philibert) ── */
@@ -1483,10 +1486,11 @@ async function ask(text, opts){
       let s2 = "think";
       if(TOOL_STATE[t]) s2 = TOOL_STATE[t];
       else if(stg.includes("tool")) s2 = "code";
-      else if(stg.includes("think")) s2 = "think";
+      else if(stg.includes("think") || stg.includes("load")) s2 = "think";
       else if(stg.includes("generat") || flow.on) s2 = "answer";
       setState(s2, seen);
-      stage(CLEAN ? doing(t, flow.on && lastRound(flow.shown).trim())
+      stage(CLEAN ? (stg.includes("load") && !flow.on ? String(st.detail || "Loading the model…")
+                                                    : doing(t, flow.on && lastRound(flow.shown).trim()))
                   : "round " + (seen||1) + (st.stage ? " · " + st.stage : ""));
 
       if(tick % 4) continue;

@@ -366,6 +366,7 @@ def update(log=None):
     git is installed; otherwise the repo's zip (signed in, for a private repo).
     Never touches data/ or models/."""
     before = version()
+    busy = []                                 # files in use that could not be replaced
     repo, branch = _repo()
     auth = {"Authorization": f"Bearer {_GH['token']}", "Accept": "application/vnd.github+json"} if _GH["token"] else {}
     if (ROOT / ".git").exists() and shutil.which("git"):
@@ -405,8 +406,20 @@ def update(log=None):
             if not rel or n.endswith("/") or rel.split("/")[0] not in UPDATABLE:
                 continue
             dst = ROOT / rel
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_bytes(z.read(n))
+            data = z.read(n)
+            try:
+                if dst.is_file() and dst.read_bytes() == data:
+                    continue                  # unchanged: never touch it (it may be open, e.g. the setup window's header)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                tmp = dst.with_name(dst.name + ".updating")
+                tmp.write_bytes(data)
+                os.replace(tmp, dst)
+            except OSError:                   # in use right now: the next update brings it
+                busy.append(rel)
+                try:
+                    tmp.unlink()
+                except (OSError, UnboundLocalError):
+                    pass
         sha = ""
         try:
             creq = urllib.request.Request(f"https://api.github.com/repos/{repo}/commits/{branch}",
@@ -420,10 +433,14 @@ def update(log=None):
         how = "download"
     after = version()
     changed = after != before
+    if busy:
+        _say(log, "Update: in use, not replaced this time: " + ", ".join(busy[:8]), "warn")
     _say(log, f"Update ({how}): {before} -> {after}", "ok")
     return {"ok": True, "changed": changed, "before": before, "after": after,
-            "message": ("Updated to " + after + ". Close Philibert and start it again to use the new version.")
-                       if changed else "Already up to date (" + after + ")."}
+            "busy": busy,
+            "message": (("Updated to " + after + ". Close Philibert and start it again to use the new version.")
+                        if changed else "Already up to date (" + after + ").")
+                       + (f" {len(busy)} file(s) were in use and will update next time." if busy else "")}
 
 
 # ── HTTP ─────────────────────────────────────────────────────────────────────
