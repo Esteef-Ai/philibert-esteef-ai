@@ -1,7 +1,14 @@
 """Band Manager: a working band's records in one SQLite file on the drive.
 
   gigs, venues, contacts, songs, setlists (+ their songs, in order),
-  merch (+ sales), money (income / expenses), reminders
+  merch (+ sales), money (income / expenses), reminders, tours (a run of gigs),
+  suppliers (van hire, printers, PA...), bills (owed to them; paying one books
+  the expense in money), and settings (the currency)
+
+Backups: once a day, before the first change, the file is copied to
+<data>/exports/Band backups (the last 14 are kept); BACK UP NOW and restore
+work on the same folder, and a restore first backs up what it replaces.
+Export: a zip of one CSV per list, for a spreadsheet or an accountant.
 
 Nothing is ever deleted outright: delete marks a row deleted (the Trash view
 lists them, restore brings them back). Philibert's chat and the Band Manager
@@ -9,10 +16,15 @@ page share this one file: <data>/band.db.
 
 Entry point: handle(body, db_path) -> dict.
 """
+import base64
+import csv
+import io
 import json
+import re
 import sqlite3
 import threading
 import time
+import zipfile
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -23,17 +35,31 @@ SCHEMA = {
                "contact_id": "INTEGER", "notes": "TEXT"},
     "gigs": {"date": "TEXT", "title": "TEXT", "venue_id": "INTEGER", "status": "TEXT", "fee": "REAL",
              "deposit_paid": "INTEGER", "load_in": "TEXT", "set_time": "TEXT", "set_length": "INTEGER",
-             "setlist_id": "INTEGER", "contact_id": "INTEGER", "notes": "TEXT"},
+             "setlist_id": "INTEGER", "contact_id": "INTEGER", "notes": "TEXT", "tour_id": "INTEGER"},
     "songs": {"title": "TEXT", "key": "TEXT", "bpm": "INTEGER", "length_sec": "INTEGER", "notes": "TEXT"},
     "setlists": {"name": "TEXT", "notes": "TEXT"},
-    "merch": {"name": "TEXT", "variant": "TEXT", "price": "REAL", "cost": "REAL", "stock": "INTEGER", "notes": "TEXT"},
+    "merch": {"name": "TEXT", "variant": "TEXT", "price": "REAL", "cost": "REAL", "stock": "INTEGER", "notes": "TEXT",
+              "supplier_id": "INTEGER"},
     "sales": {"date": "TEXT", "merch_id": "INTEGER", "gig_id": "INTEGER", "qty": "INTEGER", "price": "REAL"},
-    "money": {"date": "TEXT", "kind": "TEXT", "amount": "REAL", "category": "TEXT", "gig_id": "INTEGER", "note": "TEXT"},
+    "money": {"date": "TEXT", "kind": "TEXT", "amount": "REAL", "category": "TEXT", "gig_id": "INTEGER", "note": "TEXT",
+              "tour_id": "INTEGER", "supplier_id": "INTEGER"},
     "reminders": {"due": "TEXT", "text": "TEXT", "done": "INTEGER", "gig_id": "INTEGER"},
+    "tours": {"name": "TEXT", "starts": "TEXT", "ends": "TEXT", "notes": "TEXT"},
+    "suppliers": {"name": "TEXT", "kind": "TEXT", "person": "TEXT", "phone": "TEXT", "email": "TEXT",
+                  "website": "TEXT", "notes": "TEXT"},
+    "bills": {"due": "TEXT", "what": "TEXT", "supplier_id": "INTEGER", "amount": "REAL", "category": "TEXT",
+              "paid": "INTEGER", "paid_on": "TEXT", "money_id": "INTEGER", "gig_id": "INTEGER", "tour_id": "INTEGER",
+              "note": "TEXT"},
 }
 STATUSES = ["idea", "hold", "confirmed", "played", "cancelled"]
 REQUIRED = {"contacts": "name", "venues": "name", "gigs": "date", "songs": "title", "setlists": "name",
-            "merch": "name", "money": "amount", "reminders": "text", "sales": "merch_id"}
+            "merch": "name", "money": "amount", "reminders": "text", "sales": "merch_id",
+            "tours": "name", "suppliers": "name", "bills": "amount"}
+CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "NZD", "JPY", "CHF", "SEK", "NOK", "DKK", "PLN", "CZK",
+              "MXN", "BRL", "ZAR", "INR", "KRW", "SGD", "HKD", "ILS", "TRY"]
+SETTINGS = {"currency": "USD", "units": "imperial"}
+UNITS = {"imperial": "feet and inches, pounds, miles", "metric": "metres and centimetres, kilograms, kilometres"}
+KEEP_AUTO = 14
 _lock = threading.Lock()
 
 
@@ -56,7 +82,29 @@ def connect(db_path):
             if c not in have:
                 con.execute(f'ALTER TABLE {t} ADD COLUMN "{c}" {ty}')
     con.execute("CREATE TABLE IF NOT EXISTS setlist_songs (setlist_id INTEGER, song_id INTEGER, pos INTEGER)")
+    con.execute("CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT)")
     return con
+
+
+def settings(con):
+    out = dict(SETTINGS)
+    out.update({r[0]: r[1] for r in con.execute("SELECT k, v FROM settings")})
+    return out
+
+
+def set_settings(con, new):
+    cur = str((new or {}).get("currency") or "").upper().strip()
+    if cur:
+        if not re.fullmatch(r"[A-Z]{3}", cur):
+            raise BandError("the currency should be a 3-letter code, like USD, EUR or GBP")
+        con.execute("INSERT OR REPLACE INTO settings VALUES ('currency', ?)", (cur,))
+    units = str((new or {}).get("units") or "").lower().strip()
+    if units:
+        if units not in UNITS:
+            raise BandError("measurements should be imperial or metric")
+        con.execute("INSERT OR REPLACE INTO settings VALUES ('units', ?)", (units,))
+    con.commit()
+    return settings(con)
 
 
 def _table(t):
@@ -80,7 +128,7 @@ def _clean(t, row):
                 raise BandError(f"{c} should be a whole number")
         elif ty == "REAL":
             try:
-                out[c] = round(float(str(v).replace(",", "").replace("$", "").replace("€", "").replace("£", "")), 2)
+                out[c] = round(float(re.sub(r"[^\d.\-]", "", str(v).replace(",", "")) or "x"), 2)
             except (TypeError, ValueError):
                 raise BandError(f"{c} should be a number")
         else:
@@ -89,7 +137,7 @@ def _clean(t, row):
         out["status"] = "hold"
     if t == "money" and out.get("kind") not in (None, "income", "expense"):
         out["kind"] = "income"
-    for c in ("date", "due"):
+    for c in ("date", "due", "starts", "ends", "paid_on"):
         if out.get(c):
             try:
                 datetime.strptime(out[c][:10], "%Y-%m-%d")
@@ -100,7 +148,8 @@ def _clean(t, row):
 
 def rows(con, t, include_deleted=False, where="", args=()):
     t = _table(t)
-    order = {"gigs": "date", "reminders": "done, due", "money": "date DESC", "sales": "date DESC"}.get(t, "name" if "name" in SCHEMA[t] else "title")
+    order = {"gigs": "date", "reminders": "done, due", "money": "date DESC", "sales": "date DESC",
+             "tours": "starts DESC", "bills": "paid, due"}.get(t, "name" if "name" in SCHEMA[t] else "title")
     q = f"SELECT * FROM {t} WHERE " + ("deleted = 1" if include_deleted else "deleted = 0") + (f" AND {where}" if where else "")
     return [dict(r) for r in con.execute(q + f" ORDER BY {order}", args)]
 
@@ -108,7 +157,9 @@ def rows(con, t, include_deleted=False, where="", args=()):
 def save(con, t, row):
     t = _table(t)
     data = _clean(t, row or {})
+    data.pop("money_id", None)                    # only paying a bill sets this
     rid = row.get("id")
+    was = dict(con.execute("SELECT * FROM bills WHERE id = ?", (rid,)).fetchone() or {}) if t == "bills" and rid else {}
     now = time.time()
     if not rid:
         if not data.get(REQUIRED[t]) and data.get(REQUIRED[t]) != 0:
@@ -133,8 +184,57 @@ def save(con, t, row):
         if data:
             con.execute(f"UPDATE {t} SET " + ", ".join(f'"{c}" = ?' for c in data) + ", updated = ? WHERE id = ?",
                         [data[c] for c in data] + [now, rid])
+    if t == "bills":
+        _bill_money(con, rid, was)
     con.commit()
     return dict(con.execute(f"SELECT * FROM {t} WHERE id = ?", (rid,)).fetchone())
+
+
+def _bill_money(con, bid, was):
+    """A paid bill has one expense in money; un-paying it puts that expense in the Trash."""
+    b = dict(con.execute("SELECT * FROM bills WHERE id = ?", (bid,)).fetchone())
+    now = time.time()
+    if b.get("paid") and not b.get("money_id"):
+        paid_on = b.get("paid_on") or date.today().isoformat()
+        sup = con.execute("SELECT name FROM suppliers WHERE id = ?", (b.get("supplier_id"),)).fetchone()
+        note = " - ".join(x for x in (sup[0] if sup else "", b.get("what") or "") if x) or "Bill"
+        mid = con.execute("INSERT INTO money (date, kind, amount, category, gig_id, tour_id, supplier_id, note, created, updated) "
+                          "VALUES (?, 'expense', ?, ?, ?, ?, ?, ?, ?, ?)",
+                          (paid_on, b.get("amount") or 0, b.get("category") or "Bill", b.get("gig_id"), b.get("tour_id"),
+                           b.get("supplier_id"), note, now, now)).lastrowid
+        con.execute("UPDATE bills SET money_id = ?, paid_on = ? WHERE id = ?", (mid, paid_on, bid))
+    elif not b.get("paid") and b.get("money_id"):
+        con.execute("UPDATE money SET deleted = 1, updated = ? WHERE id = ?", (now, b["money_id"]))
+        con.execute("UPDATE bills SET money_id = NULL, paid_on = NULL WHERE id = ?", (bid,))
+    elif b.get("paid") and b.get("money_id") and (b.get("amount"), b.get("paid_on")) != (was.get("amount"), was.get("paid_on")):
+        con.execute("UPDATE money SET amount = ?, date = COALESCE(?, date), updated = ? WHERE id = ?",
+                    (b.get("amount") or 0, b.get("paid_on"), now, b["money_id"]))
+
+
+def tour(con, tid):
+    """One tour: its gigs, and what it brought in, cost and kept."""
+    tr = con.execute("SELECT * FROM tours WHERE id = ?", (tid,)).fetchone()
+    if not tr:
+        raise BandError("no such tour")
+    gigs = [dict(r) for r in con.execute(
+        "SELECT gigs.*, venues.name AS venue, venues.city FROM gigs LEFT JOIN venues ON venues.id = gigs.venue_id "
+        "WHERE gigs.deleted = 0 AND gigs.tour_id = ? ORDER BY gigs.date", (tid,))]
+    ids = [g["id"] for g in gigs] or [-1]
+    mark = ",".join("?" * len(ids))
+    cash = [dict(r) for r in con.execute(
+        f"SELECT * FROM money WHERE deleted = 0 AND (tour_id = ? OR gig_id IN ({mark}))", [tid] + ids)]
+    inc = sum(m["amount"] or 0 for m in cash if m["kind"] == "income")
+    exp = sum(m["amount"] or 0 for m in cash if m["kind"] == "expense")
+    merch = con.execute(f"SELECT COALESCE(SUM(qty * price), 0) FROM sales WHERE deleted = 0 AND gig_id IN ({mark})", ids).fetchone()[0]
+    owed = con.execute("SELECT COALESCE(SUM(amount), 0) FROM bills WHERE deleted = 0 AND COALESCE(paid, 0) = 0 "
+                       f"AND (tour_id = ? OR gig_id IN ({mark}))", [tid] + ids).fetchone()[0]
+    live = [g for g in gigs if g.get("status") != "cancelled"]
+    t = dict(tr)
+    return {**t, "gigs": gigs, "starts": t.get("starts") or (live[0]["date"] if live else None),
+            "ends": t.get("ends") or (live[-1]["date"] if live else None),
+            "fees": round(sum(g.get("fee") or 0 for g in live), 2), "income": round(inc + merch, 2),
+            "merch_income": round(merch, 2), "expenses": round(exp, 2), "owed": round(owed, 2),
+            "net": round(inc + merch - exp, 2)}
 
 
 def set_deleted(con, t, rid, flag):
@@ -183,7 +283,15 @@ def overview(con, today=None):
         "SELECT gigs.*, venues.name AS venue FROM gigs LEFT JOIN venues ON venues.id = gigs.venue_id WHERE gigs.deleted = 0 "
         "AND gigs.status = 'played' AND COALESCE(gigs.fee, 0) > 0 AND NOT EXISTS (SELECT 1 FROM money WHERE money.gig_id = gigs.id "
         "AND money.kind = 'income' AND money.deleted = 0)")]
-    return {"upcoming": upcoming, "due": due, "year": year, "income": round(inc + merch_in, 2), "expenses": round(exp, 2),
+    bills = [dict(r) for r in con.execute(
+        "SELECT bills.*, suppliers.name AS supplier FROM bills LEFT JOIN suppliers ON suppliers.id = bills.supplier_id "
+        "WHERE bills.deleted = 0 AND COALESCE(bills.paid, 0) = 0 AND (bills.due IS NULL OR bills.due <= ?) ORDER BY bills.due",
+        ((today + timedelta(days=14)).isoformat(),))]
+    tours = [tour(con, r[0]) for r in con.execute("SELECT id FROM tours WHERE deleted = 0")]
+    tours = sorted((x for x in tours if (x.get("ends") or "9999") >= t0), key=lambda x: x.get("starts") or "9999")
+    tours = [{**{k: v for k, v in x.items() if k != "gigs"}, "gig_count": len(x["gigs"])} for x in tours[:3]]
+    return {"upcoming": upcoming, "due": due, "year": year, "bills_due": bills, "tours": tours,
+            "currency": settings(con)["currency"], "units": settings(con)["units"], "income": round(inc + merch_in, 2), "expenses": round(exp, 2),
             "merch_income": round(merch_in, 2), "net": round(inc + merch_in - exp, 2), "low_stock": low, "unpaid": unpaid,
             "counts": {t: con.execute(f"SELECT COUNT(*) FROM {t} WHERE deleted = 0").fetchone()[0] for t in SCHEMA}}
 
@@ -217,6 +325,79 @@ def gig_ics(con, gid):
             + "END:VEVENT\r\nEND:VCALENDAR\r\n")
 
 
+def _backup_dir(db_path):
+    return Path(db_path).parent / "exports" / "Band backups"
+
+
+def backup(con, db_path, auto=False):
+    """A copy of the band file in the backups folder (SQLite's own copy, safe while open)."""
+    d = _backup_dir(db_path)
+    d.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y-%m-%d %H%M%S")
+    dst = d / (f"auto {stamp}.db" if auto else f"band {stamp}.db")
+    n = 2
+    while dst.exists():
+        dst = dst.with_name(dst.stem.split(" (")[0] + f" ({n}).db")
+        n += 1
+    out = sqlite3.connect(str(dst))
+    try:
+        con.backup(out)
+    finally:
+        out.close()
+    if auto:
+        for old in sorted(d.glob("auto *.db"))[:-KEEP_AUTO]:
+            old.unlink()
+    return dst.name
+
+
+def backups(db_path):
+    d = _backup_dir(db_path)
+    if not d.is_dir():
+        return []
+    return [{"name": p.name, "size": p.stat().st_size, "auto": p.name.startswith("auto "), "when": p.stat().st_mtime}
+            for p in sorted(d.glob("*.db"), key=lambda p: p.stat().st_mtime, reverse=True)]
+
+
+def daily_backup(con, db_path):
+    """Before the first change of the day: one copy, if there is anything to keep."""
+    if not any(con.execute(f"SELECT 1 FROM {t} LIMIT 1").fetchone() for t in SCHEMA):
+        return None
+    if any(_backup_dir(db_path).glob(f"auto {date.today().isoformat()} *.db")):
+        return None
+    return backup(con, db_path, auto=True)
+
+
+def restore_backup(con, db_path, name):
+    if not any(b["name"] == name for b in backups(db_path)):    # only a file the list showed: no paths
+        raise BandError("no such backup")
+    src = sqlite3.connect(str(_backup_dir(db_path) / name))
+    try:
+        if src.execute("SELECT name FROM sqlite_master WHERE name = 'gigs'").fetchone() is None:
+            raise BandError("that file is not a band backup")
+        saved = backup(con, db_path)              # what is replaced can come back too
+        src.backup(con)
+    finally:
+        src.close()
+    connect(db_path).close()                      # an older backup gets today's columns
+    return saved
+
+
+def export_zip(con):
+    """One CSV per list (the Trash left out), for a spreadsheet or an accountant."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for t, cols in SCHEMA.items():
+            s = io.StringIO()
+            w = csv.writer(s)
+            names = ["id"] + list(cols)
+            w.writerow(names)
+            for r in rows(con, t):
+                w.writerow(["" if r.get(c) is None else r.get(c) for c in names])
+            z.writestr(f"{t}.csv", "\ufeff" + s.getvalue())        # the BOM makes Excel read it as UTF-8
+        z.writestr("settings.json", json.dumps(settings(con), indent=2))
+    return buf.getvalue()
+
+
 def _line(t, r, con):
     def venue(vid):
         v = con.execute("SELECT name FROM venues WHERE id = ?", (vid,)).fetchone() if vid else None
@@ -243,7 +424,17 @@ def tool(name, a, db_path):
                             f"\nDue this week: " + ("; ".join(f"{x['text']} ({x.get('due') or 'no date'})" for x in o["due"]) or "nothing") +
                             f"\n{o['year']}: income {o['income']} (merch {o['merch_income']}), expenses {o['expenses']}, net {o['net']}" +
                             "\nUnpaid played gigs: " + ("; ".join(f"{g['date']} {g.get('venue')}" for g in o["unpaid"]) or "none") +
-                            "\nLow stock: " + ("; ".join(f"{m['name']} {m.get('variant') or ''} ({m.get('stock')})" for m in o["low_stock"]) or "none"))
+                            "\nLow stock: " + ("; ".join(f"{m['name']} {m.get('variant') or ''} ({m.get('stock')})" for m in o["low_stock"]) or "none") +
+                            "\nBills due in 14 days: " + ("; ".join(f"{b.get('supplier') or b.get('what') or 'bill'} {b['amount']} ({b.get('due') or 'no date'})"
+                                                                     for b in o["bills_due"]) or "none") +
+                            "\nTours: " + ("; ".join(f"#{x['id']} {x['name']} {x.get('starts') or '?'}..{x.get('ends') or '?'}, "
+                                                      f"{x['gig_count']} gigs, net {x['net']}" for x in o["tours"]) or "none") +
+                            f"\nAll money is in {o['currency']}. Measurements and weights: {o['units']} "
+                            f"({UNITS.get(o['units'], '')}).")
+                if what == "tours" and a.get("id"):
+                    x = tour(con, int(a["id"]))
+                    return (f"Tour #{x['id']} {x['name']} {x.get('starts')}..{x.get('ends')}: fees {x['fees']}, in {x['income']}, "
+                            f"out {x['expenses']}, owed {x['owed']}, net {x['net']}\n" + "\n".join(_line("gigs", g, con) for g in x["gigs"]))
                 if what not in SCHEMA:
                     return f"Unknown list {what!r}. Use one of: overview, " + ", ".join(SCHEMA)
                 rs = rows(con, what)
@@ -260,6 +451,7 @@ def tool(name, a, db_path):
                 row = dict(a.get("fields") or {})
                 if a.get("id"):
                     row["id"] = a["id"]
+                daily_backup(con, db_path)
                 r = save(con, t, row)
                 return ("Changed " if a.get("id") else "Added ") + _line(_table(t), r, con)
             return "unknown band tool"
@@ -275,6 +467,8 @@ def handle(body, db_path):
     with _lock:
         con = connect(db_path)
         try:
+            if op in ("save", "delete", "restore", "setlist_songs", "settings_save"):
+                daily_backup(con, db_path)
             if op == "overview":
                 return {"ok": True, **overview(con)}
             if op == "list":
@@ -296,7 +490,23 @@ def handle(body, db_path):
             if op == "ics":
                 return {"ok": True, "ics": gig_ics(con, body.get("id"))}
             if op == "schema":
-                return {"ok": True, "schema": SCHEMA, "statuses": STATUSES}
+                return {"ok": True, "schema": SCHEMA, "statuses": STATUSES, "currencies": CURRENCIES}
+            if op == "tour":
+                return {"ok": True, "tour": tour(con, body.get("id"))}
+            if op == "settings":
+                return {"ok": True, "settings": settings(con), "currencies": CURRENCIES, "units": UNITS}
+            if op == "settings_save":
+                return {"ok": True, "settings": set_settings(con, body.get("settings"))}
+            if op == "backup":
+                return {"ok": True, "name": backup(con, db_path), "backups": backups(db_path)}
+            if op == "backups":
+                return {"ok": True, "backups": backups(db_path)}
+            if op == "restore_backup":
+                saved = restore_backup(con, db_path, str(body.get("name") or ""))
+                return {"ok": True, "saved": saved, "backups": backups(db_path)}
+            if op == "export":
+                return {"ok": True, "name": f"Band Manager {date.today().isoformat()}.zip",
+                        "zip": base64.b64encode(export_zip(con)).decode("ascii")}
             return {"ok": False, "msg": f"unknown op {op!r}"}
         except BandError as e:
             return {"ok": False, "msg": str(e)}
