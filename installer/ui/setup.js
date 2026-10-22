@@ -25,16 +25,16 @@
   /* ---------- the API (pywebview, or a stand-in in a browser) ---------- */
   var mock = {
     survey: function () {
-      return { os: "windows", arch: "amd64", cpu: "AMD Ryzen 7 9800X3D 8-Core Processor", ram_gb: 61.4,
-               gpus: [{ name: "NVIDIA GeForce RTX 5070 Ti", vram_gb: 15.9 }, { name: "AMD Radeon(TM) Graphics", vram_gb: 2 }],
-               fast_gb: 15.9, fast_kind: "NVIDIA GeForce RTX 5070 Ti" };
+      // made-up example hardware for previewing the wizard in a browser
+      return { os: "windows", arch: "amd64", cpu: "Example 8-Core Processor", ram_gb: 32,
+               gpus: [{ name: "Example GeForce RTX (16 GB)", vram_gb: 16 }],
+               fast_gb: 16, fast_kind: "Example GeForce RTX (16 GB)" };
     },
     places: function () {
       return [
-        { path: "K:\\", label: "Philibert", fs: "exFAT", free_gb: 896.4, total_gb: 931.5, bus: "USB", external: true, system: false },
-        { path: "E:\\", label: "Media2", fs: "NTFS", free_gb: 2790.1, total_gb: 2794.5, bus: "USB", external: true, system: false },
-        { path: "G:\\", label: "Game", fs: "NTFS", free_gb: 104.2, total_gb: 476.9, bus: "NVMe", external: false, system: false },
-        { path: "C:\\", label: "", fs: "NTFS", free_gb: 673.0, total_gb: 1862.0, bus: "NVMe", external: false, system: true }];
+        { path: "D:\\", label: "Philibert", fs: "exFAT", free_gb: 896.4, total_gb: 931.5, bus: "USB", external: true, system: false },
+        { path: "E:\\", label: "Backup", fs: "NTFS", free_gb: 1790.1, total_gb: 1863.0, bus: "USB", external: true, system: false },
+        { path: "C:\\", label: "", fs: "NTFS", free_gb: 373.0, total_gb: 931.5, bus: "NVMe", external: false, system: true }];
     },
     catalog: function () {
       function m(tag, label, size, need, rating, why, extra) {
@@ -62,7 +62,7 @@
     choose_folder: function () { return "D:\\Music\\Philibert"; },
     checklist: function () {
       return [
-        { id: "gpu", title: "Graphics driver", detail: "NVIDIA GeForce RTX 5070 Ti - its driver is installed. Nothing to do.", kind: "info" },
+        { id: "gpu", title: "Graphics driver", detail: "Example GeForce RTX - its driver is installed. Nothing to do.", kind: "info" },
         { id: "shortcut", title: "A Philibert shortcut on this computer's desktop", detail: "Optional. The only thing Setup would put on this computer.", kind: "optional", value: false }];
     },
     start_install: function (plan) { mock._t0 = Date.now(); mock._plan = plan; return true; },
