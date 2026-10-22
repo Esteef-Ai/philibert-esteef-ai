@@ -134,7 +134,7 @@ CONFIG_FILE  = _CONFIG_DIR / "neuraldock_config.json"
 
 
 def _drive_root():
-    """Philibert: the drive's Philibert folder (data\ is in it)."""
+    """Philibert: the drive's Philibert folder (the one data is in)."""
     return Path(os.environ.get("PHILIBERT_ROOT") or _CONFIG_DIR.parent)
 
 
@@ -18024,6 +18024,12 @@ class Handler(BaseHTTPRequestHandler):
         content = ELENA_FILE.read_bytes()
         if PORTABLE:   # the page rebrands itself, but the tab title shows first
             content = content.replace(b"<title>Elena</title>", f"<title>{PRODUCT} // Esteef.Ai</title>".encode())
+            # The name the messages are labelled with, from the first paint: waiting for
+            # /api/status (4 s, longer while a model loads) left every label "Elena".
+            _js = lambda v: json.dumps(str(v)).replace("</", r"<\/")     # safe inside <script>
+            content = content.replace(b"</head>", ("<script>window.PRESET_BRAND=%s;window.PRESET_ME=%s</script>"
+                                                   % (_js(PRODUCT), _js(str(_config.get("user_name") or "")[:40]))
+                                                   ).encode() + b"</head>", 1)
         # Same token bootstrap as the main UI: a device opening /elena?token=...
         # authenticates for THIS request, but every fetch afterwards reads
         # nd_token from localStorage, which a fresh pairing link has never set.

@@ -459,7 +459,7 @@ let history = [];
 const HISTORY_CHARS = 24000;
 /* Your messages are labelled with the config's user_name, else just "You" - a
    name written into this file would ship to everyone who gets the drive. */
-let ME = "You";
+let ME = window.PRESET_ME || "You";
 /* Embedded (Philibert's one-stop page): the end-user view. One summary line per
    turn instead of every tool call and round, approvals docked by the composer,
    and the conversation saved to the chat history panel. */
@@ -886,7 +886,7 @@ $("modelsel").addEventListener("change", async (e) => {
 /* ── Philibert branding ─────────────────────────────────────────────────────
  * The same page is ND's Elena and the portable drive's Philibert. ND says which
  * in /api/status; everything that names the assistant follows it. */
-let BRAND = "Elena", HOST = "NeuralDock";
+let BRAND = window.PRESET_BRAND || "Elena", HOST = window.PRESET_BRAND || "NeuralDock", BRANDED = false;
 function applyBrand(d){
   if(d.user_name) ME = d.user_name;
   const nb = $("netbtn");
@@ -896,8 +896,11 @@ function applyBrand(d){
     nb.textContent = "INTERNET: " + (d.online ? "ON" : "OFF");
     nb.dataset.on = d.online ? "1" : "";
   }
-  if(!d.portable || BRAND !== "Elena") return;
-  BRAND = d.product || "Philibert"; HOST = BRAND;
+  if(!d.portable || BRANDED) return;
+  BRANDED = true;
+  BRAND = d.product || BRAND || "Philibert"; HOST = BRAND;
+  // anything already on screen under the old name takes the new one
+  document.querySelectorAll(".node.el > .who").forEach(w => { w.textContent = BRAND; });
   api("/api/philibert/version", {}).then(v => {
     $("updbtn").title = "Get the newest version of " + BRAND + "  (this drive: " + (v.version || "?") + ")";
   }).catch(() => {});

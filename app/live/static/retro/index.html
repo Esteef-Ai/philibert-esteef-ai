@@ -77,8 +77,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
 .game-card:focus{outline:2px solid var(--accent2);outline-offset:4px;border-radius:6px;}
 .game-card:hover{transform:translateY(-2px);border-color:var(--border2);box-shadow:0 6px 20px rgba(0,0,0,.45);}
 .game-art{width:100%;aspect-ratio:.72;background:linear-gradient(160deg,#1e1e3a 0%,#1a2040 50%,#1a1a3a 100%);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:3.2rem;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.6);transition:box-shadow .18s ease;}
-.game-art img{width:100%;height:100%;object-fit:cover;display:none;border-radius:8px;}
-.game-art img.loaded{display:block;}
+/* Not display:none until loaded: Chrome never loads a lazy image that is display:none,
+   so box art never appeared (the original Retro Vault too). Laid out, invisible, faded in. */
+.game-art img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .25s;border-radius:8px;z-index:1;}
+.game-art img.loaded{opacity:1;}
 .sys-badge{position:absolute;top:6px;left:6px;font-family:'Press Start 2P',monospace;font-size:.38rem;padding:2px 5px;border-radius:3px;letter-spacing:.04em;color:#fff;}
 .zip-badge{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.65);border-radius:3px;padding:2px 5px;font-size:.58rem;color:var(--muted);}
 .play-overlay{position:absolute;inset:0;background:rgba(0,0,0,.52);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .14s;}
@@ -1217,7 +1219,7 @@ async function fetchBoxArt(indices){
           var r=await fetch("/retro/api/fetch-art",{
             method:"POST",
             headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({system:g.system, title:g.title, type:type})
+            body:JSON.stringify({system:g.system, title:g.title, file:g.filename||"", type:type})
           });
           var d=await r.json();
           return d.ok ? d.url : null;
@@ -2018,6 +2020,7 @@ document.getElementById("mn-download-art").onclick=async function(){
   closeAllMenus();
   try{ const st=await fetch("/retro/api/status").then(r=>r.json());
        if(!st.online){ toast("Box art downloads while Philibert's INTERNET switch is on. Art already downloaded shows offline.",true); return; } }catch(e){}
+  artJob(true); return;
   var missing=[];
   LIBRARY.forEach(function(g,i){ if(!g.coverBox&&!g.coverCart) missing.push(i); });
   if(!missing.length){ toast("All box art already downloaded ✓"); return; }
@@ -2035,7 +2038,7 @@ document.getElementById("mn-metadata").onclick=async()=>{
   await enrichBatch(need,msg=>toast(msg));
   toast("Metadata updated!");
 };
-document.getElementById("mn-boxart").onclick=async()=>{
+document.getElementById("mn-boxart").onclick=async()=>{ closeAllMenus(); artJob(true); return;
   const all=LIBRARY.map((g,i)=>i);if(!all.length){toast("No games in library.");return;}
   LIBRARY.forEach(g=>g.cover=null);saveLib();
   toast("Fetching box art for all games...");
@@ -3384,7 +3387,7 @@ async function artFromDrive(){
   const need=[]; LIBRARY.forEach(function(g,i){ if(!g.coverBox||!g.coverCart) need.push(i); });
   if(!need.length) return;
   const r=await fetch("/retro/api/art-cached",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({games:need.map(function(i){ return {system:LIBRARY[i].system,title:LIBRARY[i].title}; })})}).then(function(x){ return x.json(); });
+    body:JSON.stringify({games:need.map(function(i){ return {system:LIBRARY[i].system,title:LIBRARY[i].title,file:LIBRARY[i].filename||""}; })})}).then(function(x){ return x.json(); });
   let got=0; const missing=[];
   need.forEach(function(i,k){
     const a=(r.art||[])[k]||{}, g=LIBRARY[i];
@@ -3395,10 +3398,51 @@ async function artFromDrive(){
   });
   if(got){ saveLib(); renderGames(); }
   let auto=false; try{ auto=sessionStorage.getItem("rv.artAuto")==="1"; }catch(e){}
-  if(r.online&&missing.length&&!auto){
+  if(r.online&&missing.length&&!auto&&!artFromDrive.polling){
     try{ sessionStorage.setItem("rv.artAuto","1"); }catch(e){}
-    for(let b=0;b<missing.length;b+=40) await fetchBoxArt(missing.slice(b,b+40));
+    artJob(false);
   }
+}
+
+// Box art for the whole library is downloaded by Philibert (the server), not this page,
+// so it carries on while the window is minimised or closed. This only starts it, shows
+// how far it got, and picks up new art as it lands.
+async function artJob(asked){
+  let st={};
+  try{ st=await fetch("/retro/api/art-job",{method:"POST"}).then(r=>r.json()); }catch(e){}
+  if(st.state==="offline"){ if(asked) toast("Box art downloads while Philibert's INTERNET switch is on.",true); return; }
+  if(asked&&st.state==="done"&&!st.total){ toast("All the box art there is is already on the drive ✓"); return; }
+  artPoll();
+}
+function artChip(text){
+  let c=document.getElementById("art-chip");
+  if(!c){ c=document.createElement("div"); c.id="art-chip";
+    c.style.cssText="position:fixed;right:14px;bottom:14px;z-index:60;background:#1a1530;border:1px solid #7c5cbf;"+
+      "border-radius:8px;padding:.45rem .8rem;font-size:.7rem;color:#ddd;box-shadow:0 4px 18px rgba(0,0,0,.4)";
+    document.body.appendChild(c); }
+  if(text===null){ c.remove(); return; }
+  c.textContent=text;
+}
+async function artPoll(){
+  if(artFromDrive.polling) return;
+  artFromDrive.polling=true;
+  let lastGot=-1;
+  try{
+    for(;;){
+      let st={};
+      try{ st=await fetch("/retro/api/art-job").then(r=>r.json()); }catch(e){ break; }
+      if(st.state==="running"){
+        artChip("Box art: "+(st.done||0).toLocaleString()+" / "+(st.total||0).toLocaleString()+(st.system?" · "+st.system:""));
+      }
+      if((st.got||0)!==lastGot){ lastGot=st.got||0; await artFromDrive(); }
+      if(st.state!=="running"){
+        if(st.state==="done") artChip("Box art: "+(st.got||0).toLocaleString()+" new"+(st.missed?", "+st.missed.toLocaleString()+" have none":""));
+        setTimeout(function(){ artChip(null); },6000);
+        break;
+      }
+      await new Promise(function(r){ setTimeout(r,2500); });
+    }
+  } finally { artFromDrive.polling=false; }
 }
 </script>
 </body>

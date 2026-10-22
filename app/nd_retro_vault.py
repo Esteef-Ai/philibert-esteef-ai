@@ -16,10 +16,13 @@ edition. What changed for a drive that travels between computers:
 
 Served by the launcher under /retro/ (handle_get / handle_post).
 """
+import difflib
 import json
 import os
 import re
 import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -70,6 +73,41 @@ LIBRETRO = {
     "GBA": "Nintendo - Game Boy Advance", "N64": "Nintendo - Nintendo 64", "GB": "Nintendo - Game Boy", "MAME": "MAME",
 }
 _art_lock = threading.Lock()
+# libretro-thumbnails: one GitHub repo per system, named with underscores
+# ("Nintendo_-_Super_Nintendo_Entertainment_System"). The old links used the
+# spaced name and every request was a 404 - art never arrived (2026-10-22).
+THUMB_RAW = "https://raw.githubusercontent.com/libretro-thumbnails/"
+THUMB_API = "https://api.github.com/repos/libretro-thumbnails/"
+ART_DIRS = {"box": "Named_Boxarts", "snap": "Named_Snaps"}
+INDEX_DAYS = 30
+REGION_PREF = ["(USA)", "(USA, Europe)", "(World)", "(USA, Australia)", "(Japan, USA)", "(Europe)", "(USA, Japan)", "(Japan)"]
+UA = {"User-Agent": "Philibert-RetroVault/1.0"}
+
+
+# Folders are often mixed: a "Master System" folder full of Genesis, 32X and Game Gear
+# games (K: has 947 .bin files, 132 of them Master System). Look there too.
+ALSO = {"SMS": ["Sega - Mega Drive - Genesis", "Sega - Game Gear", "Sega - 32X"],
+        "Genesis": ["Sega - 32X", "Sega - Master System - Mark III"],
+        "GB": ["Nintendo - Game Boy Color"]}
+
+
+def thumb_repo(sys_id):
+    return LIBRETRO.get(sys_id, sys_id).replace(" ", "_")
+
+
+def art_repos(sys_id):
+    return [LIBRETRO[sys_id]] + ALSO.get(sys_id, [])
+
+
+def art_key(name):
+    """A ROM file name and a thumbnail name, reduced to what they share: no region or
+    dump tags, no 'The', no punctuation. 'Legend of Zelda - A Link to the Past, The.zip'
+    and 'Legend of Zelda, The - A Link to the Past (USA)' both become
+    'legendofzeldaalinktothepast'."""
+    n = re.sub(r"\.(zip|7z|png|nes|sfc|smc|gba|gb|gbc|z64|n64|v64|sms|bin|md|gen)$", "", str(name), flags=re.I)
+    n = re.sub(r"\([^)]*\)|\[[^\]]*\]", " ", n).lower().replace("&", " and ")
+    n = re.sub(r"\bthe\b", " ", n)
+    return re.sub(r"[^a-z0-9]+", "", n)
 _STATE_KEY = re.compile(r"^[A-Za-z0-9 _\-.]{1,120}$")
 _PROFILE_ID = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
@@ -82,6 +120,8 @@ class Vault:
         self.art = self.root / "art"
         self.saves = self.root / "saves"
         self.online, self.ask_json, self.log = online, ask_json, log
+        self._keys = {}                                     # (system, kind) -> {art_key: [names]}
+        self.job = {"state": "idle"}                        # the background art download
 
     # --- the library -------------------------------------------------------------
     def sys_dir(self, sys_id):
@@ -155,31 +195,169 @@ class Vault:
             return None
         return self.art / sys_id / art_type / (safe + ".png")
 
-    def fetch_art(self, sys_id, title, art_type="box"):
-        p = self.art_path(sys_id, title, art_type)
+    def art_file(self, sys_id, rom, art_type="box"):
+        """Art for a ROM file, kept under the ROM's own name: art/<system>/<box|snap>/<rom stem>.png."""
+        if sys_id not in LIBRETRO or art_type not in ART_DIRS or not rom:
+            return None
+        stem = os.path.splitext(os.path.basename(str(rom)))[0]
+        safe = re.sub(r'[\\/:*?"<>|]', "-", stem).strip()
+        if not safe or safe.startswith("."):
+            return None
+        return self.art / sys_id / art_type / (safe + ".png")
+
+    def art_index(self, sys_id, art_type="box", repo=None):
+        """Every thumbnail name libretro has for a system (no .png), cached on the drive
+        for INDEX_DAYS. Two GitHub API calls when it has to be fetched."""
+        repo = (repo or LIBRETRO[sys_id]).replace(" ", "_")
+        f = self.art / "_index" / f"{repo}-{art_type}.json"
+        try:
+            if f.is_file() and (time.time() - f.stat().st_mtime < INDEX_DAYS * 86400 or not self.online()):
+                return json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass
+        if not self.online():
+            return []
+        def get(url):
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as r:
+                return json.loads(r.read())
+        root = get(THUMB_API + repo + "/git/trees/master")
+        sha = next(e["sha"] for e in root.get("tree", []) if e.get("path") == ART_DIRS[art_type])
+        names = [e["path"][:-4] for e in get(THUMB_API + repo + "/git/trees/" + sha).get("tree", [])
+                 if e.get("path", "").lower().endswith(".png")]
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(names), encoding="utf-8")
+        self._keys.pop((repo, art_type), None)
+        return names
+
+    def _by_key(self, sys_id, art_type, repo):
+        k = (repo.replace(" ", "_"), art_type)
+        if k not in self._keys:
+            by = {}
+            for n in self.art_index(sys_id, art_type, repo):
+                by.setdefault(art_key(n), []).append(n)
+            self._keys[k] = by
+        return self._keys[k]
+
+    def match_art(self, sys_id, rom, art_type="box", with_repo=False):
+        """The thumbnail for a ROM, or None: the same key in the system's own list, then
+        in the lists of systems its folder often mixes in, then the closest key above
+        0.88. The scan libretro has for that game - never a made-up cover. Prefers USA,
+        then World, Europe..."""
+        key = art_key(rom)
+        if not key:
+            return None
+        found = None
+        for repo in art_repos(sys_id):
+            names = self._by_key(sys_id, art_type, repo).get(key)
+            if names:
+                found = (repo, names)
+                break
+        if not found:
+            by = self._by_key(sys_id, art_type, art_repos(sys_id)[0])
+            close = difflib.get_close_matches(key, by.keys(), n=1, cutoff=0.88)
+            if close:
+                found = (art_repos(sys_id)[0], by[close[0]])
+        if not found:
+            return None
+        rank = lambda n: min([i for i, r in enumerate(REGION_PREF) if r in n] or [len(REGION_PREF)])
+        name = sorted(found[1], key=lambda n: (rank(n), len(n)))[0]
+        return (found[0], name) if with_repo else name
+
+    def fetch_art(self, sys_id, title, art_type="box", rom=None):
+        """Art for one game: from the drive if it is there, else (online only) the matched
+        libretro thumbnail, saved to the drive."""
+        p = self.art_file(sys_id, rom, art_type) if rom else self.art_path(sys_id, title, art_type)
         if not p:
             return None, "unknown system"
         if p.is_file():
             return p, ""
         if not self.online():
             return None, "offline"                        # only cached art while the Internet is off
-        url = ("https://raw.githubusercontent.com/libretro-thumbnails/" + urllib.parse.quote(LIBRETRO[sys_id], safe="")
-               + "/master/" + ("Named_Boxarts" if art_type == "box" else "Named_Snaps") + "/"
-               + urllib.parse.quote(self.lt_title(title) + ".png", safe=""))
-        with _art_lock:
-            if p.is_file():
-                return p, ""
-            try:
-                req = urllib.request.Request(url, headers={"User-Agent": "Philibert-RetroVault/1.0"})
-                with urllib.request.urlopen(req, timeout=10) as r:
-                    data = r.read(4_000_000)
-                if len(data) > 500 and data[:4] == b"\x89PNG":
-                    p.parent.mkdir(parents=True, exist_ok=True)
-                    p.write_bytes(data)
-                    return p, ""
-            except Exception:
-                pass
+        try:
+            m = self.match_art(sys_id, rom or title, art_type, with_repo=True)
+        except Exception as e:
+            return None, f"no index ({str(e)[:60]})"
+        if not m:
+            return None, "not found"
+        url = (THUMB_RAW + m[0].replace(" ", "_") + "/master/" + ART_DIRS[art_type] + "/"
+               + urllib.parse.quote(m[1] + ".png", safe=""))
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=20) as r:
+                data = r.read(4_000_000)
+        except Exception:
+            return None, "download failed"
+        if len(data) > 500 and data[:4] == b"\x89PNG":
+            p.parent.mkdir(parents=True, exist_ok=True)
+            tmp = p.with_name(p.name + ".part")
+            tmp.write_bytes(data)
+            os.replace(tmp, p)
+            return p, ""
         return None, "not found"
+
+    # --- box art for the whole library, in the background ---------------------------
+    def art_job_start(self, kinds=("box",)):
+        """Download missing art for every game on the drive, on the server: it carries on
+        when the window is minimised, hidden or closed. Misses are remembered so the next
+        run does not ask again (until the index is refreshed)."""
+        with _art_lock:
+            if self.job.get("state") == "running":
+                return dict(self.job)
+            if not self.online():
+                return {"state": "offline"}
+            self.job = {"state": "running", "total": 0, "done": 0, "got": 0, "missed": 0, "system": "",
+                        "started": time.time()}
+        threading.Thread(target=self._art_job, args=(tuple(kinds),), daemon=True).start()
+        return dict(self.job)
+
+    def _art_job(self, kinds):
+        miss_f = self.art / "_index" / "misses.json"
+        try:
+            misses = set(json.loads(miss_f.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            misses = set()
+        work = []
+        for sys_id in SYS_EXTS:
+            if sys_id not in LIBRETRO:
+                continue
+            for g in self.list_system(sys_id):
+                for kind in kinds:
+                    p = self.art_file(sys_id, g["name"], kind)
+                    tag = f"{sys_id}/{kind}/{g['name']}"
+                    if p and not p.is_file() and tag not in misses:
+                        work.append((sys_id, g["name"], kind, tag))
+        self.job["total"] = len(work)
+
+        def one(w):
+            sys_id, rom, kind, tag = w
+            self.job["system"] = sys_id
+            p, why = self.fetch_art(sys_id, rom, kind, rom=rom)
+            with _art_lock:
+                self.job["done"] += 1
+                if p:
+                    self.job["got"] += 1
+                else:
+                    self.job["missed"] += 1
+                    if why == "not found":
+                        misses.add(tag)
+        try:
+            for sys_id in {w[0] for w in work}:          # the indexes first, not one per thread
+                for kind in kinds:
+                    for repo in art_repos(sys_id):
+                        try:
+                            self._by_key(sys_id, kind, repo)
+                        except Exception as e:
+                            self.log(f"Retro Vault: no art index for {repo} ({e})")
+            with ThreadPoolExecutor(max_workers=6) as ex:
+                list(ex.map(one, work))
+            self.job["state"] = "done"
+        except Exception as e:
+            self.job.update(state="error", error=str(e)[:200])
+        finally:
+            try:
+                miss_f.parent.mkdir(parents=True, exist_ok=True)
+                miss_f.write_text(json.dumps(sorted(misses)), encoding="utf-8")
+            except OSError:
+                pass
 
     # --- save states (files on the drive) -------------------------------------------
     def state_path(self, key):
@@ -252,6 +430,10 @@ TYPES = {".html": "text/html; charset=utf-8", ".js": "application/javascript; ch
          ".zip": "application/zip"}
 
 
+def _art_url(sys_id, kind, rom):
+    return "/retro/art/" + "/".join(urllib.parse.quote(x, safe="") for x in (sys_id, kind, rom))
+
+
 def handle_get(v, path, query):
     """-> (status, content_type, bytes_or_Path). path is under /retro/."""
     rel = path[len("/retro/"):] if path.startswith("/retro/") else ""
@@ -278,6 +460,12 @@ def handle_get(v, path, query):
         f = v.rom_file(parts[0], parts[1] if len(parts) > 1 else "")
         return (200, TYPES.get(f.suffix.lower(), "application/octet-stream"), f) if f else \
                (404, "text/plain", b"That game is not in Entertainment/Cartridges.")
+    if rel == "api/art-job":
+        return 200, "application/json", json.dumps(dict(v.job, online=v.online())).encode()
+    if rel.startswith("art/"):                          # art/<system>/<box|snap>/<rom file>
+        parts = [urllib.parse.unquote(x) for x in rel[4:].split("/", 2)]
+        p = v.art_file(parts[0], parts[2], parts[1]) if len(parts) == 3 else None
+        return (200, "image/png", p) if p and p.is_file() else (204, "text/plain", b"")
     if rel.startswith("boxart/"):
         parts = [urllib.parse.unquote(x) for x in rel[7:].split("/")]
         p = v.art_path(parts[0], parts[1] if len(parts) > 1 else "", parts[2] if len(parts) > 2 else "box")
@@ -307,12 +495,16 @@ def handle_post(v, path, raw):
             d = json.loads(raw or b"{}")
         except ValueError:
             d = {}
-        p, why = v.fetch_art(str(d.get("system", "")), str(d.get("title", "")), str(d.get("type", "box")))
+        sys_id, kind, rom = str(d.get("system", "")), str(d.get("type", "box")), str(d.get("file") or "")
+        p, why = v.fetch_art(sys_id, str(d.get("title", "")), kind, rom=rom or None)
         if p:
-            url = ("/retro/boxart/" + urllib.parse.quote(str(d.get("system")), safe="") + "/"
-                   + urllib.parse.quote(str(d.get("title")), safe="") + "/" + str(d.get("type", "box")))
+            url = (_art_url(sys_id, kind, rom) if rom else
+                   "/retro/boxart/" + urllib.parse.quote(sys_id, safe="") + "/"
+                   + urllib.parse.quote(str(d.get("title")), safe="") + "/" + kind)
             return 200, "application/json", json.dumps({"ok": True, "url": url}).encode()
         return 200, "application/json", json.dumps({"ok": False, "why": why}).encode()
+    if rel == "api/art-job":
+        return 200, "application/json", json.dumps(v.art_job_start()).encode()
     if rel == "api/art-cached":
         # which games already have art on the drive: one request for the whole library,
         # so art shows offline at once (new art is only downloaded while online)
@@ -323,8 +515,13 @@ def handle_post(v, path, raw):
         out = []
         for g in games:
             sys_id, title = str((g or {}).get("system", "")), str((g or {}).get("title", ""))
+            rom = str((g or {}).get("file") or "")
             hit = {}
             for kind in ("box", "snap"):
+                p = v.art_file(sys_id, rom, kind) if rom else None
+                if p and p.is_file():
+                    hit[kind] = _art_url(sys_id, kind, rom)
+                    continue
                 p = v.art_path(sys_id, title, kind)
                 if p and p.is_file():
                     hit[kind] = ("/retro/boxart/" + urllib.parse.quote(sys_id, safe="") + "/"
