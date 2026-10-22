@@ -9,8 +9,9 @@
 
   var THEMES = [
     { id: "win311", name: "Windows 3.11" }, { id: "win95", name: "Windows 95", locked: true },
-    { id: "win98", name: "Windows 98" }, { id: "winme", name: "Windows ME" }, { id: "winxp", name: "Windows XP" },
-    { id: "sys7", name: "Mac System 7" }, { id: "os8", name: "Mac OS 8" }, { id: "os9", name: "Mac OS 9.2" }
+    { id: "winxp", name: "Windows XP" }, { id: "win11", name: "Windows 11" },
+    { id: "os8", name: "Mac OS 8" }, { id: "os9", name: "Mac OS 9.2" }, { id: "macos", name: "macOS" },
+    { id: "ios", name: "iOS" }, { id: "android", name: "Android" }, { id: "c64", name: "Commodore 64" }
   ];
   var SIZE = { theme: 6, sounds: 3, wallpapers: 18, retro: 150 };     // MB, for the totals
   var PC_GB = { windows: 2.5, mac: 0.8 };
@@ -354,7 +355,8 @@
     var themes = {};
     THEMES.forEach(function (t) { if (state.themes[t.id].on) themes[t.id] = { sounds: state.themes[t.id].sounds, wallpapers: state.themes[t.id].wallpapers }; });
     return { dest: state.dest, pcs: pcsList(), edition: state.edition,
-             full: state.edition === "full" ? { themes: themes, retro_vault: state.retro, default_theme: "win95" } : {},
+             full: state.edition === "full" ? { themes: themes, retro_vault: state.retro, default_theme: "win95",
+                                              themes_offered: THEMES.map(function (t) { return t.id; }) } : {},
              models: state.catalog.filter(function (m) { return state.models[m.tag]; }).map(function (m) { return m.tag; }),
              shortcut: !!state.checks.shortcut };
   }

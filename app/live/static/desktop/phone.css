@@ -1,0 +1,66 @@
+/* The phone shell shared by iOS and Android: a status bar, a home screen of app
+   tiles, a dock, apps full-screen, and getting home again. */
+@import url("win95.css");
+:root { --ui-font: -apple-system, "SF Pro Text", Roboto, "Segoe UI", system-ui, sans-serif; }
+html, body { font: 14px var(--ui-font); -webkit-font-smoothing: antialiased; }
+#taskbar { display: none !important; }
+#desk { inset: 0; }
+body.shell-phone #phone { display: block !important; }
+#ph-status { position: fixed; left: 0; right: 0; top: 0; height: 44px; z-index: 900; display: flex; align-items: center;
+  justify-content: space-between; padding: 0 28px; color: #fff; font: 600 15px var(--ui-font); pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,.4); }
+.ph-icons { display: flex; gap: 6px; align-items: center; }
+.ph-icons i { display: inline-block; }
+.ph-icons .sig { width: 17px; height: 11px; background: linear-gradient(90deg, currentColor 0 3px, transparent 3px 4.6px, currentColor 4.6px 7.6px, transparent 7.6px 9.2px, currentColor 9.2px 12.2px, transparent 12.2px 13.8px, currentColor 13.8px);
+  clip-path: polygon(0 100%, 100% 0, 100% 100%); color: #fff; }
+.ph-icons .wifi { width: 15px; height: 11px; border-radius: 15px 15px 0 0; border: 2.5px solid #fff; border-bottom: none; }
+.ph-icons .bat { width: 25px; height: 12px; border: 1.5px solid rgba(255,255,255,.7); border-radius: 4px; padding: 1.5px; }
+.ph-icons .bat b { display: block; height: 100%; width: 80%; background: #fff; border-radius: 2px; }
+.ph-island { display: none; }
+#ph-nav, #ph-bar { display: none; }
+#ph-cards { position: fixed; inset: 0; z-index: 950; background: rgba(0,0,0,.55); backdrop-filter: blur(14px); display: flex;
+  align-items: center; justify-content: center; gap: 20px; padding: 40px; flex-wrap: wrap; }
+#ph-cards[hidden] { display: none !important; }
+#ph-cards .card { width: 220px; height: 360px; border-radius: 22px; background: #fff; overflow: hidden; box-shadow: 0 16px 40px rgba(0,0,0,.4); cursor: pointer; }
+#ph-cards .ct { display: flex; align-items: center; gap: 8px; padding: 10px 12px; font-weight: 600; color: #111; }
+#ph-cards .ct span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ph-cards .ct button { border: none; background: #eee; border-radius: 50%; width: 24px; height: 24px; }
+#ph-cards .cb { height: 100%; background: linear-gradient(#f3f4f8, #e2e5ee); }
+#ph-cards .none { color: #fff; font-size: 16px; }
+#ph-cards .clearall { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); border: none; border-radius: 20px;
+  padding: 10px 22px; background: rgba(255,255,255,.9); font: 600 14px var(--ui-font); }
+
+/* the home screen: tiles in a grid */
+.dicon { width: 84px; gap: 6px; }
+.dicon .img.tile { width: 62px; height: 62px; border-radius: 16px; display: grid; place-items: center;
+  background: linear-gradient(160deg, #6a8cff, #3a55d8); box-shadow: 0 4px 12px rgba(0,0,0,.3); }
+.dicon .img.tile svg, .dicon .img.tile img { width: 38px; height: 38px; }
+.dicon .lbl { color: #fff; font: 500 12px var(--ui-font); text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+.dicon.sel .img::after { display: none; }
+.dicon.sel .lbl { background: none; outline: none; }
+.t-chat { background: linear-gradient(160deg, #1fd2ff, #0a6fd8) !important; }
+.t-notes { background: linear-gradient(160deg, #ffe36e, #f5b300) !important; }
+.t-suite { background: linear-gradient(160deg, #5b6476, #232836) !important; }
+.t-vault { background: linear-gradient(160deg, #ff7a9c, #c2185b) !important; }
+.t-band { background: linear-gradient(160deg, #ffb06a, #e8590c) !important; }
+.t-control { background: linear-gradient(160deg, #b8bcc6, #6b7080) !important; }
+.t-trash { background: linear-gradient(160deg, #e6e8ec, #a9aeb8) !important; }
+.t-power { background: linear-gradient(160deg, #ff6b6b, #b71c1c) !important; }
+
+/* the dock */
+body.shell-phone #dock { display: flex !important; position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 650;
+  gap: 22px; padding: 14px 22px; border-radius: 32px; background: rgba(255,255,255,.22); backdrop-filter: blur(24px) saturate(1.6); }
+.dk { background: none; border: none; padding: 0; }
+.dk .tile { width: 62px; height: 62px; border-radius: 16px; display: grid; place-items: center; box-shadow: 0 4px 12px rgba(0,0,0,.3);
+  background: linear-gradient(160deg, #6a8cff, #3a55d8); }
+.dk .tile svg { width: 38px; height: 38px; }
+
+/* apps open full-screen, under the status bar; no window chrome */
+.win { padding: 0; border-radius: 0; box-shadow: none; background: #fff; }
+.win.max { inset: 44px 0 0 0 !important; }
+.titlebar { display: none; }
+.wbody { margin: 0; }
+.wbody iframe { inset: 0; width: 100%; height: 100%; }
+.grip { display: none; }
+.btn { border-radius: 10px; background: #fff; border: 1px solid #ddd; box-shadow: none; padding: 8px 16px; }
+.tabpanel { box-shadow: none; border: 1px solid #e3e3e3; border-radius: 12px; }
+.tab { box-shadow: none; border-radius: 10px 10px 0 0; border: 1px solid #e3e3e3; }

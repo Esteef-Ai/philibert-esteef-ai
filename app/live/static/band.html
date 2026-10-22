@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Philibert Band Manager</title>
+<link href="/live/fonts/fonts.css" rel="stylesheet">
+<link rel="icon" href="/live/philibert-p1.svg">
+<style>
+  :root {
+    --navy: #0f172a; --navy-deep: #0a1120; --panel: #111d36; --raise: #162544; --line: #1e3054;
+    --cyan: #00f2fe; --violet: #7c3aed; --amber: #f59e0b; --green: #10b981; --pink: #ff2e88; --red: #ef4444;
+    --txt: #d7e3f4; --dim: #8ea3c4; --faint: #6f86a8;
+    --font: 'Inter', system-ui, sans-serif; --mono: 'JetBrains Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--navy); color: var(--txt); font: 14px var(--font); overflow: hidden; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  .app { display: grid; grid-template-rows: 54px 1fr; height: 100%; }
+  header { display: flex; align-items: center; gap: 14px; padding: 0 18px; background: linear-gradient(180deg, #101b33, #0d1729);
+           border-bottom: 1px solid var(--line); position: relative; }
+  header::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+                  background: linear-gradient(90deg, transparent, rgba(0,242,254,.5), transparent); }
+  .brand { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
+  .brand svg { width: 28px; height: 28px; --mark: #00f2fe; --bg: #0f172a; filter: drop-shadow(0 0 6px rgba(0,242,254,.35)); }
+  .brand b { font: 800 15px Montserrat, var(--font); letter-spacing: .12em; color: #fff; }
+  .brand span { font: 10px var(--mono); letter-spacing: .2em; color: var(--cyan); }
+  html.embed .brand { pointer-events: none; }
+  .spacer { flex: 1; }
+  .btn { font: 11px var(--mono); letter-spacing: .1em; color: var(--dim); background: rgba(22,37,68,.5); border: 1px solid var(--line);
+         border-radius: 6px; padding: 7px 12px; cursor: pointer; white-space: nowrap; transition: color .15s, border-color .15s; }
+  .btn:hover { color: var(--cyan); border-color: rgba(0,242,254,.5); }
+  .btn.primary { color: #04131c; background: var(--cyan); border-color: var(--cyan); font-weight: 600; }
+  .btn.danger:hover { color: var(--pink); border-color: rgba(255,46,136,.5); }
+  .btn.small { padding: 4px 8px; font-size: 10px; }
+  .main { display: grid; grid-template-columns: 210px 1fr; min-height: 0; }
+  nav { border-right: 1px solid var(--line); background: var(--navy-deep); padding: 10px 8px; overflow: auto; }
+  nav a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 7px; color: var(--txt); cursor: pointer;
+          text-decoration: none; font-size: 13.5px; }
+  nav a:hover { background: rgba(0,242,254,.06); }
+  nav a.on { background: linear-gradient(90deg, rgba(0,242,254,.16), rgba(0,242,254,.03)); color: #fff; }
+  nav a .n { margin-left: auto; font: 10px var(--mono); color: var(--faint); }
+  nav .sep { height: 1px; background: var(--line); margin: 8px 6px; }
+  nav svg { width: 16px; height: 16px; flex: none; color: var(--dim); }
+  section.view { overflow: auto; padding: 22px 26px 60px; min-height: 0; }
+  h1 { font-size: 22px; color: #fff; margin-bottom: 4px; display: flex; align-items: center; gap: 12px; }
+  h1 .btn { margin-left: auto; font-family: var(--mono); }
+  .lead { color: var(--dim); margin-bottom: 18px; font-size: 13.5px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card h2 { font: 600 10.5px var(--font); letter-spacing: .18em; text-transform: uppercase; color: var(--dim); margin-bottom: 10px; }
+  .big { font: 700 26px var(--font); color: #fff; }
+  .big.good { color: var(--green); } .big.bad { color: var(--pink); }
+  .money3 { display: flex; gap: 18px; } .money3 div { flex: 1; } .money3 small { color: var(--faint); font-size: 11px; display: block; }
+  .li { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid rgba(30,48,84,.6); cursor: pointer; }
+  .li:last-child { border-bottom: none; }
+  .li .when { font: 11px var(--mono); color: var(--cyan); width: 88px; flex: none; }
+  .li .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .empty { color: var(--faint); font-size: 12.5px; padding: 6px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; font: 600 10.5px var(--font); letter-spacing: .14em; text-transform: uppercase; color: var(--faint);
+       padding: 8px 10px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--navy); }
+  td { padding: 9px 10px; border-bottom: 1px solid rgba(30,48,84,.55); }
+  tbody tr { cursor: pointer; } tbody tr:hover td { background: rgba(0,242,254,.05); }
+  td.num, th.num { text-align: right; font-family: var(--mono); }
+  .pill { font: 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 2px 8px; border-radius: 10px;
+          border: 1px solid var(--line); color: var(--dim); }
+  .pill.confirmed { color: var(--green); border-color: rgba(16,185,129,.5); } .pill.hold { color: var(--amber); border-color: rgba(245,158,11,.5); }
+  .pill.played { color: var(--cyan); border-color: rgba(0,242,254,.4); } .pill.cancelled { color: var(--faint); text-decoration: line-through; }
+  .pill.idea { color: #a78bfa; border-color: rgba(124,58,237,.5); }
+  .pill.income { color: var(--green); } .pill.expense { color: var(--pink); }
+  .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .toolbar input[type=search] { flex: 1; max-width: 320px; background: rgba(8,15,30,.7); border: 1px solid var(--line); border-radius: 7px;
+                                padding: 7px 10px; outline: none; }
+  /* the editor drawer */
+  .drawer { position: fixed; top: 54px; right: 0; bottom: 0; width: min(440px, 100%); background: #0e1a31; border-left: 1px solid rgba(0,242,254,.35);
+            box-shadow: -10px 0 40px rgba(0,0,0,.45); transform: translateX(105%); transition: transform .22s ease; z-index: 20;
+            display: flex; flex-direction: column; }
+  .drawer.on { transform: none; }
+  .drawer .dh { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .drawer .dh h3 { flex: 1; color: #fff; font-size: 16px; }
+  .drawer .db { flex: 1; overflow: auto; padding: 14px 18px; }
+  .drawer .df { display: flex; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font: 10.5px var(--mono); letter-spacing: .1em; color: var(--faint); margin-bottom: 4px; text-transform: uppercase; }
+  .field input, .field select, .field textarea { width: 100%; background: rgba(8,15,30,.8); border: 1px solid var(--line); border-radius: 6px;
+                                                 padding: 8px 10px; outline: none; color-scheme: dark; }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: rgba(0,242,254,.6); }
+  .field textarea { min-height: 90px; resize: vertical; }
+  .field.check label { display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font: 13.5px var(--font); color: var(--txt); }
+  .field.check input { width: auto; accent-color: var(--cyan); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .extras { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  /* setlist editor */
+  .sl { display: grid; grid-template-columns: 260px 1fr 300px; gap: 14px; align-items: start; }
+  .sl .card { max-height: calc(100vh - 170px); overflow: auto; }
+  .song { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; background: rgba(22,37,68,.45);
+          margin-bottom: 5px; cursor: grab; user-select: none; }
+  .song .k { font: 10.5px var(--mono); color: var(--faint); }
+  .song .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .song .x { background: none; border: none; color: var(--faint); cursor: pointer; }
+  .song .x:hover { color: var(--pink); }
+  .song.drag { opacity: .4; } .song.over { box-shadow: 0 -2px 0 var(--cyan); }
+  .song .no { font: 11px var(--mono); color: var(--cyan); width: 20px; }
+  .total { font: 600 13px var(--mono); color: var(--cyan); }
+  .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(10px); z-index: 80; font: 12px var(--mono);
+           background: #102038; border: 1px solid rgba(0,242,254,.4); border-radius: 7px; padding: 9px 15px; opacity: 0;
+           transition: opacity .25s, transform .25s; pointer-events: none; }
+  .toast.on { opacity: 1; transform: translateX(-50%); }
+  @media (max-width: 900px) { .main { grid-template-columns: 1fr; } nav { display: none; } .sl { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+<script>if (/[?&]embed=1\b/.test(location.search)) document.documentElement.classList.add("embed");</script>
+</head>
+<body>
+<div class="app">
+  <header>
+    <a class="brand" href="/"><svg viewBox="0 0 200 200" aria-hidden="true">
+      <path d="M62 62 V46 Q62 34 74 34 H126 Q138 34 138 46 V62" fill="none" stroke="var(--mark)" stroke-width="9" stroke-linecap="round"/>
+      <rect x="26" y="60" width="148" height="100" rx="16" fill="var(--mark)"/>
+      <circle cx="70" cy="104" r="25" fill="var(--bg)"/><circle cx="70" cy="104" r="17" fill="var(--mark)"/><circle cx="70" cy="104" r="6" fill="var(--bg)"/>
+      <circle cx="130" cy="104" r="25" fill="var(--bg)"/><circle cx="130" cy="104" r="17" fill="var(--mark)"/><circle cx="130" cy="104" r="6" fill="var(--bg)"/>
+      <path d="M48 143 H86 L93 134 L100 150 L107 138 L112 143 H152" fill="none" stroke="var(--bg)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg><b>PHILIBERT</b><span>BAND MANAGER</span></a>
+    <div class="spacer"></div>
+    <button class="btn primary" id="new-gig" type="button">+ NEW GIG</button>
+  </header>
+  <div class="main">
+    <nav id="nav"></nav>
+    <section class="view" id="view"></section>
+  </div>
+</div>
+<div class="drawer" id="drawer">
+  <div class="dh"><h3 id="d-title"></h3><button class="btn small" id="d-close" type="button">CLOSE</button></div>
+  <div class="db" id="d-body"></div>
+  <div class="df" id="d-foot"></div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<script src="/live/band.js"></script>
+</body>
+</html>

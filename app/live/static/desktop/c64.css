@@ -1,0 +1,31 @@
+/* Philibert 64: the blue BASIC screen. The wallpaper is the border; programs are
+   loaded from the disk listing and run inside the screen. */
+@import url("win95.css");
+:root { --c64-bg: #352879; --c64-fg: #6c5eb5; --c64-font: "Press Start 2P", "Courier New", monospace; }
+html, body { font: 14px var(--c64-font); }
+#taskbar { display: none !important; }
+#desk { inset: 0; }
+#icons, #minicons { display: none !important; }
+body.shell-c64 #c64 { display: flex !important; position: fixed; inset: 6% 7%; z-index: 2; background: var(--c64-bg); color: var(--c64-fg);
+  font: clamp(10px, 1.25vw, 18px)/1.35 var(--c64-font); text-transform: uppercase; padding: 1.6% 1.6%; overflow: auto; }
+#c64.loading { animation: c64load .18s steps(2) infinite; }
+@keyframes c64load { 50% { box-shadow: 0 0 0 9999px #883932; } }
+.c64-screen p, #c64-list p { white-space: pre; margin: 0; }
+#c64-list .prg { cursor: pointer; }
+#c64-list .prg:hover, #c64-list .prg.sel, #c64-list .inv { background: var(--c64-fg); color: var(--c64-bg); }
+#c64-list .hint { margin-top: 1.5em; white-space: normal; opacity: .8; }
+/* a running program fills the screen area, with a one-line bar to go back */
+.win { padding: 0; border-radius: 0; box-shadow: none; background: var(--c64-bg); }
+.win.max { inset: 6% 7% !important; z-index: 3; }
+.titlebar { height: 26px; background: var(--c64-fg) !important; color: var(--c64-bg) !important; font: 11px var(--c64-font); padding: 0 8px; }
+.titlebar .ico { display: none; }
+.titlebar .tt::after { content: "   - RUN/STOP (ESC) = BACK"; opacity: .8; }
+.tbtn { display: none; }
+.tbtn.close { display: grid; width: 20px; height: 18px; background: var(--c64-bg); color: var(--c64-fg); box-shadow: none; font: 10px var(--c64-font); }
+.wbody { margin: 0; }
+.wbody iframe { inset: 0; width: 100%; height: 100%; }
+.wbody.face, .raised { background: var(--c64-bg); color: var(--c64-fg); }
+.grip { display: none; }
+.btn { background: var(--c64-fg); color: var(--c64-bg); box-shadow: none; border-radius: 0; font: 11px var(--c64-font); }
+.tab, .tabpanel, .well, .listbox { box-shadow: none; border: 2px solid var(--c64-fg); border-radius: 0; background: var(--c64-bg); color: var(--c64-fg); font: 10px var(--c64-font); }
+.listbox div.on { background: var(--c64-fg); color: var(--c64-bg); }

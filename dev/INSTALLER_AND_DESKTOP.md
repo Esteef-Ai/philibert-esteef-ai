@@ -145,9 +145,13 @@ stays one click away.
 
 ## 7. Full — the retro desktop
 
-Themes: **Windows 3.11, Windows 95, Windows 98, Windows ME, Windows XP, Mac System 7, Mac OS 8,
-Mac OS 9.2**,
-picked in the Control Panel. Our own artwork and look-alike open fonts — no Microsoft
+Themes (2026-10-22: 98, ME and System 7 retired as too alike; 11, macOS, iOS, Android and
+Commodore 64 added): **Windows 3.11, Windows 95, Windows XP, Windows 11, Mac OS 8, Mac OS 9.2,
+macOS, iOS, Android, Commodore 64**, picked in the Control Panel. Shells: taskbar (95 / XP /
+11), Program Manager (3.11), menu bar (Mac OS 8 / 9, macOS + Dock), phone home screen (iOS /
+Android: tiles, dock, apps full-screen, home / back / recents), and the 64's BASIC screen
+(programs loaded from a disk listing). Every theme has branded Philibert / Esteef.Ai
+wallpapers in its era's style (desktop/wallpapers.js). Our own artwork and look-alike open fonts — no Microsoft
 or Apple icons, fonts, logos or sounds are shipped.
 
 - **Icons**: ND Suite, Philibert Chat, Notes, Retro Vault, Band Manager,
@@ -162,13 +166,13 @@ or Apple icons, fonts, logos or sounds are shipped.
   - *Windows 95 / 98*: the Start button becomes a **Philibert** button with its
     logo; vertical band in the start menu reading "Philibert 95/98"; Esteef.Ai in
     the tray clock area and "About Philibert"; boot splash with clouds-style art.
-  - *Windows ME*: like 98, with the start-menu band reading "Philibert Me" on ME's
-    slate-blue desktop.
   - *Windows XP*: the green start button becomes an italic **philibert**; the start
     menu's user tile is the boombox; the E3 mark in the tray; a rolling-hill wallpaper
     drawn in-house (never the real photo).
-  - *System 7*: a Philibert menu in the Apple-menu position; "Welcome to Philibert"
-    boot box; "About This Philibert…" with the Esteef.Ai credit.
+  - *Windows 11*: centred taskbar, floating Start (pinned grid, recent notes, power), Bloom wallpapers.
+  - *macOS*: translucent menu bar with the Philibert menu, traffic-light windows, a glass Dock.
+  - *iOS / Android*: "Philibert for iOS / Android" home screens; Android's back / home / recents.
+  - *Commodore 64*: "**** PHILIBERT 64 BASIC V2 ****", `LOAD"PHILIBERT CHAT",8,1`.
   - *Mac OS 8 / 9.2*: Platinum-style menu bar with the Philibert menu; boot screen
     "Philibert OS 8 / 9" with Esteef.Ai; Esteef.Ai desktop pattern among the wallpapers.
   - Every theme: an Esteef.Ai wallpaper option and the Philibert name in window

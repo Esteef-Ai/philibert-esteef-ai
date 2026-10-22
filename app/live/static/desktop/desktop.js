@@ -13,27 +13,22 @@
   var I = window.PhilIcons, S = window.PhilSounds;
   var desk = $("desk"), winsEl = $("windows"), iconsEl = $("icons"), tasksEl = $("tasks");
   var st = { settings: {}, themes: [], apps: [], retro: false, wins: {}, z: 10, active: null, sel: null };
-  /* Every theme: its shell (taskbar / Program Manager / Mac menu bar), its name
-     for Philibert, the boot screen and start-up sound, and its wallpapers (the
-     first is its default). The look itself is the theme's CSS file. */
+  /* Every theme: its shell (taskbar / Program Manager / Mac menu bar / phone home
+     screen / Commodore 64 screen), its name for Philibert, the boot screen and
+     start-up sound. Wallpapers are in wallpapers.js; the look is the theme's CSS. */
   var THEMES = {
-    win311: { shell: "progman", family: "win", ver: "3.11", name: "Philibert for Workgroups 3.11", boot: "w311",
-              sound: "startup_win311", wall: ["teal311", "slate", "esteef"] },
-    win95:  { shell: "taskbar", family: "win", ver: "95", name: "Philibert 95", boot: "clouds",
-              sound: "startup", wall: ["teal", "slate", "plum", "clouds", "boombox", "esteef"] },
-    win98:  { shell: "taskbar", family: "win", ver: "98", name: "Philibert 98", boot: "clouds",
-              sound: "startup", wall: ["teal", "clouds", "boombox", "slate", "esteef"] },
-    winme:  { shell: "taskbar", family: "win", ver: "Me", name: "Philibert Me", boot: "me",
-              sound: "startup", wall: ["meslate", "clouds", "boombox", "esteef"] },
-    winxp:  { shell: "taskbar", family: "win", ver: "xp", name: "Philibert XP", boot: "xp",
-              sound: "startup_xp", wall: ["hills", "xpblue", "esteef", "boombox"] },
-    sys7:   { shell: "menubar", family: "mac", ver: "7", name: "Philibert System 7", boot: "sys7",
-              sound: "startup_mac", wall: ["pattern7", "gray7", "esteefpat"] },
-    os8:    { shell: "menubar", family: "mac", ver: "8", name: "Philibert OS 8", boot: "os8",
-              sound: "startup_mac", wall: ["platinum8", "esteefpat", "clouds", "boombox"] },
-    os9:    { shell: "menubar", family: "mac", ver: "9", name: "Philibert OS 9", boot: "os8",
-              sound: "startup_mac", wall: ["os9blue", "esteefpat", "clouds", "boombox"] },
+    win311:  { shell: "progman", family: "win", ver: "3.11", name: "Philibert for Workgroups 3.11", boot: "w311", sound: "startup_win311" },
+    win95:   { shell: "taskbar", family: "win", ver: "95", name: "Philibert 95", boot: "clouds", sound: "startup" },
+    winxp:   { shell: "taskbar", family: "win", ver: "xp", name: "Philibert XP", boot: "xp", sound: "startup_xp" },
+    win11:   { shell: "taskbar", family: "win", ver: "11", name: "Philibert 11", boot: "w11", sound: "startup_win11" },
+    os8:     { shell: "menubar", family: "mac", ver: "8", name: "Philibert OS 8", boot: "os8", sound: "startup_mac" },
+    os9:     { shell: "menubar", family: "mac", ver: "9", name: "Philibert OS 9", boot: "os8", sound: "startup_mac" },
+    macos:   { shell: "menubar", family: "mac", ver: "", name: "Philibert for macOS", boot: "macos", sound: "startup_mac", dock: true },
+    ios:     { shell: "phone", family: "phone", ver: "", name: "Philibert for iOS", boot: "ios", sound: "startup_phone" },
+    android: { shell: "phone", family: "phone", ver: "", name: "Philibert for Android", boot: "android", sound: "startup_phone" },
+    c64:     { shell: "c64", family: "c64", ver: "64", name: "Philibert 64", boot: "c64", sound: "startup_c64" },
   };
+  Object.keys(THEMES).forEach(function (k) { THEMES[k].wall = (window.PhilWalls.themes[k] || ["teal"]); });
   function T() { return THEMES[st.settings.theme] || THEMES.win95; }
 
   function esc(s) {
@@ -60,7 +55,10 @@
       { id: "suite", name: "ND Suite", icon: "suite", url: "/full", w: 1280, h: 800, max: true },
     ];
     if (st.retro) list.push({ id: "vault", name: "Retro Vault", icon: "vault", url: "/retro/", w: 1240, h: 800, max: true });
-    list.push({ id: "band", name: "Band Manager", icon: "band", internal: comingBand, w: 460, h: 220 },
+    var sh = THEMES[st.settings.theme] ? THEMES[st.settings.theme].shell : "taskbar";
+    if (sh === "phone" || sh === "c64")          // no Start menu there: shutting down is an app
+      list.push({ id: "power", name: "Shut Down", icon: "shutdown", action: function () { shutdownDialog(); } });
+    list.push({ id: "band", name: "Band Manager", icon: "band", url: "/band?embed=1", w: 1180, h: 760, title: "Philibert Band Manager" },
               { id: "control", name: "Control Panel", icon: "control", internal: controlPanel, w: 420, h: 470, fixed: true },
               { id: "trash", name: "Trash", icon: "trash", internal: trashWin, w: 560, h: 380 });
     return list;
@@ -83,6 +81,11 @@
       var cols = Math.max(1, Math.floor((iconsEl.clientWidth - 8) / 84));
       return [8 + (i % cols) * 84, 8 + Math.floor(i / cols) * 70];
     }
+    if (sh === "phone") {                      // a home-screen grid under the status bar
+      var pc = Math.max(4, Math.min(8, Math.floor(desk.clientWidth / 110)));
+      var pw = desk.clientWidth / pc;
+      return [Math.round((i % pc) * pw + (pw - 84) / 2), 70 + Math.floor(i / pc) * 112];
+    }
     var rows = Math.max(1, Math.floor((desk.clientHeight - 8) / GRID_Y));
     if (sh === "menubar")                      // the Mac way: down the right-hand side
       return [desk.clientWidth - 84 - Math.floor(i / rows) * GRID_X, 10 + (i % rows) * GRID_Y];
@@ -94,7 +97,7 @@
     iconsEl.innerHTML = allApps().map(function (a, i) {
       var p = saved[a.id] || iconPos(i);
       return '<div class="dicon" role="listitem" tabindex="0" data-id="' + esc(a.id) + '" style="left:' + p[0] + "px;top:" + p[1] + 'px">' +
-             '<div class="img">' + iconHtml(a, 32) + '</div><div class="lbl">' + esc(a.name) + "</div></div>";
+             '<div class="img tile t-' + esc(a.id.replace(/[^a-z0-9]/g, "")) + '">' + iconHtml(a, 32) + '</div><div class="lbl">' + esc(a.name) + "</div></div>";
     }).join("");
   }
   function select(el) {
@@ -104,6 +107,31 @@
   iconsEl.addEventListener("dblclick", function (ev) {
     var d = ev.target.closest(".dicon");
     if (d) open(d.dataset.id);
+  });
+  // apps ND publishes appear by themselves; right-click one to take it off the desktop
+  function refreshApps() {
+    api("/api/desktop", { op: "state" }).then(function (d) {
+      if (d.ok && JSON.stringify(d.apps) !== JSON.stringify(st.apps)) { st.apps = d.apps; renderIcons(); }
+    }).catch(function () {});
+  }
+  setInterval(refreshApps, 15000);
+  addEventListener("focus", refreshApps);
+  iconsEl.addEventListener("contextmenu", function (ev) {
+    var d = ev.target.closest(".dicon");
+    if (!d) return;
+    ev.preventDefault();
+    select(d);
+    var id = d.dataset.id, app = appById(id);
+    var items = [{ label: "Open", run: function () { open(id); } }];
+    if (app && app.published) items.push("-", { label: "Remove from desktop", run: function () {
+      api("/api/desktop", { op: "app_remove", id: id.slice(4) }).then(function (r) {
+        if (!r.ok) { msgbox("Remove", r.msg || "Could not remove it.", "error"); return; }
+        close(id); refreshApps();
+      });
+    } });
+    dropMenu(d, items);
+    fly.style.left = Math.min(ev.clientX, innerWidth - fly.offsetWidth - 4) + "px";
+    fly.style.top = Math.min(ev.clientY, innerHeight - fly.offsetHeight - 4) + "px";
   });
   iconsEl.addEventListener("keydown", function (ev) {
     var d = ev.target.closest(".dicon");
@@ -147,13 +175,16 @@
     var app = appById(id);
     if (!app) return;
     closeMenus();
+    if (app.action) { app.action(); return; }
+    var sh = T().shell;
     if (st.wins[id]) { restore(id); focus(id); return st.wins[id]; }
     S.play("open");
     var n = Object.keys(st.wins).length;
     var W = Math.min(app.w || 640, desk.clientWidth - 40), H = Math.min(app.h || 440, desk.clientHeight - 30);
     var x = Math.max(10, (desk.clientWidth - W) / 2 + (n % 6) * 24 - 60), y = Math.max(6, (desk.clientHeight - H) / 2 + (n % 6) * 22 - 50);
     var el = document.createElement("div");
-    el.className = "win raised" + (app.max ? " max" : "");
+    // phones and the 64 open every app full-screen
+    el.className = "win raised" + (app.max || sh === "phone" || sh === "c64" ? " max" : "");
     el.dataset.id = id;
     el.style.cssText = "left:" + x + "px;top:" + y + "px;width:" + W + "px;height:" + H + "px";
     el.innerHTML =
@@ -249,11 +280,11 @@
     var el = st.wins[id];
     if (!el) return;
     S.play("minimize");
-    if (T().shell === "menubar") {             // Mac: roll the window up into its title bar
+    if (T().shell === "menubar" && !T().dock) {   // classic Mac: roll the window up into its title bar
       el.classList.toggle("shade");
       return;
     }
-    el.classList.add("min");
+    el.classList.add("min");                     // macOS: into the Dock; phones, the 64: back home
     el.classList.remove("active");
     if (st.active === id) st.active = null;
     renderTasks();
@@ -281,9 +312,14 @@
         return '<div class="dicon mini" data-id="' + esc(id) + '"><div class="img">' + w.ico.replace(/width="16" height="16"/, 'width="32" height="32"') +
                '</div><div class="lbl">' + esc(w.title) + "</div></div>";
       }).join("");
-    } else {                                   // Mac: the window menu at the right of the menu bar
+    } else if (sh === "menubar") {             // Mac: the window menu at the right of the menu bar
       var a = st.active && st.wins[st.active] ? winInfo(st.active) : null;
       $("mb-apps").innerHTML = a ? a.ico + "<span>" + esc(a.title) + "</span>" : I.svg("chat", 16) + "<span>Finder</span>";
+      if (T().dock) renderDock();
+    } else if (sh === "phone") {
+      renderDock();
+    } else if (sh === "c64" && !(st.active && st.wins[st.active] && !st.wins[st.active].classList.contains("min"))) {
+      renderC64();
     }
   }
   $("minicons").addEventListener("dblclick", function (ev) {
@@ -327,6 +363,22 @@
       sm.querySelector(".sm-main").appendChild(right);
       $("sm-foot").innerHTML = '<button class="xpf" data-act="unload">' + I.svg("gpu", 22) + "Unload GPU</button>" +
         '<button class="xpf off" data-act="shutdown">' + I.svg("shutdown", 22) + "Turn Off Philibert</button>";
+      return;
+    }
+    if (st.settings.theme === "win11") {
+      // 11: a centred panel - search, pinned apps in a grid, recent notes, the user and power
+      $("sm-head").innerHTML = '<input class="w11-search" placeholder="Search for apps, settings and notes" id="w11-q">';
+      $("sm-list").innerHTML = '<li class="w11-h">Pinned</li><li class="w11-grid">' + allApps().map(function (a) {
+        return '<button class="w11-app" data-app="' + esc(a.id) + '">' + iconHtml(a, 32) + "<span>" + esc(a.name) + "</span></button>";
+      }).join("") + '</li><li class="w11-h">Recommended</li><li class="w11-rec" id="w11-rec"></li>';
+      $("sm-foot").innerHTML = '<span class="w11-user">' + I.p1(26, "#fff", "#3c8cff") + "<b>Philibert</b></span>" +
+        '<button class="w11-pow" data-act="shutdown" title="Power">' + I.svg("shutdown", 20) + "</button>";
+      recentNotes().then(function (notes) {
+        var r = $("w11-rec");
+        if (r) r.innerHTML = notes.slice(0, 6).map(function (n) {
+          return '<button class="w11-doc" data-note="' + esc(n.id) + '">' + I.svg("notes", 24) + "<span>" + esc(n.title) + "</span></button>";
+        }).join("") || '<span class="none">Your recent notes show up here.</span>';
+      });
       return;
     }
     $("sm-head").innerHTML = ""; $("sm-foot").innerHTML = "";
@@ -375,6 +427,16 @@
       if (x) { closeMenus(); items[+x.dataset.i].run(); }
     };
   }
+  sm.addEventListener("input", function (ev) {
+    if (ev.target.id !== "w11-q") return;
+    var q = ev.target.value.toLowerCase();
+    sm.querySelectorAll(".w11-app").forEach(function (b) { b.hidden = q && b.textContent.toLowerCase().indexOf(q) < 0; });
+  });
+  sm.addEventListener("keydown", function (ev) {
+    if (ev.target.id !== "w11-q" || ev.key !== "Enter") return;
+    var first = [].find.call(sm.querySelectorAll(".w11-app"), function (b) { return !b.hidden; });
+    if (first) first.click();
+  });
   sm.addEventListener("mouseover", function (ev) {
     var li = ev.target.closest(".mi");
     if (!li || li.classList.contains("open")) return;
@@ -404,7 +466,10 @@
     }
   });
   sm.addEventListener("click", function (ev) {
-    var li = ev.target.closest(".mi, .xpf");
+    var w11a = ev.target.closest("[data-app]"), w11n = ev.target.closest("[data-note]");
+    if (w11a) { closeMenus(); open(w11a.dataset.app); return; }
+    if (w11n) { closeMenus(); openNote(w11n.dataset.note); return; }
+    var li = ev.target.closest(".mi, .xpf, .w11-pow");
     if (!li) return;
     var act = li.dataset.act;
     if (act === "find") { closeMenus(); open("notes"); }
@@ -590,12 +655,6 @@
   }
 
   /* ================= built-in apps ================= */
-  function comingBand(body) {
-    body.innerHTML = '<div class="pad coming">' + I.svg("band", 32) + "<div><h3>Band Manager</h3>" +
-      "<p>Gigs, venues, contacts, setlists, merch and money in one place, with reminders. Coming in a later update.</p>" +
-      "<p>Until then, Philibert Chat and the Gig sheet and Setlist templates in Notes cover the basics.</p></div></div>";
-  }
-
   function trashWin(body) {
     body.innerHTML = '<div class="explorer"><div class="menubar"><span>File</span><span>Edit</span><span>View</span><span>Help</span></div>' +
       '<div class="rows well" style="margin:0 2px"><div class="row head"><span>Name</span><span>Was in</span><span>Deleted</span></div>' +
@@ -640,15 +699,7 @@
   }
 
   // plain ones come with every theme; the rest are the theme's "wallpapers" download
-  var WALLPAPERS = {
-    teal: { name: "(None) Teal", plain: true }, teal311: { name: "(None) Program Manager teal", plain: true },
-    slate: { name: "(None) Slate", plain: true }, plum: { name: "(None) Plum", plain: true },
-    meslate: { name: "(None) Millennium blue", plain: true }, xpblue: { name: "(None) Blue", plain: true },
-    gray7: { name: "(None) Gray", plain: true }, pattern7: { name: "Philibert Pattern", plain: true },
-    platinum8: { name: "(None) Platinum", plain: true }, os9blue: { name: "(None) Nine Blue", plain: true },
-    clouds: { name: "Clouds" }, boombox: { name: "Boombox" }, esteef: { name: "Esteef.Ai" },
-    esteefpat: { name: "Esteef.Ai Pattern" }, hills: { name: "Rolling Hills" },
-  };
+  var WALLPAPERS = window.PhilWalls.list;
   function themeWallpapers(themeId) {
     var t = THEMES[themeId || st.settings.theme] || THEMES.win95;
     return t.wall.map(function (id) { return Object.assign({ id: id }, WALLPAPERS[id]); });
@@ -660,21 +711,11 @@
   function applyWallpaper(id, target) {
     target = target || desk;
     var art = target.querySelector("#wallart") || target.querySelector(".wallart");
+    var w = WALLPAPERS[id] || WALLPAPERS.teal;
     target.className = target.className.replace(/\bwp-\S+/g, "").trim() + " wp-" + id;
-    if (art) {
-      var big = Math.round(Math.min(target.clientWidth, target.clientHeight) * 0.32) || 60;
-      art.innerHTML = id === "boombox" ? I.p1(big, "rgba(0,0,0,.28)", "rgba(255,255,255,.12)")
-                    : id === "esteef" ? '<img src="/live/esteef-ai-e3.svg" alt="" style="width:46%;max-width:640px;filter:drop-shadow(0 0 18px rgba(0,242,254,.35))">'
-                    : id === "hills" ? '<svg viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" style="position:absolute;inset:0;width:100%;height:100%">' +
-                        '<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3f7fe0"/><stop offset=".6" stop-color="#8fc0f2"/><stop offset="1" stop-color="#cfe6fb"/></linearGradient>' +
-                        '<linearGradient id="hill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5cb83a"/><stop offset="1" stop-color="#2a7d1c"/></linearGradient>' +
-                        '<radialGradient id="cl"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient></defs>' +
-                        '<rect width="1600" height="1000" fill="url(#sky)"/>' +
-                        '<ellipse cx="420" cy="230" rx="240" ry="60" fill="url(#cl)"/><ellipse cx="1180" cy="170" rx="300" ry="70" fill="url(#cl)"/><ellipse cx="900" cy="330" rx="180" ry="40" fill="url(#cl)" opacity=".7"/>' +
-                        '<path d="M0 720 Q 380 520 820 600 T 1600 640 V1000 H0Z" fill="url(#hill)"/>' +
-                        '<path d="M0 820 Q 500 700 1000 790 T 1600 760 V1000 H0Z" fill="#3f9a28" opacity=".8"/></svg>'
-                    : "";
-    }
+    target.style.setProperty("background", w.bg || "#008080", "important");
+    if (art) art.innerHTML = w.art ? w.art(target.clientWidth, target.clientHeight) : "";
+    st.wallpaper = id;
   }
 
   function controlPanel(body, el, opts) {
@@ -849,6 +890,105 @@
     if (st.settings.screensaver && !saverOn && Date.now() - idleAt > (st.settings.saver_minutes || 10) * 60000) startSaver();
   }, 5000);
 
+  /* ================= the Dock (macOS) and the phone home screen's dock ================= */
+  var DOCK = ["chat", "notes", "band", "vault", "suite", "control", "trash"];
+  function renderDock() {
+    var t = T(), apps = DOCK.filter(function (id) { return appById(id); });
+    if (t.shell === "phone") apps = apps.filter(function (id) { return ["chat", "notes", "band", "vault"].indexOf(id) >= 0; });
+    var mins = t.dock ? Object.keys(st.wins).filter(function (id) { return st.wins[id].classList.contains("min"); }) : [];
+    $("dock").innerHTML = apps.map(function (id) {
+      var a = appById(id);
+      return '<button class="dk' + (st.wins[id] ? " running" : "") + '" data-id="' + id + '" title="' + esc(a.name) + '"><span class="tile t-' + id + '">' +
+             iconHtml(a, 40) + "</span>" + (t.shell === "phone" ? "" : '<i class="dot"></i>') + "</button>";
+    }).join("") + (mins.length ? '<span class="dksep"></span>' + mins.map(function (id) {
+      var w = winInfo(id);
+      return '<button class="dk min" data-id="' + id + '" title="' + esc(w.title) + '"><span class="tile">' + w.ico.replace(/width="16" height="16"/, 'width="40" height="40"') + "</span></button>";
+    }).join("") : "");
+  }
+  $("dock").addEventListener("click", function (ev) {
+    var b = ev.target.closest(".dk");
+    if (!b) return;
+    var id = b.dataset.id;
+    if (st.wins[id] && st.wins[id].classList.contains("min")) { restore(id); focus(id); }
+    else if (st.wins[id] && st.active === id && T().shell !== "phone") minimize(id);
+    else open(id);
+    renderDock();
+  });
+
+  /* ================= phones: status bar, home, back, recent apps ================= */
+  function goHome() { Object.keys(st.wins).forEach(function (id) { st.wins[id].classList.add("min"); }); st.active = null; renderTasks(); }
+  function phoneTick() {
+    $("ph-time").textContent = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).replace(/\s?[AP]M$/i, "");
+  }
+  setInterval(phoneTick, 15000);
+  phoneTick();
+  $("ph-home").addEventListener("click", goHome);
+  $("ph-bar").addEventListener("click", goHome);
+  $("ph-back").addEventListener("click", function () { if (st.active) { minimize(st.active); } });
+  $("ph-recents").addEventListener("click", function () {
+    var ids = Object.keys(st.wins), r = $("ph-cards");
+    if (!r.hidden) { r.hidden = true; return; }
+    r.innerHTML = (ids.length ? ids.map(function (id) {
+      var w = winInfo(id);
+      return '<div class="card" data-id="' + id + '"><div class="ct">' + w.ico + "<span>" + esc(w.title) + '</span><button data-x="' + id + '" aria-label="Close">&#10005;</button></div><div class="cb"></div></div>';
+    }).join("") : '<p class="none">No recent apps</p>') + (ids.length ? '<button class="clearall">Clear all</button>' : "");
+    r.hidden = false;
+  });
+  $("ph-cards").addEventListener("click", function (ev) {
+    var x = ev.target.closest("[data-x]"), c = ev.target.closest(".card"), r = $("ph-cards");
+    if (ev.target.closest(".clearall")) { Object.keys(st.wins).forEach(close); r.hidden = true; return; }
+    if (x) { close(x.dataset.x); r.hidden = true; return; }
+    if (c) { restore(c.dataset.id); focus(c.dataset.id); r.hidden = true; return; }
+    r.hidden = true;
+  });
+
+  /* ================= the Commodore 64: load a program from the disk listing ================= */
+  var c64sel = 0;
+  function c64name(a) { return a.name.toUpperCase().replace(/[^A-Z0-9 .!-]/g, "").slice(0, 16); }
+  function renderC64() {
+    var apps = allApps();
+    var blocks = function (i) { return String(12 + (i * 37) % 180).padEnd(5, " "); };
+    $("c64-list").innerHTML = '<p>LOAD"$",8</p><p>SEARCHING FOR $</p><p>LOADING</p><p>READY.</p><p>LIST</p><p>&nbsp;</p>' +
+      '<p class="inv">0 "PHILIBERT DISK  " ES 2A</p>' +
+      apps.map(function (a, i) {
+        return '<p class="prg' + (i === c64sel ? " sel" : "") + '" data-id="' + esc(a.id) + '" data-i="' + i + '">' + blocks(i) +
+               '"' + esc(c64name(a)) + '"' + " ".repeat(Math.max(1, 17 - c64name(a).length)) + "PRG</p>";
+      }).join("") + "<p>" + (664 - apps.length * 23) + " BLOCKS FREE.</p><p>READY.</p>" +
+      '<p id="c64-type"></p><p class="c64-cur">&#9608;</p>' +
+      '<p class="hint">CLICK A PROGRAM, OR USE THE ARROW KEYS AND RETURN. RUN/STOP (ESC) GOES BACK.</p>';
+  }
+  function c64run(id) {
+    var a = appById(id);
+    if (!a) return;
+    var line = 'LOAD"' + c64name(a) + '",8,1', ty = $("c64-type"), n = 0;
+    ty.textContent = "";
+    var iv = setInterval(function () {
+      n++;
+      ty.textContent = line.slice(0, n);
+      if (n >= line.length) {
+        clearInterval(iv);
+        ty.innerHTML = esc(line) + "<br>SEARCHING FOR " + esc(c64name(a)) + "<br>LOADING<br>READY.<br>RUN";
+        $("c64").classList.add("loading");
+        setTimeout(function () { $("c64").classList.remove("loading"); ty.textContent = ""; open(id); }, 700);
+      }
+    }, 28);
+  }
+  $("c64-list").addEventListener("click", function (ev) {
+    var p = ev.target.closest(".prg");
+    if (p) { c64sel = +p.dataset.i; renderC64(); c64run(p.dataset.id); }
+  });
+  addEventListener("keydown", function (ev) {
+    if (T().shell !== "c64") return;
+    if (st.active && !st.wins[st.active].classList.contains("min")) {
+      if (ev.key === "Escape") { minimize(st.active); renderC64(); }
+      return;
+    }
+    var n = allApps().length;
+    if (ev.key === "ArrowDown") { c64sel = (c64sel + 1) % n; renderC64(); ev.preventDefault(); }
+    if (ev.key === "ArrowUp") { c64sel = (c64sel + n - 1) % n; renderC64(); ev.preventDefault(); }
+    if (ev.key === "Enter") c64run(allApps()[c64sel].id);
+  });
+
   /* ================= settings & start ================= */
   function applySettings() {
     var s = st.settings;
@@ -896,6 +1036,24 @@
         '<div class="mac-name">Philibert OS ' + t.ver + '</div><div class="mac-by">Esteef.Ai</div>' +
         '<div class="mac-prog"><i></i></div><div class="mac-starting">Starting Up…</div></div></div>';
     },
+    w11: function () {
+      return '<div class="w11-boot">' + I.p1(110, "#3c8cff", "#000") + '<div class="w11-spin"><i></i><i></i><i></i><i></i><i></i></div>' +
+        '<div class="w11-by">Philibert 11 &middot; Esteef.Ai</div></div>';
+    },
+    macos: function () {
+      return '<div class="mod-boot">' + I.p1(110, "#fff", "#000") + '<div class="mod-bar"><i></i></div></div>';
+    },
+    ios: function () {
+      return '<div class="mod-boot">' + I.p1(120, "#fff", "#000") + '<div class="mod-by">Philibert &middot; Esteef.Ai</div></div>';
+    },
+    android: function () {
+      return '<div class="and-boot"><div class="and-dots"><i></i><i></i><i></i><i></i></div><div class="and-word">Philibert</div>' +
+        '<div class="mod-by">by Esteef.Ai</div></div>';
+    },
+    c64: function () {
+      return '<div class="c64-boot"><div class="c64-scr"><p>    **** PHILIBERT 64 BASIC V2 ****</p><p> 64K RAM SYSTEM  38911 BASIC BYTES FREE</p>' +
+        '<p>&nbsp;</p><p>READY.</p><p class="c64-cur">&#9608;</p></div></div>';
+    },
   };
   function boot(show) {
     var t = T(), b = $("boot");
@@ -924,16 +1082,23 @@
       });
       css.setAttribute("href", href);
     }
-    document.body.className = "theme-" + id + " shell-" + t.shell + " family-" + t.family;
+    document.body.className = "theme-" + id + " shell-" + t.shell + " family-" + t.family + (t.dock ? " has-dock" : "");
     document.title = t.name;
     $("taskbar").hidden = t.shell !== "taskbar";
     $("menubar").hidden = t.shell !== "menubar";
     $("progman").hidden = t.shell !== "progman";
+    $("phone").hidden = t.shell !== "phone";
+    $("c64").hidden = t.shell !== "c64";
+    $("dock").hidden = !t.dock && t.shell !== "phone";
     if (t.shell === "progman") document.querySelector("#progman .pm-body").appendChild(iconsEl);
     else desk.insertBefore(iconsEl, $("minicons"));
     if (t.shell === "menubar") renderMenubar();
+    if (t.shell === "phone" || t.dock) renderDock();
+    // the 64's screen sits in the desk's own layer, under the windows a program opens in
+    if (t.shell === "c64") { desk.insertBefore($("c64"), winsEl); renderC64(); }
     $("start-label").textContent = id === "winxp" ? "philibert" : "Philibert";
-    $("start-mark").innerHTML = id === "winxp" ? I.p1(20, "#fff", "#3c9a3c") : I.p1(18, "#000", "#c0c0c0");
+    $("start-mark").innerHTML = id === "winxp" ? I.p1(20, "#fff", "#3c9a3c")
+                              : id === "win11" ? I.p1(22, "#3c8cff", "#fff") : I.p1(18, "#000", "#c0c0c0");
     $("band-ver").textContent = t.ver;
     $("safe-text").textContent = t.family === "mac" ? "You may now unplug your Philibert drive safely."
                                                     : "It's now safe to unplug your Philibert drive.";

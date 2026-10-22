@@ -185,7 +185,32 @@ body.dragging .wbody iframe { pointer-events: none; }
 #flyout .sep { list-style: none; }
 
 /* shells other than the taskbar start hidden; their theme CSS shows them */
-#menubar, #progman { display: none; }
+#menubar, #progman, #dock, #phone, #c64 { display: none; }
+
+/* the newer themes' boot screens */
+.w11-boot, .mod-boot, .and-boot { position: absolute; inset: 0; background: #000; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 34px; color: #fff; }
+.w11-spin { position: relative; width: 44px; height: 44px; }
+.w11-spin i { position: absolute; left: 20px; top: 0; width: 5px; height: 5px; border-radius: 50%; background: #fff;
+  transform-origin: 2.5px 22px; animation: w11s 1.6s cubic-bezier(.5,.1,.5,.9) infinite; }
+.w11-spin i:nth-child(2) { animation-delay: .1s; } .w11-spin i:nth-child(3) { animation-delay: .2s; }
+.w11-spin i:nth-child(4) { animation-delay: .3s; } .w11-spin i:nth-child(5) { animation-delay: .4s; }
+@keyframes w11s { to { transform: rotate(360deg); } }
+.w11-by, .mod-by { font: 500 14px "Segoe UI", Montserrat, sans-serif; color: #aaa; letter-spacing: .06em; }
+.mod-bar { width: 180px; height: 5px; border-radius: 3px; background: #333; overflow: hidden; }
+.mod-bar i { display: block; height: 100%; width: 0; background: #fff; animation: mprog 2.6s ease-out forwards; }
+.and-boot { background: #111; }
+.and-dots { display: flex; gap: 14px; }
+.and-dots i { width: 22px; height: 22px; border-radius: 50%; background: #4285f4; animation: adot .9s ease-in-out infinite alternate; }
+.and-dots i:nth-child(2) { background: #ea4335; animation-delay: .15s; } .and-dots i:nth-child(3) { background: #fbbc05; animation-delay: .3s; }
+.and-dots i:nth-child(4) { background: #34a853; animation-delay: .45s; }
+@keyframes adot { to { transform: translateY(-14px); } }
+.and-word { font: 700 40px Montserrat, sans-serif; letter-spacing: .02em; }
+.c64-boot { position: absolute; inset: 0; background: #6c5eb5; display: flex; align-items: center; justify-content: center; }
+.c64-scr { width: 82%; height: 76%; background: #352879; color: #6c5eb5; padding: 3% 2%; font: 20px/1.3 "Press Start 2P", monospace;
+  text-transform: uppercase; white-space: pre; overflow: hidden; }
+.c64-cur { animation: c64b 1s steps(1) infinite; }
+@keyframes c64b { 50% { opacity: 0; } }
 #minicons { position: absolute; left: 6px; bottom: 6px; display: flex; gap: 8px; z-index: 1; }
 #minicons .dicon { position: static; }
 .mb { background: none; border: none; padding: 1px 8px; height: 100%; cursor: default; }

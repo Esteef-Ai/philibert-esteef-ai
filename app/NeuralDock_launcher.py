@@ -7201,6 +7201,7 @@ def _written_paths(rows):
 
 TOOL_TIERS = {
     "list_dir":"green", "read_file":"green", "search_files":"green", "computer_info":"green",
+    "band_info":"green", "band_save":"yellow",
     "find_definition":"green", "find_references":"green",
     "web_search":"green", "web_fetch":"green", "screen_capture":"green",
     "delegate":"green", "list_specialists":"green", "list_devices":"green",
@@ -7230,7 +7231,7 @@ TOOL_TIERS = {
     # the page" and "looked at the page" would stop the agent using it at all.
     "design_review":"green",
     "device_action":"red",      # it moves a physical device the user is holding
-    "edit_file":"yellow", "write_file":"yellow", "run_script":"yellow",
+    "edit_file":"yellow", "write_file":"yellow", "run_script":"yellow", "publish_app":"yellow",
     "run_shell":"red", "install_app":"red", "gui_action":"red",
 }
 
@@ -9794,6 +9795,9 @@ def computer_info():
 
 
 TOOL_SCHEMAS = [
+  {"type":"function","function":{"name":"band_info","description":"Look up the user's band records in the Band Manager: their gigs, venues, contacts, songs, setlists, merch, money and reminders, or an overview (next gigs, what is due, the year's money). Use it for any question about gigs, bookings, setlists, songs, venues, merch stock or band money.","parameters":{"type":"object","properties":{"what":{"type":"string","description":"overview | gigs | venues | contacts | songs | setlists | merch | money | reminders"},"query":{"type":"string","description":"Optional words to filter by, e.g. a venue or song name"}},"required":["what"]}}},
+  {"type":"function","function":{"name":"band_save","description":"Add or change a record in the user's Band Manager (the user approves it). table: gigs | venues | contacts | songs | setlists | merch | money | reminders. fields: the values - gigs {date YYYY-MM-DD, venue_id, title, status idea|hold|confirmed|played|cancelled, fee, load_in HH:MM, set_time HH:MM, set_length minutes, notes}; venues {name, address, city, capacity}; contacts {name, role, phone, email}; songs {title, key, bpm, length_sec}; merch {name, variant, price, stock}; money {date, kind income|expense, amount, category, gig_id}; reminders {text, due}. Give id to change an existing record. Look ids up with band_info first.","parameters":{"type":"object","properties":{"table":{"type":"string"},"fields":{"type":"object"},"id":{"type":"integer"}},"required":["table","fields"]}}},
+  {"type":"function","function":{"name":"publish_app","description":"Put an app or page you built onto the user's desktop (Philibert's Full edition) as an icon they can open. Give the folder that holds it (with index.html) or a single .html file, and a short name. Publishing again with the same name updates it.","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Absolute path of the app's folder, or of one .html file"},"name":{"type":"string","description":"The icon's name, e.g. 'Setlist Timer'"},"entry":{"type":"string","description":"Optional: the page to open, if not index.html"},"icon":{"type":"string","description":"Optional: an image file inside the folder to use as the icon"}},"required":["path","name"]}}},
   {"type":"function","function":{"name":"computer_info","description":"Facts about THIS computer: every drive's total size, used and free space and format (C:, D:, USB drives), memory, processor, graphics card and OS. Use it for any question about disk space, drive size, RAM or hardware - never a shell command.","parameters":{"type":"object","properties":{}}}},
   {"type":"function","function":{"name":"design_review","description":"LOOK at an HTML file you have written: renders it in a real headless browser at desktop and mobile sizes, runs automated checks, and returns a critique of how it actually looks. ALWAYS call this after writing or editing any HTML/CSS page, before telling the user it is done. It is the only way you can see your own output - without it you are working blind. Fast (a few seconds) and read-only.","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Absolute path to the .html file to render and review"},"brief":{"type":"string","description":"Optional: the design brief or intent to judge it against, e.g. the palette, mood and audience you were aiming for"}},"required":["path"]}}},
   {"type":"function","function":{"name":"generate_image","description":"Create an image from a text prompt using the local ComfyUI image pipeline. USE THIS whenever the user asks for a picture, image, artwork, wallpaper, logo or render. ComfyUI is started automatically if it is not running - never try to launch it yourself, never inspect ComfyUI folders, and never tell the user to install anything. Takes 20-60s.","parameters":{"type":"object","properties":{"prompt":{"type":"string","description":"What to draw. Be descriptive and visual."},"negative":{"type":"string","description":"What to avoid (optional)"},"width":{"type":"integer","description":"Pixels, default 1024"},"height":{"type":"integer","description":"Pixels, default 1024"},"steps":{"type":"integer","description":"Sampling steps, default 20"},"cfg":{"type":"number","description":"Guidance scale, default 7.0"}},"required":["prompt"]}}},
@@ -13366,6 +13370,16 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
             if name == "update_plan":  return tool_update_plan(session_id, a.get("steps"))
             if name == "read_file":    return "[FILE] " + fs_read_file(a.get("path",""), a.get("offset",0), a.get("limit"))
             if name == "computer_info": return "[INFO] " + computer_info()
+            if name in ("band_info", "band_save"):
+                import nd_band
+                return "[BAND] " + nd_band.tool(name, a, _CONFIG_DIR / "band.db")
+            if name == "publish_app":
+                import nd_retro_desktop
+                r = nd_retro_desktop.publish(APPS_DIR, a.get("path", ""), a.get("name", ""),
+                                             a.get("entry", ""), a.get("icon", ""))
+                return ("[OK] " + (f"Updated \"{r['name']}\" on the desktop (version {r['version']})." if r.get("updated")
+                                   else f"\"{r['name']}\" is on the desktop now - double-click its icon to open it.")
+                        if r["ok"] else "[ERROR] " + r["msg"])
             if name == "list_dir":     return "[FILE] " + fs_list_dir(a.get("path",""))
             if name == "search_files": return "[FILE] " + fs_search_files(a.get("root",""), a.get("pattern",""))
             if name == "find_definition": return "[FILE] " + tool_find_definition(a, workspace)
@@ -18037,6 +18051,8 @@ class Handler(BaseHTTPRequestHandler):
             bare_path = "/"
         elif bare_path == "/notes":
             bare_path = "/live/notes.html"
+        elif bare_path == "/band":
+            bare_path = "/live/band.html"
         if bare_path in ("/", "/index.html"):
             if not self.authed():
                 page = PAIR_PAGE.encode("utf-8")
@@ -18222,7 +18238,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error":"unauthorized","hint":"Send X-ND-Token. Pair in Setup > Devices."}, 401)
             return
 
-        if path in ("/api/notes", "/api/chats", "/api/desktop"):
+        if path in ("/api/notes", "/api/chats", "/api/desktop", "/api/band"):
             # The Notes app (nd_notes.py) and saved chats (nd_chats.py). They
             # write files, so a page from another site in the user's own browser
             # must not be able to drive them.
@@ -18233,6 +18249,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/chats":
                 import nd_chats
                 self.send_json(nd_chats.handle(body, _CONFIG_DIR / "chats"))
+                return
+            if path == "/api/band":
+                import nd_band
+                self.send_json(nd_band.handle(body, _CONFIG_DIR / "band.db"))
                 return
             if path == "/api/desktop":
                 import nd_retro_desktop

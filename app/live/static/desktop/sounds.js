@@ -80,6 +80,23 @@
         tone(a, t, f, 2.6, { type: i % 2 ? "triangle" : "sine", vol: 0.1, att: 0.005, cut: 2600 });
       });
     },
+    // 11: a soft, airy four-note rise
+    startup_win11: function (a, t) {
+      [[392.0, 0], [523.25, 0.12], [659.25, 0.24], [783.99, 0.36]].forEach(function (n) {
+        tone(a, t + n[1], n[0], 1.8, { type: "sine", vol: 0.09, att: 0.08, cut: 3000 });
+      });
+    },
+    // phones: a short bright chime
+    startup_phone: function (a, t) {
+      tone(a, t, 1046.5, 0.5, { type: "sine", vol: 0.12 });
+      tone(a, t + 0.1, 1567.98, 0.7, { type: "sine", vol: 0.09 });
+    },
+    // the 64: a quick chip-tune arpeggio, square waves like its sound chip
+    startup_c64: function (a, t) {
+      [261.63, 329.63, 392.0, 523.25, 392.0, 523.25, 659.25, 1046.5].forEach(function (f, i) {
+        tone(a, t + i * 0.07, f, 0.12, { type: "square", vol: 0.05, cut: 3500 });
+      });
+    },
     ding: function (a, t) {
       tone(a, t, 1318.5, 0.6, { type: "sine", vol: 0.16 });
       tone(a, t + 0.09, 1975.5, 0.7, { type: "sine", vol: 0.1 });

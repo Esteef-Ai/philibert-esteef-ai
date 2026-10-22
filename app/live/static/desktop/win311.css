@@ -4,6 +4,8 @@
 @import url("win95.css");
 :root { --title: #000080; --title-off: #fff; --sel: #000080; }
 #desk { bottom: 0; }
+/* the Program Manager covers the middle: the wallpaper's art sits bottom right */
+body.shell-progman #wallart { justify-content: flex-end; align-items: flex-end; padding: 0 3% 3% 0; }
 #taskbar { display: none !important; }
 
 /* frames: a thick grey border, a flat title bar, the control box on the left */

@@ -54,6 +54,25 @@
 </div>
 <div id="flyout" class="raised" hidden></div>
 
+<!-- macOS: the Dock; phones: the home-screen dock -->
+<div id="dock" hidden></div>
+
+<!-- phones: status bar, navigation, recent apps -->
+<div id="phone" hidden>
+  <div id="ph-status"><span id="ph-time">9:41</span><span class="ph-island"></span>
+    <span class="ph-icons"><i class="sig"></i><i class="wifi"></i><i class="bat"><b></b></i></span></div>
+  <div id="ph-nav"><button id="ph-back" aria-label="Back">&#9664;</button><button id="ph-home" aria-label="Home">&#9679;</button>
+    <button id="ph-recents" aria-label="Recent apps">&#9632;</button></div>
+  <button id="ph-bar" aria-label="Go home"></button>
+  <div id="ph-cards" hidden></div>
+</div>
+
+<!-- the Commodore 64 screen -->
+<div id="c64" hidden>
+  <div class="c64-screen"><p>    **** PHILIBERT 64 BASIC V2 ****</p><p> 64K RAM SYSTEM  38911 BASIC BYTES FREE</p><p>&nbsp;</p><p>READY.</p>
+    <div id="c64-list"></div></div>
+</div>
+
 <!-- screen saver -->
 <canvas id="saver" hidden></canvas>
 
@@ -61,6 +80,7 @@
 <div id="safe" hidden><p id="safe-text">It's now safe to unplug your Philibert drive.</p></div>
 
 <script src="/live/desktop/icons.js"></script>
+<script src="/live/desktop/wallpapers.js"></script>
 <script src="/live/desktop/sounds.js"></script>
 <script src="/live/desktop/desktop.js"></script>
 </body>
