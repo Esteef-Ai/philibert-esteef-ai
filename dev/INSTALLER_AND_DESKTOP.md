@@ -244,8 +244,11 @@ or search history, no AI memory, no vault notes, no config, no personal paths.
 - Hugging Face: org is **https://huggingface.co/EsteefAi**. Plan: **mirror** the
   chosen GGUFs there, each repo clearly marked as a mirror (original author, link,
   licence, unmodified) with Ollama `template`/`params` files where we use a custom
-  template (ZB / Defiance). All current picks are Apache 2.0. **Nothing is uploaded
-  until the installer is ready to test on K:** — until then files stay local.
+  template (ZB / Defiance). All current picks are Apache 2.0. **Done 2026-10-22**:
+  `EsteefAi/Qwen3.8-27B-ZB-IQ4_XS-GGUF-mirror` and
+  `EsteefAi/Qwen3.8-27B-Defiance-Uncensored-MTP-GGUF-mirror` (public; unmodified,
+  SHA-256 checked; card credits tooltd / ttindall); models.json points at them.
+  Re-run `dev/hf_mirror.py --go` to add a model (add it to MIRRORS first).
 - Mac testing: the user will have a Mac soon (model TBD).
 - Whether the code repo also goes public (then the GitHub sign-in step disappears).
 
