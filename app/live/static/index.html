@@ -575,6 +575,15 @@
   .notes-body .md code { font-family: var(--font-mono); font-size: 12px; background: rgba(22,37,68,0.7); padding: 1px 4px; border-radius: 3px; }
   .notes-body .md pre { font-family: var(--font-mono); font-size: 11.5px; background: rgba(4,10,22,0.8); padding: 8px; border-radius: 5px; overflow: auto; }
   .notes-body .md a.wl { color: var(--cyan); text-decoration: none; border-bottom: 1px dotted rgba(0,242,254,0.5); cursor: pointer; }
+  .notes-head button + button { margin-left: 6px; }
+  .notes-body .md li.task { list-style: none; margin-left: -1.1em; }
+  .notes-body .md li.task.done span { color: var(--txt-faint); text-decoration: line-through; }
+  .notes-body .md table { border-collapse: collapse; margin: 6px 0; font-size: 12px; }
+  .notes-body .md th, .notes-body .md td { border: 1px solid var(--line); padding: 3px 7px; text-align: left; }
+  .notes-body .md blockquote { border-left: 2px solid var(--violet); padding-left: 10px; color: var(--txt-dim); }
+  .notes-body .md .tag { font-family: var(--font-mono); font-size: 11px; color: #a78bfa; }
+  .notes-body .md .props { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+  .notes-body .md .prop { font-family: var(--font-mono); font-size: 10px; color: var(--txt-faint); border: 1px solid var(--line); border-radius: 10px; padding: 1px 7px; }
   .notes-body .md .fm { font-family: var(--font-mono); font-size: 10.5px; color: var(--txt-faint); margin-bottom: 8px; }
 
   @media (max-width: 1300px) { section.chat-panel { width: 360px; } }
@@ -626,6 +635,7 @@
     </div>
     <div class="spacer"></div>
     <button class="appbtn" id="btn-unload" type="button" title="Take the model off the graphics card, freeing it for games and other apps">UNLOAD GPU</button>
+    <a class="appbtn" id="btn-notes" href="/notes" target="philibert-notes" title="Write and organise your notes">NOTES</a>
     <a class="appbtn" id="btn-suite" href="/full" title="The full NeuralDock interface">ND SUITE</a>
     <div class="conn-status">
       <span class="pill" id="pill-nd"><span class="dot"></span>ND</span>
@@ -686,7 +696,8 @@
       </div>
       <div class="notes" id="notes">
         <div class="notes-head"><h2>Notes</h2><span class="sub" id="notes-sub">recently read</span>
-          <button id="notes-back" type="button" hidden>&larr; RECENT</button></div>
+          <button id="notes-back" type="button" hidden>&larr; RECENT</button>
+          <button id="notes-edit" type="button" hidden title="Open this note in the Notes app">EDIT</button></div>
         <div class="notes-body" id="notes-body"></div>
       </div>
     </aside>
@@ -710,6 +721,7 @@
   <script>window.VIZ_STATE_URL = "/live/api/state";</script>
   <script src="/live/elena_mark.js"></script>
   <script src="/live/viz.js"></script>
+  <script src="/live/md.js"></script>
   <script src="/live/philibert.js"></script>
 </body>
 </html>

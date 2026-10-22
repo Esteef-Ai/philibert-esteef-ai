@@ -1,8 +1,11 @@
 ---
-type: template
-tags: [template, songs]
+type: song
+started: {{date}}
+tags: [songs]
 ---
-# Song idea - (working title)
+# {{title}}
+
+%% When it is ready to play live, add it to a setlist. %%
 
 - **Key / tempo:**
 - **Feel:**
@@ -10,9 +13,12 @@ tags: [template, songs]
 
 ## Lyrics
 
+
 ## Parts
 - Verse:
 - Chorus:
 - Bridge:
 
-When it is ready to play live, add it to a [[Setlist template]].
+## To do
+- [ ] Demo it
+- [ ] Teach the band

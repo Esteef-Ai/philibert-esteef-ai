@@ -1,20 +1,33 @@
 ---
-type: template
-tags: [template, gigs]
+type: gig
+date: {{date}}
+tags: [gigs]
 ---
-# Gig - (venue, date)
+# {{title}}
 
-- **Venue / address:**
-- **Contact:**
-- **Load-in / soundcheck / set time:**
-- **Pay:**
-- **Backline provided:**
-- **Set length:**
+%% A template: Notes > + New note > Start from "Gig sheet template" makes a copy with the name and date filled in. %%
+
+| The gig | |
+| --- | --- |
+| **Venue / address** | |
+| **Contact** | |
+| **Load-in** | |
+| **Soundcheck** | |
+| **Set time** | |
+| **Set length** | |
+| **Pay** | |
+| **Backline provided** | |
 
 ## Setlist
-Link it here, for example a copy of [[Setlist template]].
+- 
+
+## Packing
+- [ ] Instruments + spare strings / sticks
+- [ ] Cables, DI, power strip
+- [ ] Merch + card reader
+- [ ] Printed setlists
 
 ## After the show
-- Paid?
+- [ ] Paid
 - Merch sold:
 - Notes for next time:

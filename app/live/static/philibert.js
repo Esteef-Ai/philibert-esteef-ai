@@ -3,7 +3,7 @@
  * Unload GPU, the brand spark, and the notes panel: the notes Philibert has
  * just read (newest first, coloured by read / write / update), and any note
  * opened from that list, from a [[wikilink]], or by clicking it in the vault.
- * Reads only: editing notes is the Notes app's job.
+ * Reads only: editing notes is the Notes app's job (EDIT / NOTES open it).
  */
 (function () {
   "use strict";
@@ -59,52 +59,23 @@
     return null;
   }
 
-  // small, safe Markdown: everything is escaped first, then a few patterns
+  // the same safe Markdown as the Notes app (md.js); read-only here, so boxes don't tick
   function md(src) {
-    var fm = "";
-    var m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(src);
-    if (m) {
-      var tags = /tags:\s*\[?([^\]\n]*)/.exec(m[1]);
-      var type = /type:\s*(\S+)/.exec(m[1]);
-      fm = [type ? type[1] : "", tags ? tags[1].trim() : ""].filter(Boolean).join("  ·  ");
-      src = src.slice(m[0].length);
-    }
-    var out = [], inList = false, inCode = false;
-    src.split(/\r?\n/).forEach(function (line) {
-      if (/^```/.test(line)) {
-        if (inList) { out.push("</ul>"); inList = false; }
-        out.push(inCode ? "</pre>" : "<pre>");
-        inCode = !inCode;
-        return;
-      }
-      if (inCode) { out.push(esc(line)); return; }
-      var t = esc(line)
-        .replace(/`([^`]+)`/g, "<code>$1</code>")
-        .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
-        .replace(/(^|[^*])\*([^*]+)\*/g, "$1<i>$2</i>")
-        .replace(/\[\[([^\]]+)\]\]/g, function (_, inner) {
-          var label = inner.indexOf("|") >= 0 ? inner.split("|")[1] : inner;
-          return '<a class="wl" data-note="' + inner + '">' + label + "</a>";
-        });
-      var h = /^(#{1,3})\s+(.*)$/.exec(t);
-      var li = /^\s*[-*]\s+(.*)$/.exec(t);
-      if (li) {
-        if (!inList) { out.push("<ul>"); inList = true; }
-        out.push("<li>" + li[1] + "</li>");
-        return;
-      }
-      if (inList) { out.push("</ul>"); inList = false; }
-      if (h) out.push("<h" + h[1].length + ">" + h[2] + "</h" + h[1].length + ">");
-      else if (t.trim()) out.push("<p>" + t + "</p>");
-    });
-    if (inList) out.push("</ul>");
-    if (inCode) out.push("</pre>");
-    return (fm ? '<div class="fm">' + esc(fm) + "</div>" : "") + out.join("\n");
+    return PhilMD.render(src).replace(/<input type="checkbox"/g, '<input type="checkbox" disabled');
   }
+
+  // the Notes app opens in its own window, so the chat here keeps going
+  function openNotesApp(id) {
+    window.open("/notes" + (id ? "#" + encodeURIComponent(id) : ""), "philibert-notes", "popup,width=1320,height=880");
+  }
+  var editBtn = document.getElementById("notes-edit");
+  editBtn.addEventListener("click", function () { openNotesApp(openId); });
+  document.getElementById("btn-notes").addEventListener("click", function (ev) { ev.preventDefault(); openNotesApp(openId); });
 
   function showRecent() {
     openId = null;
     back.hidden = true;
+    editBtn.hidden = true;
     sub.textContent = "recently read";
     var evs = (lastState && lastState.vault && lastState.vault.events) || [];
     var seen = {}, rows = [];
@@ -130,6 +101,7 @@
     if (!id) { showRecent(); return; }
     openId = id;
     back.hidden = false;
+    editBtn.hidden = false;
     sub.textContent = stem(id);
     body.innerHTML = '<div class="empty">opening…</div>';
     if (!fromVault && window.vaultFocusNote) window.vaultFocusNote(id);

@@ -17585,6 +17585,7 @@ def _open_portable_browser(url):
             "--disable-background-networking", "--disable-component-update",
             "--disable-domain-reliability", "--disable-features=Translate,MediaRouter",
             "--autoplay-policy=no-user-gesture-required",   # startup sounds, voice
+            "--disable-infobars",       # hides non-interactive bars (CfT banner: to verify)
             "--start-maximized"]
     if os.environ.get("ND_BROWSER_KIOSK") == "1":
         args.append("--kiosk")
@@ -17862,6 +17863,8 @@ class Handler(BaseHTTPRequestHandler):
             bare_path = "/live/"
         elif bare_path == "/full":
             bare_path = "/"
+        elif bare_path == "/notes":
+            bare_path = "/live/notes.html"
         if bare_path in ("/", "/index.html"):
             if not self.authed():
                 page = PAIR_PAGE.encode("utf-8")
@@ -17981,6 +17984,19 @@ class Handler(BaseHTTPRequestHandler):
         # entirely, so the exempt path was never exercised from 127.0.0.1.
         if path not in AUTH_EXEMPT and not self.authed():
             self.send_json({"error":"unauthorized","hint":"Send X-ND-Token. Pair in Setup > Devices."}, 401)
+            return
+
+        if path == "/api/notes":
+            # The Notes app (nd_notes.py). It writes files, so a page from another
+            # site in the user's own browser must not be able to drive it.
+            _origin = self.headers.get("Origin")
+            if _origin and urllib.parse.urlparse(_origin).netloc != self.headers.get("Host"):
+                self.send_json({"ok": False, "msg": "refused: another site"}, 403)
+                return
+            import nd_notes
+            o = obs()
+            self.send_json(nd_notes.handle(body, str(o.vault) if o else None,
+                                           lambda op, p: vault_event(op, p, "you")))
             return
 
         if PORTABLE and path.startswith("/api/philibert/"):
@@ -19260,7 +19276,8 @@ def main():
     threading.Thread(target=_serve_selfcheck, args=(server, PORT),
                      daemon=True).start()
     try:
-        owned = open_ui(url)
+        # --headless: serve only, no window (tests, and checks run while the user works)
+        owned = False if "--headless" in sys.argv else open_ui(url)
         if owned:
             log(f"Window closed - shutting down {PRODUCT}", "info")
             return
