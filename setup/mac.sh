@@ -11,6 +11,14 @@ set -u
 FULL=0; [ "${1:-}" = "--full" ] && FULL=1
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# Everything this window shows also goes to data/logs/mac-start.log on the drive, so a
+# problem can be read later on another computer (the Terminal window is easy to lose).
+mkdir -p "$ROOT/data/logs"
+LOG="$ROOT/data/logs/mac-start.log"
+exec > >(tee -a "$LOG") 2>&1
+echo
+echo "======== $(date '+%Y-%m-%d %H:%M:%S')  macOS $(sw_vers -productVersion 2>/dev/null)  $(uname -m)  $(sysctl -n machdep.cpu.brand_string 2>/dev/null)  RAM $(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824 )) GB  free on drive: $(df -h "$ROOT" | awk 'NR==2{print $4}')"
+
 case "$(uname -m)" in
   arm64) PYA="aarch64-apple-darwin"; RT="$ROOT/runtime/mac-arm64"; CRP="mac-arm64" ;;
   *)     PYA="x86_64-apple-darwin";  RT="$ROOT/runtime/mac-x64";   CRP="mac-x64" ;;
