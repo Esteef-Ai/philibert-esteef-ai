@@ -22,12 +22,34 @@ THEMES = [  # id, name, family - the order the Control Panel lists them
     ("win11", "Windows 11", "win"), ("os8", "Mac OS 8", "mac"), ("os9", "Mac OS 9.2", "mac"),
     ("macos", "macOS", "mac"), ("ios", "iOS", "phone"), ("android", "Android", "phone"),
     ("c64", "Commodore 64", "c64"),
+    ("redhat", "Red Hat Linux", "linux"),
 ]
 READY = {t[0] for t in THEMES}
 # themes added after a drive was set up: it never had the chance to say no to them
-ADDED_LATER = {"win11", "macos", "ios", "android", "c64"}
+ADDED_LATER = {"win11", "macos", "ios", "android", "c64", "redhat"}
 DEFAULTS = {"theme": "win95", "wallpaper": "teal", "sounds": True, "boot": True,
-            "screensaver": True, "saver_minutes": 10, "icons": {}}
+            "screensaver": True, "saver_minutes": 10, "icons": {},
+            # The Esteef.Ai App Store: the apps added to this desktop. None = a drive set up
+            # before the store, which keeps every app it had; Setup writes [] on a fresh one.
+            "installed": None,
+            # windows that were open when the theme changed, waiting in the tray
+            "parked": []}
+# The core - always on the desktop. Everything else comes from the App Store.
+CORE = ("chat", "store", "control", "trash")
+STORE = [
+    {"id": "notes", "name": "Notes", "about": "Write and keep notes in your vault - plain files that open in Obsidian too."},
+    {"id": "files", "name": "File Manager", "about": "Browse, copy, move and tidy the files on this drive - your pictures and "
+     "downloads above all. Philibert's own program folders are read-only here."},
+    {"id": "models", "name": "Model Manager", "about": "The AI models on this drive in plain words: what each one is good for, "
+     "and add or remove them."},
+    {"id": "images", "name": "Image Generation", "about": "Album covers, posters, banners and photos from a description, made "
+     "on this computer. Sets itself up the first time (about 3.5 GB plus a model)."},
+    {"id": "band", "name": "Band Manager", "about": "For people who play in a band: gigs, tours, setlists, merch, money and bills."},
+    {"id": "vault", "name": "Retro Vault", "about": "Play your own classic games from the drive (NES, SNES, Genesis, GBA, N64 and "
+     "more), with saves kept on the drive."},
+    {"id": "suite", "name": "ND Suite", "about": "NeuralDock's full interface - every model setting and tool, for power users."},
+]
+STORE_IDS = {a["id"] for a in STORE}
 _APP_ID = re.compile(r"^[a-z0-9][a-z0-9_\-]{1,40}$")
 
 
@@ -81,6 +103,11 @@ def save_settings(data_dir, changes):
             continue
         if k in ("sounds", "boot", "screensaver"):
             v = bool(v)
+        if k in ("installed", "parked"):
+            if not isinstance(v, list):
+                continue
+            ok = STORE_IDS if k == "installed" else None
+            v = [str(x) for x in v if isinstance(x, str) and (ok is None or x in ok)][:40]
         if k == "saver_minutes":
             try:
                 v = max(1, min(60, int(v)))
@@ -229,13 +256,33 @@ def app_file(apps_dir, rel):
     return p if p.is_file() else None
 
 
+def installed(data_dir):
+    """The apps on this desktop: the core, plus what the App Store added."""
+    have = settings(data_dir).get("installed")
+    return list(CORE) + ([a["id"] for a in STORE] if have is None else [x for x in have if x in STORE_IDS])
+
+
+def store(data_dir):
+    have = set(installed(data_dir))
+    return [dict(a, installed=a["id"] in have) for a in STORE]
+
+
+def store_set(data_dir, app_id, on):
+    if app_id not in STORE_IDS:
+        return {"ok": False, "msg": "That is not in the App Store."}
+    cur = [x for x in installed(data_dir) if x in STORE_IDS]
+    cur = [x for x in cur if x != app_id] + ([app_id] if on else [])
+    save_settings(data_dir, {"installed": cur})
+    return {"ok": True, "installed": installed(data_dir)}
+
+
 def handle(body, data_dir, apps_dir, shutdown=None):
     body = body or {}
     op = body.get("op", "")
     if op == "state":
         info = install_info(data_dir)
         return {"ok": True, "settings": settings(data_dir), "themes": themes(data_dir),
-                "apps": apps(apps_dir), "edition": info.get("edition", "slim"),
+                "apps": apps(apps_dir), "edition": info.get("edition", "slim"), "installed": installed(data_dir),
                 "retro_vault": bool((info.get("full") or {}).get("retro_vault", False)),
                 # every Full desktop: the app sets itself up on each computer (drives set up
                 # before the Setup option existed had no icon at all)
@@ -243,6 +290,12 @@ def handle(body, data_dir, apps_dir, shutdown=None):
                 "now": time.time()}
     if op == "save":
         return {"ok": True, "settings": save_settings(data_dir, body.get("settings"))}
+    if op == "store":
+        return {"ok": True, "apps": store(data_dir)}
+    if op == "store_add":
+        return store_set(data_dir, str(body.get("id") or ""), True)
+    if op == "store_remove":
+        return store_set(data_dir, str(body.get("id") or ""), False)
     if op == "app_remove":
         return remove(apps_dir, body.get("id"))
     if op == "shutdown":

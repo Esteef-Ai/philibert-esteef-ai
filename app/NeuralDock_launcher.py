@@ -18215,6 +18215,10 @@ class Handler(BaseHTTPRequestHandler):
             bare_path = "/live/band.html"
         elif bare_path == "/images":
             bare_path = "/live/images.html"
+        elif bare_path == "/files":
+            bare_path = "/live/files.html"
+        elif bare_path == "/modelmgr":
+            bare_path = "/live/modelmgr.html"
         if bare_path in ("/", "/index.html"):
             if not self.authed():
                 page = PAIR_PAGE.encode("utf-8")
@@ -18268,6 +18272,23 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             if data and self.command != "HEAD":
                 self.wfile.write(data)
+            return
+        if bare_path == "/api/files/file":
+            # File Manager: a file inside the drive's Philibert folder, to view or save
+            import nd_files
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            f = nd_files.file_for(_drive_root(), (q.get("path") or [""])[0])
+            if not f or not self.authed():
+                self.send_json({"error": "not found"}, 404)
+                return
+            data = f.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", self._LIVE_TYPES.get(f.suffix.lower(), "application/octet-stream"))
+            self.send_header("Content-Length", str(len(data)))
+            if (q.get("download") or [""])[0]:
+                self.send_header("Content-Disposition", 'attachment; filename="' + f.name.replace('"', "") + '"')
+            self.end_headers()
+            self.wfile.write(data)
             return
         if bare_path == "/api/images/file":
             # Image Generation's gallery: a picture by name, never a path from outside
@@ -18416,7 +18437,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error":"unauthorized","hint":"Send X-ND-Token. Pair in Setup > Devices."}, 401)
             return
 
-        if path in ("/api/notes", "/api/chats", "/api/desktop", "/api/band", "/api/images"):
+        if path in ("/api/notes", "/api/chats", "/api/desktop", "/api/band", "/api/images", "/api/files"):
             # The Notes app (nd_notes.py) and saved chats (nd_chats.py). They
             # write files, so a page from another site in the user's own browser
             # must not be able to drive them.
@@ -18431,6 +18452,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/band":
                 import nd_band
                 self.send_json(nd_band.handle(body, _CONFIG_DIR / "band.db"))
+                return
+            if path == "/api/files":
+                import nd_files
+                self.send_json(nd_files.handle(body, _drive_root()))
                 return
             if path == "/api/images":
                 import nd_imagegen

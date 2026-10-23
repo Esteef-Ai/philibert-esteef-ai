@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Philibert Models</title>
+<link href="/live/fonts/fonts.css" rel="stylesheet">
+<link rel="icon" href="/live/philibert-p1.svg">
+<style>
+  :root { --navy:#0f172a; --panel:#111d36; --raise:#162544; --line:#1e3054; --cyan:#00f2fe; --amber:#f59e0b; --green:#10b981;
+          --pink:#ff2e88; --txt:#d7e3f4; --dim:#8ea3c4; --faint:#6f86a8; --font:'Inter',system-ui,sans-serif; --mono:'JetBrains Mono',Consolas,monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { min-height:100%; background:var(--navy); color:var(--txt); font:14px var(--font); }
+  .wrap { max-width:980px; margin:0 auto; padding:20px 22px 40px; }
+  h1 { font-size:20px; color:#fff; } .lead { color:var(--dim); font-size:13px; line-height:1.5; margin:4px 0 6px; }
+  h2 { font:600 10.5px var(--font); letter-spacing:.18em; text-transform:uppercase; color:var(--dim); margin:22px 0 8px; }
+  .row { display:grid; grid-template-columns:1fr auto; gap:14px; align-items:center; background:var(--panel); border:1px solid var(--line);
+         border-radius:10px; padding:12px 14px; margin-bottom:8px; }
+  .row b { color:#fff; font-size:15px; } .real { font:11px var(--mono); color:var(--faint); margin-left:6px; }
+  .good { color:var(--dim); font-size:12.5px; line-height:1.45; margin-top:3px; }
+  .meta { display:flex; gap:10px; align-items:center; margin-top:6px; font:10.5px var(--mono); color:var(--faint); flex-wrap:wrap; }
+  .tag { padding:2px 7px; border-radius:10px; border:1px solid var(--line); }
+  .tag.on { color:var(--green); border-color:rgba(16,185,129,.5); } .tag.keep { color:var(--cyan); border-color:rgba(0,242,254,.4); }
+  .fit::before { content:""; display:inline-block; width:7px; height:7px; border-radius:50%; background:currentColor; margin-right:5px; }
+  .fit.green { color:var(--green); } .fit.yellow { color:var(--amber); } .fit.red { color:var(--pink); }
+  .btn { font:11px var(--mono); letter-spacing:.08em; color:var(--dim); background:rgba(22,37,68,.5); border:1px solid var(--line);
+         border-radius:6px; padding:7px 12px; cursor:pointer; white-space:nowrap; }
+  .btn:hover:not(:disabled) { color:var(--cyan); border-color:rgba(0,242,254,.5); }
+  .btn.primary { color:#04131c; background:var(--cyan); border-color:var(--cyan); font-weight:600; }
+  .btn.danger:hover { color:var(--pink); border-color:rgba(255,46,136,.5); } .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .bar { height:5px; border-radius:3px; background:var(--raise); overflow:hidden; width:160px; margin-top:6px; }
+  .bar div { height:100%; background:var(--cyan); width:0; }
+  .note { font:11px var(--mono); color:var(--amber); margin-top:6px; }
+  .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); font:12px var(--mono); background:#102038;
+           border:1px solid rgba(0,242,254,.4); border-radius:7px; padding:8px 14px; opacity:0; transition:opacity .25s; pointer-events:none; }
+  .toast.on { opacity:1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Models</h1>
+  <p class="lead">The AI models on this drive, in plain words: what each one is, what it is good for, and whether it suits this
+    computer. Add one and it downloads onto the drive; it then works on every computer you plug the drive into.</p>
+  <div id="body"></div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="/live/modelmgr.js"></script>
+</body>
+</html>

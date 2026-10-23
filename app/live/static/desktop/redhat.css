@@ -1,0 +1,52 @@
+/* Philibert Linux: our take on the classic Red Hat desktop of 2002 - GNOME's light grey
+   panel along the bottom, soft rounded buttons, blue gradient title bars and a curving
+   blue wallpaper. Drawn in-house: no Red Hat, GNOME or Fedora logos ship - the Start
+   button is the Philibert boombox in red. */
+@import url("win95.css");
+:root { --face: #e4e4e4; --hi: #ffffff; --lite: #f3f3f3; --shade: #a8a8a8; --dark: #646464;
+        --title: #4a6aa5; --title-off: #c6c6c6; --sel: #4a6aa5;
+        --ui-font: "Nimbus Sans L", "Liberation Sans", "DejaVu Sans", Helvetica, Arial, sans-serif; }
+html, body { font-size: 12px; -webkit-font-smoothing: antialiased; }
+
+/* buttons: soft, rounded, a gentle gradient */
+.btn { border-radius: 4px; background: linear-gradient(#fdfdfd, #d8d8d8); box-shadow: inset 0 0 0 1px #8a8a8a, inset 0 2px 0 -1px #fff; }
+.btn:hover:not([disabled]) { background: linear-gradient(#ffffff, #e6eaf2); }
+.btn:active, .btn.down { background: linear-gradient(#c9c9c9, #e6e6e6); box-shadow: inset 0 0 0 1px #6a6a6a; padding: 4px 10px; }
+.raised { background: var(--face); box-shadow: 0 0 0 1px #8a8a8a, inset 0 1px #fff; border-radius: 3px; }
+.sunk { box-shadow: inset 0 0 0 1px #a8a8a8; border-radius: 3px; }
+.well { box-shadow: inset 0 0 0 1px #8a8a8a; border-radius: 2px; }
+
+/* windows */
+.win { padding: 0 4px 4px; background: #dedede; border-radius: 7px 7px 2px 2px; box-shadow: 0 0 0 1px #5e5e5e, 2px 4px 10px rgba(0,0,0,.3); }
+.titlebar { height: 22px; margin: 0 -4px; padding: 0 4px 0 7px; gap: 4px; border-radius: 7px 7px 0 0;
+            background: linear-gradient(#e2e2e2, #bcbcbc); color: #5a5a5a; text-shadow: 0 1px #f0f0f0; }
+.win.active .titlebar { background: linear-gradient(#86a5d8, #4f70ad 55%, #3e5f9b); color: #fff; text-shadow: 0 1px #263e6e; }
+.tbtn { width: 17px; height: 17px; border-radius: 50%; font-size: 8px; color: #3a3a3a; text-shadow: none;
+        background: radial-gradient(circle at 40% 35%, #fff, #cfd6e4 70%); box-shadow: inset 0 0 0 1px #4d5d7d; }
+.tbtn.close:hover { background: radial-gradient(circle at 40% 35%, #ffd6d6, #e06060 70%); color: #fff; }
+.wbody { margin-top: 4px; border-radius: 2px; }
+
+/* the GNOME-style panel along the bottom */
+#taskbar { height: 32px; padding: 3px 4px; gap: 6px; background: linear-gradient(#f4f4f4, #d2d2d2); box-shadow: 0 -1px #8a8a8a, inset 0 1px #fff; }
+#start { height: 26px; padding: 2px 10px 2px 5px; gap: 5px; border-radius: 5px; }
+#start-label { color: #a00000; letter-spacing: .01em; }
+.task { height: 24px; border-radius: 4px; }
+.task.down { font-weight: bold; background-image: linear-gradient(#b9c7e0, #dde4f1); box-shadow: inset 0 0 0 1px #4a6aa5; }
+#tasks { height: 24px; }
+#tray { height: 24px; padding: 0 9px 0 5px; background: linear-gradient(#e2e2e2, #ededed); }
+
+/* the menu: grey, rounded, a red band */
+#startmenu { bottom: 33px; left: 4px; padding: 4px; border-radius: 5px; background: #efefef; box-shadow: 0 0 0 1px #5e5e5e, 2px 4px 10px rgba(0,0,0,.3); }
+#startmenu .band { background: linear-gradient(0deg, #7a0000, #cc0000); border-radius: 3px; }
+#startmenu .band i { color: #ffc4c4; }
+.mi { border-radius: 3px; }
+.mi:hover, .mi.open { background: linear-gradient(#6d8cc4, #4a6aa5); }
+#flyout { border-radius: 4px; background: #efefef; box-shadow: 0 0 0 1px #5e5e5e, 2px 4px 10px rgba(0,0,0,.25); }
+
+/* desktop icons: white labels with a soft shadow */
+.dicon .lbl { text-shadow: 1px 1px 2px #000, 0 0 3px rgba(0,0,0,.6); }
+.dicon.sel .img::after { background: #4a6aa5; }
+.dicon.sel .lbl { background: #4a6aa5; outline: none; border-radius: 3px; text-shadow: none; }
+
+/* parked windows sit in the panel's tray */
+#parked button { border-radius: 3px; }

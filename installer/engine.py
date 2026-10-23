@@ -326,6 +326,16 @@ class Installer:
             shutil.copytree(ready, vault / ".obsidian")
         if self.plan.get("edition") == "full" and (self.plan.get("full") or {}).get("retro_vault", True):
             (self.dest / "Entertainment" / "Cartridges").mkdir(parents=True, exist_ok=True)
+        desk = data / "desktop.json"
+        if self.plan.get("edition") == "full" and not desk.exists():
+            # A fresh desktop: Philibert Chat, the App Store, Control Panel and Trash. The rest
+            # is added from the App Store (Retro Vault when Setup fetched its game players).
+            first = ["vault"] if (self.plan.get("full") or {}).get("retro_vault") else []
+            first += ["images"] if (self.plan.get("full") or {}).get("image_gen") else []
+            fresh = {"installed": first}
+            if (self.plan.get("full") or {}).get("default_theme"):     # desktop.json wins over install.json's
+                fresh["theme"] = self.plan["full"]["default_theme"]
+            desk.write_text(json.dumps(fresh), encoding="utf-8")
         info = {"version": 1, "installed": datetime.now().isoformat(timespec="seconds"),
                 "edition": self.plan.get("edition", "slim"), "pcs": self.pcs,
                 "full": self.plan.get("full") or {}, "models": self.plan.get("models") or []}

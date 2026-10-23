@@ -177,6 +177,22 @@
     c64petscii: { name: "Esteef.Ai PETSCII", bg: "conic-gradient(#6c5eb5 0 25%, #352879 0 50%, #6c5eb5 0 75%, #352879 0) 0 0 / 16px 16px" },
   };
 
+  // ---- 2002: Red Hat-era Linux - a soft blue curve, GNOME's grey panel ----
+  list.rhplain = { name: "(None) Blue-grey", plain: true, bg: "#5a6f92" };
+  list.rhcurve = { name: "Philibert Curve", bg: "linear-gradient(180deg, #2f5291 0%, #5f86c4 55%, #a9c1e6 100%)", art: function () {
+    return svg(W, H, '<path d="M-100 760 C 300 560, 900 980, 1700 620 L1700 1100 L-100 1100 Z" fill="#fff" opacity=".12"/>' +
+      '<path d="M-100 820 C 380 650, 1000 1010, 1700 700" fill="none" stroke="#fff" stroke-width="6" opacity=".35"/>' +
+      '<path d="M-100 860 C 420 720, 1040 1040, 1700 760" fill="none" stroke="#fff" stroke-width="2" opacity=".3"/>' +
+      '<text x="800" y="470" text-anchor="middle" font-family="Montserrat,Arial,sans-serif" font-weight="800" font-size="84" fill="#fff" opacity=".85">Philibert</text>' +
+      '<text x="800" y="525" text-anchor="middle" font-family="Montserrat,Arial,sans-serif" font-weight="600" font-size="30" fill="#cc0000" opacity=".9">L I N U X</text>' +
+      '<text x="1560" y="970" text-anchor="end" font-family="Arial" font-weight="600" font-size="20" fill="#fff" opacity=".7">Esteef.Ai</text>');
+  } };
+  list.rhred = { name: "Philibert Red", bg: "radial-gradient(ellipse at 50% 45%, #b30000 0%, #5a0000 55%, #1a0000 100%)", art: function () {
+    return '<div style="text-align:center">' + P1(150, "#fff", "#8a0000") +
+      '<div style="font:800 40px Montserrat,Arial,sans-serif;color:#fff;margin-top:10px">Philibert Linux</div>' +
+      '<div style="font:600 15px Arial,sans-serif;color:#ffb0b0;letter-spacing:.2em">ESTEEF.AI</div></div>';
+  } };
+
   var themes = {
     win311: ["teal311", "w311logo", "w311bricks", "w311weave", "slate", "esteef"],
     win95: ["teal", "clouds", "w95setup", "w95space", "boombox", "esteef", "slate", "plum"],
@@ -188,6 +204,7 @@
     ios: ["iosliquid", "iosnight", "phoneblack"],
     android: ["andmaterial", "anddark", "phoneblack"],
     c64: ["c64classic", "c64stripes", "c64petscii"],
+    redhat: ["rhcurve", "rhred", "rhplain", "esteef", "slate"],
   };
 
   window.PhilWalls = { list: list, themes: themes };

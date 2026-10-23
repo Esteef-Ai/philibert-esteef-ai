@@ -166,6 +166,29 @@ def _pull_run(tag, log):
         _say(log, f"Download of {tag} failed: {e}", "warn")
 
 
+def remove(tag, log=None):
+    """Take a model off the drive (Ollama deletes its files). Never one Philibert needs
+    (vision, note search), and only models this drive has."""
+    m = next((x for x in catalog() if _same(x["tag"], tag)), None)
+    if m and m.get("required"):
+        return {"ok": False, "error": m.get("label", tag) + " is part of Philibert and stays."}
+    if not any(_same(tag, h) for h in installed()):
+        return {"ok": False, "error": "That model is not on this drive."}
+    # Philibert needs something to talk with: never the last chat model on the drive
+    kinds = {x["tag"]: x.get("kind", "chat") for x in catalog()}
+    chats = [h for h in installed() if "embed" not in h and not any(_same(h, t) and k != "chat" for t, k in kinds.items())]
+    if (m is None or m.get("kind", "chat") == "chat") and len(chats) <= 1 and any(_same(tag, h) for h in chats):
+        return {"ok": False, "error": "That is the only chat model on this drive - add another one first, then remove this."}
+    try:
+        req = urllib.request.Request(OLLAMA_URL + "/api/delete", method="DELETE",
+                                     data=json.dumps({"model": tag}).encode(), headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=60).close()
+    except Exception as e:
+        return {"ok": False, "error": f"Could not remove it: {e}"}
+    _say(log, f"Removed {tag}", "ok")
+    return {"ok": True}
+
+
 # -- speech -------------------------------------------------------------------
 SPEECH = ROOT / "speech"            # HF_HOME (Whisper models) and voices/, set by setup
 VOICE = "en_US-amy-medium"
@@ -448,6 +471,8 @@ def handle(path, body, log=None):
     name = path.rsplit("/", 1)[-1]
     if name == "models":
         return view()
+    if name == "remove":
+        return remove(str(body.get("tag", "")), log)
     if name == "pull":
         return pull(str(body.get("tag", "")), log)
     if name == "preload":

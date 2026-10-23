@@ -184,6 +184,42 @@ body.dragging .wbody iframe { pointer-events: none; }
 #flyout .mi kbd { margin-left: auto; font: inherit; color: inherit; opacity: .7; }
 #flyout .sep { list-style: none; }
 
+/* ---------- the App Store ---------- */
+.store { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 8px; padding: 8px; }
+.st-head { display: flex; gap: 10px; align-items: center; }
+.st-head b, .st-upd b { display: block; font-size: 13px; margin-bottom: 2px; }
+.st-head span, .st-upd span { line-height: 1.35; }
+.st-list { flex: 1; overflow: auto; padding: 2px 6px; color: #000; }
+.st-app { display: grid; grid-template-columns: 36px 1fr auto; gap: 10px; align-items: center; padding: 8px 2px; border-bottom: 1px solid #d8d8d8; }
+.st-app:last-child { border-bottom: none; }
+.st-app .about { line-height: 1.35; margin-top: 2px; color: #333; }
+.st-app .on { color: #007000; font-weight: bold; }
+.st-upd { display: flex; align-items: center; gap: 10px; padding: 8px; }
+.st-upd .msg { flex: 1; }
+.st-code { font: bold 15px Consolas, monospace; background: #ffffc0; padding: 0 6px; letter-spacing: .08em; }
+
+/* ---------- parked windows: by the clock after a theme change ---------- */
+#parked { display: flex; gap: 3px; align-items: center; }
+#parked:empty { display: none; }
+#parked button { border: none; padding: 1px; min-width: 0; display: flex; align-items: center; gap: 4px; cursor: default;
+  background: #ffe680; box-shadow: 0 0 0 1px #a07800; border-radius: 2px; animation: parkglow 1.6s ease-in-out 4; color: #000; }
+#parked button .ico, #parked button img { width: 16px; height: 16px; display: block; }
+#parked.float { position: fixed; right: 10px; bottom: 12px; z-index: 520; padding: 5px 7px; gap: 5px; background: rgba(0,0,0,.6);
+  border-radius: 6px; font: 11px var(--ui-font); }
+#parked.float::before { content: "Parked:"; color: #fff; }
+#parked.float button { padding: 2px 6px 2px 3px; }
+@keyframes parkglow { 50% { box-shadow: 0 0 0 1px #a07800, 0 0 7px 2px #ffd000; } }
+
+/* Philibert Linux boot: services starting, each [ OK ] */
+.rh-boot { position: absolute; inset: 0; background: #000; color: #c8c8c8; font: 15px/1.6 "DejaVu Sans Mono", "Liberation Mono", Consolas, monospace;
+  padding: 30px 36px; }
+.rh-boot p { margin: 0; width: min(660px, 92vw); position: relative; opacity: 0; animation: rhl .01s forwards; }
+.rh-boot p:nth-child(-n+2) { opacity: 1; animation: none; }
+.rh-boot .rh-w { margin-bottom: 6px; } .rh-boot .rh-w b { color: #ff4040; font-weight: bold; }
+.rh-boot .ok { position: absolute; right: 0; } .rh-boot .ok b { color: #3cff3c; }
+.rh-boot .rh-by { position: absolute; right: 36px; bottom: 26px; width: auto; color: #888; }
+@keyframes rhl { to { opacity: 1; } }
+
 /* shells other than the taskbar start hidden; their theme CSS shows them */
 #menubar, #progman, #dock, #phone, #c64 { display: none; }
 

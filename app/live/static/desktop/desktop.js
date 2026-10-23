@@ -12,7 +12,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var I = window.PhilIcons, S = window.PhilSounds;
   var desk = $("desk"), winsEl = $("windows"), iconsEl = $("icons"), tasksEl = $("tasks");
-  var st = { settings: {}, themes: [], apps: [], retro: false, wins: {}, z: 10, active: null, sel: null };
+  var st = { settings: {}, themes: [], apps: [], retro: false, installed: null, wins: {}, z: 10, active: null, sel: null };
   /* Every theme: its shell (taskbar / Program Manager / Mac menu bar / phone home
      screen / Commodore 64 screen), its name for Philibert, the boot screen and
      start-up sound. Wallpapers are in wallpapers.js; the look is the theme's CSS. */
@@ -27,6 +27,7 @@
     ios:     { shell: "phone", family: "phone", ver: "", name: "Philibert for iOS", boot: "ios", sound: "startup_phone" },
     android: { shell: "phone", family: "phone", ver: "", name: "Philibert for Android", boot: "android", sound: "startup_phone" },
     c64:     { shell: "c64", family: "c64", ver: "64", name: "Philibert 64", boot: "c64", sound: "startup_c64" },
+    redhat:  { shell: "taskbar", family: "linux", ver: "Linux", name: "Philibert Linux", boot: "redhat", sound: "startup_redhat" },
   };
   Object.keys(THEMES).forEach(function (k) { THEMES[k].wall = (window.PhilWalls.themes[k] || ["teal"]); });
   function T() { return THEMES[st.settings.theme] || THEMES.win95; }
@@ -48,19 +49,24 @@
   }
 
   /* ================= the apps ================= */
+  // added from the App Store? (a drive set up before the Store has every app)
+  function has(id) { return !st.installed || st.installed.indexOf(id) >= 0; }
   function builtins() {
     var list = [
       { id: "chat", name: "Philibert Chat", icon: "chat", url: "/live/", w: 1280, h: 800, max: true },
-      { id: "notes", name: "Notes", icon: "notes", url: "/notes?embed=1", w: 1100, h: 720, title: "Philibert Notes" },
-      { id: "suite", name: "ND Suite", icon: "suite", url: "/full", w: 1280, h: 800, max: true },
+      { id: "store", name: "App Store", icon: "store", internal: storeWin, w: 640, h: 560, title: "Esteef.Ai App Store" },
     ];
-    if (st.retro) list.push({ id: "vault", name: "Retro Vault", icon: "vault", url: "/retro/", w: 1240, h: 800, max: true });
-    if (st.imagegen) list.push({ id: "images", name: "Image Generation", icon: "images", url: "/images", w: 1240, h: 800, title: "Philibert Image Generation" });
+    if (has("notes")) list.push({ id: "notes", name: "Notes", icon: "notes", url: "/notes?embed=1", w: 1100, h: 720, title: "Philibert Notes" });
+    if (has("files")) list.push({ id: "files", name: "Files", icon: "files", url: "/files", w: 1080, h: 700, title: "Philibert Files" });
+    if (has("models")) list.push({ id: "models", name: "Models", icon: "models", url: "/modelmgr", w: 940, h: 720, title: "Philibert Models" });
+    if (has("images") && st.imagegen) list.push({ id: "images", name: "Image Generation", icon: "images", url: "/images", w: 1240, h: 800, title: "Philibert Image Generation" });
+    if (has("vault") && st.retro) list.push({ id: "vault", name: "Retro Vault", icon: "vault", url: "/retro/", w: 1240, h: 800, max: true });
+    if (has("band")) list.push({ id: "band", name: "Band Manager", icon: "band", url: "/band?embed=1", w: 1180, h: 760, title: "Philibert Band Manager" });
+    if (has("suite")) list.push({ id: "suite", name: "ND Suite", icon: "suite", url: "/full", w: 1280, h: 800, max: true });
     var sh = THEMES[st.settings.theme] ? THEMES[st.settings.theme].shell : "taskbar";
     if (sh === "phone" || sh === "c64")          // no Start menu there: shutting down is an app
       list.push({ id: "power", name: "Shut Down", icon: "shutdown", action: function () { shutdownDialog(); } });
-    list.push({ id: "band", name: "Band Manager", icon: "band", url: "/band?embed=1", w: 1180, h: 760, title: "Philibert Band Manager" },
-              { id: "control", name: "Control Panel", icon: "control", internal: controlPanel, w: 420, h: 470, fixed: true },
+    list.push({ id: "control", name: "Control Panel", icon: "control", internal: controlPanel, w: 420, h: 470, fixed: true },
               { id: "trash", name: "Trash", icon: "trash", internal: trashWin, w: 560, h: 380 });
     return list;
   }
@@ -696,7 +702,8 @@
   function trashSources() {
     return Promise.all([api("/api/notes", { op: "trash_list" }).catch(function () { return {}; }),
                         api("/api/chats", { op: "trash_list" }).catch(function () { return {}; }),
-                        api("/api/band", { op: "trash" }).catch(function () { return {}; })]);
+                        api("/api/band", { op: "trash" }).catch(function () { return {}; }),
+                        api("/api/files", { op: "trash_list" }).catch(function () { return {}; })]);
   }
   function loadTrash() {
     trashSources().then(function (r) {
@@ -704,12 +711,14 @@
         return { kind: "note", key: n.name, name: n.title, from: (n.from || "").split("/").slice(0, -1).join("/") || "Notes", at: n.at };
       }).concat((r[1].chats || []).map(function (c) {
         return { kind: "chat", key: c.id, name: c.title, from: c.folder || "Chats", at: c.updated };
-      })).concat(bandRows(r[2])).sort(function (a, b) { return b.at - a.at; });
+      })).concat(bandRows(r[2])).concat((r[3].items || []).map(function (f) {
+        return { kind: "file", key: f.id, name: f.name, from: "Files \u203a " + (f.from || "Philibert"), at: f.at };
+      })).sort(function (a, b) { return b.at - a.at; });
       var el = $("trash-rows");
       if (!el) return;
       el.innerHTML = rows.map(function (x, i) {
         return '<div class="row" data-i="' + i + '" title="Double-click to put it back"><span class="n">' +
-               I.svg(x.kind === "note" ? "notes" : x.kind === "band" ? "band" : "chat", 16) + esc(x.name) + "</span><span>" + esc(x.from) +
+               I.svg(x.kind === "note" ? "notes" : x.kind === "band" ? "band" : x.kind === "file" ? "files" : "chat", 16) + esc(x.name) + "</span><span>" + esc(x.from) +
                "</span><span>" + esc(new Date(x.at * 1000).toLocaleDateString()) + "</span></div>";
       }).join("");
       $("trash-status").textContent = rows.length + " object(s). Double-click one to put it back.";
@@ -719,6 +728,7 @@
         var x = rows[+row.dataset.i];
         (x.kind === "note" ? api("/api/notes", { op: "restore", name: x.key })
          : x.kind === "band" ? api("/api/band", { op: "restore", table: x.key.split(":")[0], id: +x.key.split(":")[1] })
+         : x.kind === "file" ? api("/api/files", { op: "restore", id: x.key })
          : api("/api/chats", { op: "restore", id: x.key }))
           .then(function () { S.play("ding"); loadTrash(); updateTrashIcon(); });
       };
@@ -731,7 +741,7 @@
   }
   function updateTrashIcon() {
     trashSources().then(function (r) {
-      setTrashIcon(((r[0].items || []).length + (r[1].chats || []).length + bandRows(r[2]).length) > 0);
+      setTrashIcon(((r[0].items || []).length + (r[1].chats || []).length + bandRows(r[2]).length + (r[3].items || []).length) > 0);
     });
   }
 
@@ -865,6 +875,9 @@
       var ch = { theme: draft.theme, wallpaper: draft.wallpaper, screensaver: !!draft.screensaver,
                  saver_minutes: +draft.saver_minutes || 10, sounds: !!draft.sounds, boot: !!draft.boot };
       var newTheme = ch.theme !== st.settings.theme;
+      if (newTheme) ch.parked = (st.settings.parked || []).concat(Object.keys(st.wins)).filter(function (id, i, a) {
+        return id !== "control" && a.indexOf(id) === i;
+      });
       var jobs = [save(ch)];
       if (you && JSON.stringify(you) !== youWas) {
         jobs.push(api("/api/set_config", { user_name: String(you.user_name || "").trim().slice(0, 40), online: !!you.online }));
@@ -877,6 +890,114 @@
       });
     }
     draw();
+  }
+
+  /* ================= the Esteef.Ai App Store ================= */
+  // Adding an app puts its icon on the desktop; removing one only takes the icon away -
+  // nothing made with it is deleted. The core (Chat, the Store, Control Panel, Trash) stays.
+  function storeWin(body) {
+    body.innerHTML = '<div class="store"><div class="st-head">' + I.svg("store", 32) +
+      "<div><b>Esteef.Ai App Store</b><span>Add the apps you want on your desktop. Removing one only takes its icon away - " +
+      "nothing you made with it is deleted, and you can add it back any time.</span></div></div>" +
+      '<div class="st-list well" id="st-list">Loading...</div>' +
+      '<div class="st-upd raised"><span class="ico-wrap">' + I.svg("settings", 24) + '</span><div class="msg"><b>Philibert updates</b>' +
+      '<span id="st-ver">Checking which version this drive has...</span></div><button class="btn" id="st-update">Update...</button></div></div>';
+    api("/api/philibert/version", {}).then(function (v) {
+      var e = $("st-ver");
+      if (e) e.textContent = "This drive has version " + (v.version || "?") + ". Updating uses the Internet; your chats, notes and models are kept.";
+    }).catch(function () { var e = $("st-ver"); if (e) e.textContent = "Updating uses the Internet; your chats, notes and models are kept."; });
+    $("st-update").addEventListener("click", function () { updatePhilibert(this); });
+    drawStore();
+  }
+  function drawStore() {
+    api("/api/desktop", { op: "store" }).then(function (d) {
+      var el = $("st-list");
+      if (!el) return;
+      el.innerHTML = (d.apps || []).map(function (a) {
+        var needs = a.id === "vault" && !st.retro;
+        return '<div class="st-app"><div class="st-ico">' + I.svg(a.id, 32) + '</div><div><b>' + esc(a.name) + "</b>" +
+          (a.installed ? ' <span class="on">&#10003; on your desktop</span>' : "") + '<div class="about">' + esc(a.about) +
+          (needs ? " <i>Needs the Retro Vault option from Philibert Setup.</i>" : "") + "</div></div>" +
+          (a.installed ? '<button class="btn" data-st-rm="' + esc(a.id) + '">Remove</button>'
+                       : '<button class="btn" data-st-add="' + esc(a.id) + '"' + (needs ? " disabled" : "") + ">Add</button>") + "</div>";
+      }).join("");
+      el.onclick = function (ev) {
+        var add = ev.target.closest("[data-st-add]"), rm = ev.target.closest("[data-st-rm]");
+        if (!add && !rm) return;
+        var id = (add || rm).dataset[add ? "stAdd" : "stRm"];
+        if (rm) close(id);
+        api("/api/desktop", { op: add ? "store_add" : "store_remove", id: id }).then(function (r) {
+          if (!r.ok) { msgbox("App Store", r.msg || "That did not work.", "error"); return; }
+          st.installed = r.installed;
+          if (add) S.play("ding");
+          renderIcons(); renderTasks(); drawStore();
+        });
+      };
+    });
+  }
+  // a private copy: GitHub's device sign-in, the code shown right in the Store
+  function githubSignin(msg) {
+    return api("/api/philibert/github_start", {}).then(function (s) {
+      if (!s.ok) { msg.textContent = s.message || "Could not start signing in to GitHub."; return false; }
+      msg.innerHTML = "This copy is shared privately, so updating needs your GitHub sign-in. A GitHub page has opened (if not, go to " +
+        esc(s.uri) + ") - type this code there: <b class=\"st-code\">" + esc(s.user_code) + "</b>";
+      var until = Date.now() + 15 * 60 * 1000, wait = (s.interval || 5) * 1000;
+      return new Promise(function (done) {
+        (function poll() {
+          if (Date.now() > until) { msg.textContent = "The GitHub code expired. Press Update to try again."; done(false); return; }
+          setTimeout(function () {
+            api("/api/philibert/github_poll", {}).then(function (p) {
+              if (p.state === "ok") done(true);
+              else if (p.state === "slow_down") { wait += 5000; poll(); }
+              else if (p.state === "pending") poll();
+              else { msg.textContent = p.message || "GitHub sign-in did not finish."; done(false); }
+            }).catch(poll);
+          }, wait);
+        })();
+      });
+    });
+  }
+  function updatePhilibert(b) {
+    var msg = $("st-ver");
+    if (!confirm("Check for a newer version of Philibert and install it?\n\nThis uses the Internet. Your chats, notes and models are not touched.")) return;
+    b.disabled = true; msg.textContent = "Checking for a newer version...";
+    var run = function () { return api("/api/philibert/update", {}).catch(function (e) { return { ok: false, message: String(e) }; }); };
+    run().then(function (r) {
+      if (!r.need_signin) return r;
+      return githubSignin(msg).then(function (ok) { if (!ok) return null; msg.textContent = "Updating..."; return run(); });
+    }).then(function (r) {
+      b.disabled = false;
+      if (!r) return;
+      msg.textContent = r.message || (r.ok ? "Done." : "The update did not work.");
+      if (r.ok) S.play("ding");
+    });
+  }
+
+  /* ================= parked windows ================= */
+  // Changing the theme reloads the page (it boots like the real thing), so the windows that
+  // were open wait in the tray by the clock, highlighted, until they are clicked.
+  var parkedEl = $("parked");
+  function renderParked() {
+    var ids = (st.settings.parked || []).filter(function (id) { return appById(id); });
+    parkedEl.innerHTML = ids.map(function (id) {
+      var a = appById(id);
+      return '<button type="button" data-id="' + esc(id) + '" title="' + esc(a.name) + ' - parked when the theme changed. Click to open it.">' +
+             iconHtml(a, 16) + (parkedEl.classList.contains("float") ? "<span>" + esc(a.name) + "</span>" : "") + "</button>";
+    }).join("");
+  }
+  parkedEl.addEventListener("click", function (ev) {
+    var b = ev.target.closest("[data-id]");
+    if (!b) return;
+    var id = b.dataset.id;
+    save({ parked: (st.settings.parked || []).filter(function (x) { return x !== id; }) }).then(renderParked);
+    b.remove();
+    open(id);
+  });
+  function placeParked(shell) {
+    parkedEl.classList.toggle("float", shell !== "taskbar" && shell !== "menubar");
+    if (shell === "taskbar") $("tray").insertBefore(parkedEl, $("clock"));
+    else if (shell === "menubar") $("mb-right").insertBefore(parkedEl, $("mb-clock"));
+    else document.body.appendChild(parkedEl);
   }
 
   /* ================= screen saver: Philibert Constellation ================= */
@@ -1124,6 +1245,14 @@
       return '<div class="and-boot"><div class="and-dots"><i></i><i></i><i></i><i></i></div><div class="and-word">Philibert</div>' +
         '<div class="mod-by">by Esteef.Ai</div></div>';
     },
+    redhat: function () {
+      var steps = ["Mounting the Philibert drive", "Checking your notes vault", "Starting the model server", "Starting Philibert Chat",
+                   "Bringing up the desktop"];
+      return '<div class="rh-boot"><p class="rh-w">Welcome to <b>Philibert</b> Linux</p><p>Press \'I\' to enter interactive startup.</p>' +
+        steps.map(function (s, i) {
+          return '<p style="animation-delay:' + (0.35 + i * 0.38).toFixed(2) + 's">' + s + ':<span class="ok">[  <b>OK</b>  ]</span></p>';
+        }).join("") + '<p class="rh-by" style="animation-delay:2.3s">Esteef.Ai</p></div>';
+    },
     c64: function () {
       return '<div class="c64-boot"><div class="c64-scr"><p>    **** PHILIBERT 64 BASIC V2 ****</p><p> 64K RAM SYSTEM  38911 BASIC BYTES FREE</p>' +
         '<p>&nbsp;</p><p>READY.</p><p class="c64-cur">&#9608;</p></div></div>';
@@ -1167,12 +1296,14 @@
     if (t.shell === "progman") document.querySelector("#progman .pm-body").appendChild(iconsEl);
     else desk.insertBefore(iconsEl, $("minicons"));
     if (t.shell === "menubar") renderMenubar();
+    placeParked(t.shell);
     if (t.shell === "phone" || t.dock) renderDock();
     // the 64's screen sits in the desk's own layer, under the windows a program opens in
     if (t.shell === "c64") { desk.insertBefore($("c64"), winsEl); renderC64(); }
     $("start-label").textContent = id === "winxp" ? "philibert" : "Philibert";
     $("start-mark").innerHTML = id === "winxp" ? I.p1(20, "#fff", "#3c9a3c")
-                              : id === "win11" ? I.p1(22, "#3c8cff", "#fff") : I.p1(18, "#000", "#c0c0c0");
+                              : id === "win11" ? I.p1(22, "#3c8cff", "#fff") : id === "redhat" ? I.p1(20, "#cc0000", "#f0f0f0")
+                              : I.p1(18, "#000", "#c0c0c0");
     $("band-ver").textContent = t.ver;
     $("safe-text").textContent = t.family === "mac" ? "You may now unplug your Philibert drive safely."
                                                     : "It's now safe to unplug your Philibert drive.";
@@ -1195,12 +1326,14 @@
 
   api("/api/desktop", { op: "state" }).then(function (d) {
     st.settings = d.settings || {}; st.themes = d.themes || []; st.apps = d.apps || []; st.retro = !!d.retro_vault; st.imagegen = !!d.image_gen;
+    st.installed = d.installed || null;
     // the modern themes get modern icons in their platform's shape; the rest stay 90s pixels
     I.style = { win11: "tile", macos: "squircle", ios: "squircle", android: "circle" }[st.settings.theme] || "pixel";
     boot(st.settings.boot !== false);
     applySettings().then(function () {
       applyWallpaper(desk.className.replace(/.*\bwp-(\S+).*/, "$1"));   // sized now the layout is final
       renderIcons();
+      renderParked();
       updateTrashIcon();
     });
   }).catch(function () {

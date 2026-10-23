@@ -52,6 +52,20 @@
       '<circle cx="19.5" cy="8.5" r="2" fill="' + LM + '" stroke="' + K + '"/><circle cx="24" cy="12.5" r="2" fill="' + BL + '" stroke="' + K + '"/>' +
       '<circle cx="11" cy="20" r="2.5" fill="' + W + '" stroke="' + K + '"/>' +
       p("M30 2.5l-10 13 1.5 1.5 10-12.5z", MR, K) + p("M20 15.5l-3 3 1 2 3.5-2z", LG, K) + r(15, 19, 2, 2, PU),
+    // App Store: a shopping bag with an E on it
+    store:
+      p("M11.5 10.5V7.5a4.5 4.5 0 0 1 9 0v3", "none", K) + p("M5.5 10.5h21l-1.5 18h-18z", TL, K) + r(6, 11, 20, 1, CY) +
+      r(13, 15, 2, 9, W) + r(13, 15, 7, 2, W) + r(13, 18.5, 5, 2, W) + r(13, 22, 7, 2, W),
+    // Files: a folder with a picture in it
+    files:
+      p("M3.5 7.5h9l2 2h14v18h-25z", OL, K) + r(9.5, 12.5, 15, 11, W, K) + r(10, 13, 14, 6, CY) +
+      p("M10 23l4-5 3 3 2-2 5 4", GR, K) + r(19, 14, 3, 3, YL) + p("M3.5 14.5h25v13h-25z", YL, K) + r(4, 15, 24, 1, W),
+    // Models: three stacked model drives with their lights on
+    models:
+      r(5.5, 5.5, 21, 6, LG, K) + r(5.5, 13.5, 21, 6, LG, K) + r(5.5, 21.5, 21, 6, LG, K) +
+      r(6, 6, 20, 1, W) + r(6, 14, 20, 1, W) + r(6, 22, 20, 1, W) +
+      r(8, 8, 9, 1, DG) + r(8, 16, 9, 1, DG) + r(8, 24, 9, 1, DG) +
+      r(21, 8, 2, 2, LM) + r(21, 16, 2, 2, LM) + r(21, 24, 2, 2, YL),
     // Control Panel: a window with sliders
     control:
       r(3.5, 5.5, 25, 21, LG, K) + r(4, 6, 24, 4, NV) + r(25, 7, 2, 2, LG) +
@@ -124,6 +138,9 @@
     band: "M4 6h16v14H4zM4 9.5h16M12 15m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0M7 7.8h.01M10 7.8h.01",
     images: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15.5 9.5m-1.5 0a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0",
     control: "M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4",
+    store: "M5 8h14l-1 12H6zM9 8V6a3 3 0 0 1 6 0v2M10.5 11.5h3.5M10.5 11.5v5.5h3.5M10.5 14.2h3",
+    files: "M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM7 16l3-3 2 2 2-2 3 3",
+    models: "M12 3l8 4-8 4-8-4zM4 12l8 4 8-4M4 17l8 4 8-4",
     trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13",
     trash_full: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6",
     app: "M5 5h5v5H5zM14 5h5v5h-5zM5 14h5v5H5zM14 14h5v5h-5z",
@@ -138,7 +155,8 @@
   };
   var TINT = {
     chat: ["#22d3ee", "#0369a1"], notes: ["#fcd34d", "#d97706"], suite: ["#a78bfa", "#5b21b6"], vault: ["#fb7185", "#be123c"],
-    band: ["#fdba74", "#c2410c"], images: ["#f472b6", "#7e22ce"], control: ["#9ca3af", "#374151"], trash: ["#d1d5db", "#4b5563"],
+    band: ["#fdba74", "#c2410c"], images: ["#f472b6", "#7e22ce"], control: ["#9ca3af", "#374151"], store: ["#2dd4bf", "#0f766e"],
+    files: ["#fcd34d", "#ca8a04"], models: ["#67e8f9", "#0e7490"], trash: ["#d1d5db", "#4b5563"],
     trash_full: ["#d1d5db", "#4b5563"], app: ["#60a5fa", "#1d4ed8"], programs: ["#60a5fa", "#1d4ed8"], folder: ["#fcd34d", "#ca8a04"],
     help: ["#34d399", "#047857"], find: ["#60a5fa", "#1e40af"], docs: ["#93c5fd", "#1d4ed8"], gpu: ["#4ade80", "#15803d"],
     shutdown: ["#f87171", "#b91c1c"], settings: ["#9ca3af", "#1f2937"],

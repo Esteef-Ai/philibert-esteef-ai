@@ -86,6 +86,12 @@
         tone(a, t + n[1], n[0], 1.8, { type: "sine", vol: 0.09, att: 0.08, cut: 3000 });
       });
     },
+    // Philibert Linux: a bright, open fifth that rings out
+    startup_redhat: function (a, t) {
+      [[293.66, 0], [440.0, 0.1], [587.33, 0.2], [880.0, 0.34]].forEach(function (n) {
+        tone(a, t + n[1], n[0], 2.0, { type: "triangle", vol: 0.09, att: 0.02, cut: 2800 });
+      });
+    },
     // phones: a short bright chime
     startup_phone: function (a, t) {
       tone(a, t, 1046.5, 0.5, { type: "sine", vol: 0.12 });

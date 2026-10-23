@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Philibert Files</title>
+<link href="/live/fonts/fonts.css" rel="stylesheet">
+<link rel="icon" href="/live/philibert-p1.svg">
+<style>
+  :root { --navy:#0f172a; --deep:#0a1120; --panel:#111d36; --raise:#162544; --line:#1e3054; --cyan:#00f2fe; --amber:#f59e0b;
+          --green:#10b981; --pink:#ff2e88; --txt:#d7e3f4; --dim:#8ea3c4; --faint:#6f86a8;
+          --font:'Inter',system-ui,sans-serif; --mono:'JetBrains Mono',Consolas,monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { height:100%; background:var(--navy); color:var(--txt); font:14px var(--font); overflow:hidden; }
+  button, input { font:inherit; color:inherit; }
+  .app { display:grid; grid-template-rows:auto auto 1fr auto; height:100%; }
+  .bar { display:flex; align-items:center; gap:6px; padding:8px 12px; background:linear-gradient(180deg,#101b33,#0d1729);
+         border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  .btn { font:11px var(--mono); letter-spacing:.08em; color:var(--dim); background:rgba(22,37,68,.5); border:1px solid var(--line);
+         border-radius:6px; padding:6px 10px; cursor:pointer; white-space:nowrap; }
+  .btn:hover:not(:disabled) { color:var(--cyan); border-color:rgba(0,242,254,.5); }
+  .btn:disabled { opacity:.38; cursor:not-allowed; }
+  .btn.danger:hover:not(:disabled) { color:var(--pink); border-color:rgba(255,46,136,.5); }
+  .sep { width:1px; height:22px; background:var(--line); margin:0 4px; }
+  .crumbs { display:flex; align-items:center; gap:4px; padding:7px 12px; border-bottom:1px solid var(--line); font:12px var(--mono);
+            color:var(--dim); overflow-x:auto; white-space:nowrap; }
+  .crumbs a { color:var(--txt); cursor:pointer; text-decoration:none; padding:2px 5px; border-radius:4px; }
+  .crumbs a:hover { background:rgba(0,242,254,.08); color:var(--cyan); }
+  .ro { margin-left:auto; color:var(--amber); }
+  .main { display:grid; grid-template-columns:180px 1fr; min-height:0; }
+  nav { border-right:1px solid var(--line); background:var(--deep); padding:10px 8px; overflow:auto; }
+  nav a { display:block; padding:7px 10px; border-radius:6px; cursor:pointer; color:var(--txt); font-size:13px; }
+  nav a:hover { background:rgba(0,242,254,.06); } nav a.on { background:rgba(0,242,254,.14); color:#fff; }
+  nav .k { font:10px var(--mono); color:var(--faint); letter-spacing:.12em; margin:10px 10px 4px; }
+  .grid { overflow:auto; padding:12px; display:grid; grid-template-columns:repeat(auto-fill,minmax(122px,1fr)); gap:10px;
+          align-content:start; user-select:none; }
+  .it { border:1px solid transparent; border-radius:8px; padding:8px 6px; text-align:center; cursor:default; }
+  .it:hover { background:rgba(0,242,254,.05); }
+  .it.sel { background:rgba(0,242,254,.14); border-color:rgba(0,242,254,.5); }
+  .it.cut { opacity:.45; }
+  .it .th { height:86px; display:grid; place-items:center; margin-bottom:6px; }
+  .it img { max-width:100%; max-height:86px; border-radius:4px; display:block; }
+  .it .nm { font-size:12px; word-break:break-word; line-height:1.3; max-height:3.9em; overflow:hidden; }
+  .it .mt { font:10px var(--mono); color:var(--faint); margin-top:3px; }
+  .ic { width:54px; height:44px; position:relative; }
+  .ic.folder::before { content:""; position:absolute; inset:8px 0 0 0; background:#f2b84b; border-radius:4px; }
+  .ic.folder::after { content:""; position:absolute; left:0; top:2px; width:22px; height:10px; background:#d99a2b; border-radius:3px 3px 0 0; }
+  .ic.file::before { content:""; position:absolute; left:12px; right:12px; top:0; bottom:0; background:#cfd8e6; border-radius:3px; }
+  .ic.file span { position:absolute; left:12px; right:12px; bottom:6px; font:9px var(--mono); color:#0f172a; text-transform:uppercase; }
+  .empty { color:var(--faint); padding:30px; grid-column:1/-1; text-align:center; }
+  .status { padding:6px 12px; border-top:1px solid var(--line); font:11px var(--mono); color:var(--faint); display:flex; gap:14px; }
+  .status .clip { color:var(--cyan); }
+  .lb { position:fixed; inset:0; background:rgba(4,8,18,.95); display:none; z-index:20; align-items:center; justify-content:center; }
+  .lb.on { display:flex; }
+  .lb img { max-width:calc(100% - 140px); max-height:calc(100% - 90px); border-radius:6px; }
+  .lb .x { position:absolute; top:14px; right:16px; } .lb .pv { position:absolute; left:16px; } .lb .nx { position:absolute; right:16px; }
+  .lb .cap { position:absolute; bottom:16px; left:0; right:0; text-align:center; font:12px var(--mono); color:var(--dim); }
+  .toast { position:fixed; bottom:40px; left:50%; transform:translateX(-50%); z-index:30; font:12px var(--mono); background:#102038;
+           border:1px solid rgba(0,242,254,.4); border-radius:7px; padding:8px 14px; opacity:0; transition:opacity .25s; pointer-events:none; }
+  .toast.on { opacity:1; }
+  @media (max-width:700px) { .main { grid-template-columns:1fr; } nav { display:none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="bar">
+    <button class="btn" id="b-up" title="Up a folder (Backspace)">&#8593; UP</button>
+    <span class="sep"></span>
+    <button class="btn" id="b-new">NEW FOLDER</button>
+    <button class="btn" id="b-copy" title="Ctrl+C">COPY</button>
+    <button class="btn" id="b-cut" title="Ctrl+X">CUT</button>
+    <button class="btn" id="b-paste" title="Ctrl+V">PASTE</button>
+    <button class="btn" id="b-ren" title="F2">RENAME</button>
+    <button class="btn danger" id="b-del" title="Delete">DELETE</button>
+    <span class="sep"></span>
+    <button class="btn" id="b-save">SAVE A COPY</button>
+  </div>
+  <div class="crumbs" id="crumbs"></div>
+  <div class="main">
+    <nav id="places">
+      <div class="k">PLACES</div>
+      <a data-go="data/images">Pictures</a>
+      <a data-go="data/vault">Notes</a>
+      <a data-go="data/exports">Exports</a>
+      <a data-go="Entertainment/Cartridges">Games</a>
+      <div class="k">THIS DRIVE</div>
+      <a data-go="data">My data</a>
+      <a data-go="">Everything</a>
+    </nav>
+    <div class="grid" id="grid" tabindex="0"></div>
+  </div>
+  <div class="status"><span id="count"></span><span class="clip" id="clip"></span></div>
+</div>
+<div class="lb" id="lb"><img id="lb-img" alt=""><button class="btn x" id="lb-x">CLOSE</button>
+  <button class="btn pv" id="lb-pv">&#8592;</button><button class="btn nx" id="lb-nx">&#8594;</button><div class="cap" id="lb-cap"></div></div>
+<div class="toast" id="toast"></div>
+<script src="/live/files.js"></script>
+</body>
+</html>

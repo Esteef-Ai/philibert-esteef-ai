@@ -11,7 +11,7 @@
     { id: "win311", name: "Windows 3.11" }, { id: "win95", name: "Windows 95", locked: true },
     { id: "winxp", name: "Windows XP" }, { id: "win11", name: "Windows 11" },
     { id: "os8", name: "Mac OS 8" }, { id: "os9", name: "Mac OS 9.2" }, { id: "macos", name: "macOS" },
-    { id: "ios", name: "iOS" }, { id: "android", name: "Android" }, { id: "c64", name: "Commodore 64" }
+    { id: "ios", name: "iOS" }, { id: "android", name: "Android" }, { id: "c64", name: "Commodore 64" }, { id: "redhat", name: "Red Hat Linux" }
   ];
   var SIZE = { theme: 6, sounds: 3, wallpapers: 18, retro: 150, imagegen: 13000 };     // MB, for the totals
   var PC_GB = { windows: 2.5, mac: 0.8 };

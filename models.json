@@ -1,23 +1,23 @@
 {
   "about": "The models Philibert offers. Add one here and push: every drive's dropdown lists it after its next Update, and downloads it the first time someone picks it. 'tag' is what `ollama pull` takes - a name from ollama.com/library, or hf.co/<user>/<repo>:<quant> for a GGUF on Hugging Face. 'min_gpu_gb' is the GPU memory it needs to run at full speed; 'auto' lets first-run setup choose it for a machine with that much.",
   "models": [
-    {"tag": "qwen3.5:4b", "setup_editions": ["slim"], "label": "Qwen3.5 4B", "tier": "4B", "size_gb": 3.3, "min_gpu_gb": 0, "auto": true,
+    {"tag": "qwen3.5:4b", "plain_name": "Small, quick helper", "good_for": "Short answers on older or low-power computers. It has to think longer than the 8B to get things right, so answers come slower.", "setup_editions": ["slim"], "label": "Qwen3.5 4B", "tier": "4B", "size_gb": 3.3, "min_gpu_gb": 0, "auto": true,
      "note": "Fast on any computer, even without a graphics card."},
-    {"tag": "qwen3:8b", "label": "Qwen3 8B", "tier": "8B", "size_gb": 5.2, "min_gpu_gb": 6, "auto": true,
+    {"tag": "qwen3:8b", "plain_name": "Everyday helper", "good_for": "Questions, writing, summaries, notes and simple coding - right and quick on most computers. The one to start with.", "label": "Qwen3 8B", "tier": "8B", "size_gb": 5.2, "min_gpu_gb": 6, "auto": true,
      "note": "The everyday tier for a 6-8 GB graphics card."},
-    {"tag": "qwen3:14b", "label": "Qwen3 14B", "tier": "14B", "size_gb": 9.3, "min_gpu_gb": 10, "auto": true,
+    {"tag": "qwen3:14b", "plain_name": "Sharper everyday helper", "good_for": "Longer writing, trickier questions and more careful answers. Wants a graphics card with 12 GB or more.", "label": "Qwen3 14B", "tier": "14B", "size_gb": 9.3, "min_gpu_gb": 10, "auto": true,
      "note": "Sharper answers; wants a 12-16 GB graphics card."},
-    {"tag": "hf.co/EsteefAi/Qwen3.8-27B-ZB-IQ4_XS-GGUF-mirror:ZB4.00-MIN-v5.1-IQ4_XS", "label": "Qwen3.8 27B", "tier": "27B",
+    {"tag": "hf.co/EsteefAi/Qwen3.8-27B-ZB-IQ4_XS-GGUF-mirror:ZB4.00-MIN-v5.1-IQ4_XS", "plain_name": "Big, careful thinker", "good_for": "Hard reasoning, long documents, planning and coding. Needs a 16 GB graphics card and loads slowly from a drive.", "label": "Qwen3.8 27B", "tier": "27B",
      "size_gb": 13.7, "min_gpu_gb": 16, "auto": false,
      "note": "The strongest, for a 16 GB card. Slow to start from a USB drive; never picked automatically."},
-    {"tag": "hf.co/EsteefAi/Qwen3.8-27B-Defiance-Uncensored-MTP-GGUF-mirror:IQ4_XS", "label": "Qwen3.8 27B Defiance", "tier": "27B", "size_gb": 15.7, "min_gpu_gb": 18, "auto": false,
+    {"tag": "hf.co/EsteefAi/Qwen3.8-27B-Defiance-Uncensored-MTP-GGUF-mirror:IQ4_XS", "plain_name": "Big thinker, fewer refusals", "good_for": "Like the big careful thinker, but it will discuss subjects that cautious models turn down. Needs a 16 GB graphics card.", "label": "Qwen3.8 27B Defiance", "tier": "27B", "size_gb": 15.7, "min_gpu_gb": 18, "auto": false,
      "note": "Another 27B build (Defiance, by ttindall); a little stronger on our tests, a little slower."},
-    {"tag": "hf.co/EsteefAi/Qwen3.8-27B-Defiance-Uncensored-MTP-GGUF-mirror:Q6_K_P", "label": "Qwen3.8 27B Defiance Q6", "tier": "27B", "size_gb": 25.9, "min_gpu_gb": 28, "auto": false,
+    {"tag": "hf.co/EsteefAi/Qwen3.8-27B-Defiance-Uncensored-MTP-GGUF-mirror:Q6_K_P", "plain_name": "Big thinker, finest copy", "good_for": "The most exact copy of the big thinker, for when quality matters more than speed. It is too big for most graphics cards, so it runs partly on the processor and is slow.", "label": "Qwen3.8 27B Defiance Q6", "tier": "27B", "size_gb": 25.9, "min_gpu_gb": 28, "auto": false,
      "note": "Highest quality 27B; needs a very large graphics card or a lot of patience - best for long jobs left running."},
-    {"tag": "qwen2.5vl:7b", "label": "Qwen2.5-VL 7B (vision)", "tier": "vision", "size_gb": 6.0, "min_gpu_gb": 8, "auto": false,
+    {"tag": "qwen2.5vl:7b", "plain_name": "Eyes", "good_for": "Looks at pictures and screenshots and says what is in them, word for word. Philibert needs it whenever you show it an image.", "label": "Qwen2.5-VL 7B (vision)", "tier": "vision", "size_gb": 6.0, "min_gpu_gb": 8, "auto": false,
      "required": true, "vision": true,
      "note": "Reads pictures: posters, receipts, setlists, screenshots. Always installed."},
-    {"tag": "nomic-embed-text", "label": "nomic-embed-text", "kind": "embed", "size_gb": 0.3, "required": true,
+    {"tag": "nomic-embed-text", "plain_name": "Note finder", "good_for": "Lets Philibert find the right notes in your vault by what they mean, not just by words. Small, and always kept.", "label": "nomic-embed-text", "kind": "embed", "size_gb": 0.3, "required": true,
      "note": "Lets Philibert search its own notes. Downloaded on first run."}
   ]
 }

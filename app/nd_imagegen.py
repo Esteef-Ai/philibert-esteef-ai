@@ -434,7 +434,8 @@ def models(root):
     out, known = [], set()
     for m in catalog(root):
         known.update(f["file"] for f in m["files"])
-        out.append({k: m.get(k) for k in ("id", "name", "kind", "about", "licence", "source", "recommended", "settings")}
+        out.append({k: m.get(k) for k in ("id", "name", "kind", "about", "licence", "source", "recommended", "settings",
+                                          "plain_name", "good_for")}
                    | {"installed": model_installed(root, m), "size": sum(f["size"] for f in m["files"]),
                       "fit": _vram_fit(m)})
     for c in checkpoints(root):
