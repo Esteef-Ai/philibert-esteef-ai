@@ -70,7 +70,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
 .vt-btn svg{width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
 .sort-select{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);padding:.28rem .6rem;font-size:.72rem;font-family:inherit;cursor:pointer;}
 .sort-select:focus{outline:none;}
-.game-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:1.5rem 1.1rem;padding:1.4rem;align-items:start;}
+/* A shelf: every box the same height, as wide as that system's real box (BOX_RATIO),
+   so the whole scan shows - a wide SNES or N64 box is not cropped into an NES shape. */
+.game-grid{--art-h:228px;display:flex;flex-wrap:wrap;gap:1.5rem 1.1rem;padding:1.4rem;align-items:flex-start;}
+.game-grid .game-card{flex:0 0 auto;}
+.game-grid .card-info{max-width:100%;}
 .game-card{background:transparent;border:none;overflow:visible;cursor:pointer;transition:transform .18s ease;display:flex;flex-direction:column;border-radius:0;}
 .game-card:hover{transform:translateY(-7px);}
 .game-card:hover .game-art{box-shadow:0 18px 44px rgba(0,0,0,.85);}
@@ -79,7 +83,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
 .game-art{width:100%;aspect-ratio:.72;background:linear-gradient(160deg,#1e1e3a 0%,#1a2040 50%,#1a1a3a 100%);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:3.2rem;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.6);transition:box-shadow .18s ease;}
 /* Not display:none until loaded: Chrome never loads a lazy image that is display:none,
    so box art never appeared (the original Retro Vault too). Laid out, invisible, faded in. */
-.game-art img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .25s;border-radius:8px;z-index:1;}
+.game-art img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .25s;border-radius:8px;z-index:1;}
 .game-art img.loaded{opacity:1;}
 .sys-badge{position:absolute;top:6px;left:6px;font-family:'Press Start 2P',monospace;font-size:.38rem;padding:2px 5px;border-radius:3px;letter-spacing:.04em;color:#fff;}
 .zip-badge{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.65);border-radius:3px;padding:2px 5px;font-size:.58rem;color:var(--muted);}
@@ -958,6 +962,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
 <script src="/retro/lib/jszip.min.js"></script>
 <script>
 const APP_VERSION = "1.3.0";
+// Box shape (width / height) per system, measured from the libretro scans: NES and Master
+// System 0.70, GBA 1.00, SNES 1.41, N64 1.43 (US boxes).
+const BOX_RATIO={NES:0.70,SNES:1.41,Genesis:0.70,SMS:0.70,GBA:1.0,N64:1.43,GB:1.0,MAME:0.70};
 const SYSTEMS=[
   {id:"NES",label:"NES",color:"var(--nes)",exts:[".nes"],core:"nes",emoji:"🎮"},
   {id:"SNES",label:"SNES",color:"var(--snes)",exts:[".sfc",".smc"],core:"snes",emoji:"🕹️"},
@@ -1340,15 +1347,16 @@ function renderGames(){
   document.getElementById("content-count").textContent=isEmpty?"":(games.length===LIBRARY.length?`${games.length} games`:`${games.length} of ${LIBRARY.length}`);
   if(isEmpty||noMatch){gridEl.style.display="none";listEl.style.display="none";return;}
   if(viewMode==="grid"){
-    gridEl.style.display="grid";listEl.style.display="none";
+    gridEl.style.display="flex";listEl.style.display="none";
     gridEl.innerHTML=games.map(g=>{
       const idx=LIBRARY.indexOf(g),sys=SYS_MAP[g.system]||{};
       const pub=g.publisher||g.developer||'';
-      return`<div class="game-card" data-idx="${idx}" tabindex="0" role="button" aria-label="${g.title}">
-        <div class="game-art">
+      const br=BOX_RATIO[g.system]||0.72;
+      return`<div class="game-card" data-idx="${idx}" tabindex="0" role="button" aria-label="${g.title}" style="width:calc(var(--art-h) * ${br})">
+        <div class="game-art" style="aspect-ratio:${br}">
           ${(g.coverBox||g.coverCart||g._svgPlaceholder)
             ?`<img src="${g.coverBox||g.coverCart||g._svgPlaceholder||''}" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.opacity='1')" alt="">`
-            :''}}
+            :''}
           <span style="position:absolute;opacity:${(g.coverBox||g.coverCart)?'0':'1'};transition:opacity .2s;font-size:3rem">${g.emoji||sys.emoji||'🎮'}</span>
           <span class="sys-badge" style="background:${sys.color||'#7c5cbf'}">${g.system}</span>
           <div class="play-overlay"><div class="play-circle"><svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg></div></div>

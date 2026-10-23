@@ -306,6 +306,8 @@ button:disabled{color:var(--dim); border-color:var(--s2); cursor:default}
 /* the 60px gutter tip, centred on the embedded line (left 16px): at -80px it sat
    36px past the edge and its label ("think") was cut off by the history column */
 .embed .tip{width:40px; margin-left:-48px;}
+/* picture mode (Philibert): the button lights, and the box says what will happen */
+#imgbtn[aria-pressed="true"]{color:#04131c; background:#00f2fe; border-color:#00f2fe;}
 .embed .cin{max-width:none; padding:10px 12px 6px;}
 
 /* ── the end-user view (embedded in Philibert) ── */
@@ -408,6 +410,8 @@ button:disabled{color:var(--dim); border-color:var(--s2); cursor:default}
   <div class="cin">
     <button id="convobtn" class="icon" title="Conversation mode — always listening"
             aria-label="Conversation mode">&#9673;</button>
+    <button id="imgbtn" class="icon" type="button" hidden title="Picture mode: your next message becomes a picture"
+            aria-label="Picture mode" aria-pressed="false">&#127912;</button>
     <textarea id="ta" rows="1" placeholder="Ask Elena&hellip;"></textarea>
     <span class="split">
       <button id="mic" class="icon" title="Click to start, click again to stop"
@@ -1404,7 +1408,51 @@ if(HOSTED){
   tellHost({type: "phil-chat-ready"});
 }
 
+/* Picture mode - the quick Image Generation inside Philibert Chat: the message goes
+   straight to the picture engine (the default model, square, one picture), no
+   language model in between. The full app (models, styles, variations) is the
+   Image Generation icon on the desktop. */
+let IMGMODE = false;
+if(window.PRESET_BRAND){
+  $("imgbtn").hidden = false;
+  $("imgbtn").addEventListener("click", () => {
+    IMGMODE = !IMGMODE;
+    $("imgbtn").setAttribute("aria-pressed", IMGMODE ? "true" : "false");
+    ta.placeholder = IMGMODE ? "Describe a picture\u2026" : "Ask " + BRAND + "\u2026";
+    ta.focus();
+  });
+}
+async function askImage(text){
+  busy = true; send.disabled = true;
+  node("you", ME, text);
+  chatPush("user", text);
+  const d = node("el", BRAND, "Drawing it\u2026 (the first picture after a start takes up to a minute)");
+  const body = d.querySelector(".body");
+  setState("think", 0);
+  try{
+    const r = await api("/api/images", {op: "generate", prompt: text, count: 1, size: "square"});
+    if(r && r.ok){
+      const src = "/api/images/file?name=" + encodeURIComponent(r.name);
+      d.classList.add("img");
+      body.innerHTML = '<a class="shot" href="' + src + '" target="_blank" title="Open the full-size picture"><img src="' + src
+        + '" alt="' + esc(text) + '"></a><a class="gal" href="/images" target="_blank">More options in Image Generation</a>';
+      chatPush("assistant", "[picture: " + r.name + "] " + text);
+      pushHistory("user", "(made a picture of: " + text + ")");
+    }else{
+      const msg = String((r && r.msg) || "");
+      body.textContent = /not set up/i.test(msg)
+        ? "Image Generation isn't set up on this computer yet. Open Image Generation on the desktop to set it up - it downloads the picture engine and a model once."
+        : /No picture model/i.test(msg) ? "There's no picture model on the drive yet. Open Image Generation on the desktop and download one in Models."
+        : "That picture didn't work: " + msg;
+    }
+  }catch(e){ body.textContent = "That picture didn't work: " + e.message; }
+  setState("idle", 0);
+  busy = false; send.disabled = false;
+  follow();
+}
+
 async function ask(text, opts){
+  if(IMGMODE && !(opts && opts.noImage)) return askImage(text);
   busy = true; send.disabled = true;
   node("you", ME, text);
   TURN = {steps: []};
