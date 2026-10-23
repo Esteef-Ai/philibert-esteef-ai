@@ -183,6 +183,13 @@ class Api:
         plan["source"] = source()
         if plan["source"].get("repo") and self._token:
             plan["source"]["token"] = self._token
+        elif plan["source"].get("repo") and not plan["source"].get("local") \
+                and github_auth.repo_needs_signin(plan["source"]["repo"]):
+            self._state = {"steps": [{"title": "Copying Philibert onto the drive"}], "step": 0, "step_pct": 0,
+                           "overall": 0, "detail": "", "done": False, "warnings": [],
+                           "error": "This copy of Philibert is private: sign in to GitHub on Setup's first page "
+                                    "(your GitHub account needs to be invited to it) - then start again."}
+            return False
         log = Path(plan["dest"]) / "data" / "logs" / "install.log"
         self._state = {"steps": [], "step": 0, "step_pct": 0, "overall": 0, "detail": "Starting", "done": False,
                        "error": "", "warnings": []}

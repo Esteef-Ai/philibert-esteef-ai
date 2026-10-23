@@ -25,6 +25,7 @@ import sys
 import tarfile
 import tempfile
 import time
+import urllib.error
 import urllib.request
 import zipfile
 from datetime import datetime
@@ -142,6 +143,16 @@ class Installer:
                 return out
             except Cancelled:
                 raise
+            except urllib.error.HTTPError as e:
+                self.log(f"download attempt {attempt} of {url} failed: {e}")
+                if e.code in (401, 403, 404) and "github" in url:
+                    raise RuntimeError("GitHub refused the download (" + str(e.code) + "). This copy of Philibert is "
+                                       "private: sign in to GitHub on Setup's first page with an account that has "
+                                       "been invited to it.")
+                if 400 <= e.code < 500 and e.code not in (408, 429):
+                    raise RuntimeError(f"Could not download {label}: the server said {e.code} ({e.reason}).")
+                self.emit(-1, f"{label} - connection trouble, trying again ({attempt} of 8)")
+                time.sleep(min(20, 3 * attempt))
             except Exception as e:
                 self.log(f"download attempt {attempt} of {url} failed: {e}")
                 self.emit(-1, f"{label} - connection trouble, trying again ({attempt} of 8)")

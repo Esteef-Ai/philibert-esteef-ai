@@ -84,10 +84,24 @@
     open_philibert: function () { return true; },
     close: function () { return true; }
   };
+  // The stand-in answers only in a design preview opened with ?mock=1. Inside Setup's
+  // window every call waits for the real installer: answering early from the
+  // stand-in once said "no sign-in needed" for a private repo, and the install then
+  // failed on GitHub's 404 eight times as "connection trouble". (pywebview serves
+  // this page over http://127.0.0.1, so the address can't tell the two apart.)
+  var PREVIEW = /[?&]mock=1/.test(location.search);
+  var READY = new Promise(function (res) {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.survey) return res();
+    window.addEventListener("pywebviewready", function () { res(); });
+    if (PREVIEW) setTimeout(res, 600);
+  });
   function api(name) {
     var args = Array.prototype.slice.call(arguments, 1);
-    if (window.pywebview && window.pywebview.api && window.pywebview.api[name]) return window.pywebview.api[name].apply(null, args);
-    return Promise.resolve(mock[name].apply(null, args));
+    return READY.then(function () {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api[name]) return window.pywebview.api[name].apply(null, args);
+      if (PREVIEW) return mock[name].apply(null, args);
+      throw new Error("Setup's window is not ready: " + name);
+    });
   }
 
   /* ---------- pages ---------- */
@@ -129,7 +143,7 @@
     $("gh-msg").innerHTML = '<span class="good">Signed in as ' + esc(user || "you") + ".</span> You can go on.";
     validate();
   }
-  api("github_status").then(function (s) {
+  function ghCheck() { api("github_status").then(function (s) {
     gh.needed = !!(s && s.needed);
     if (!gh.needed) return;
     $("signin").classList.remove("hide");
@@ -140,7 +154,7 @@
     if (s.offline) $("gh-msg").innerHTML = '<span class="warn">Setup cannot reach GitHub. Check the Internet connection.</span>';
     if (s.signed_in) ghDone(s.user);
     validate();
-  });
+  }); }
   $("gh-start").addEventListener("click", function () {
     $("gh-msg").textContent = "";
     api("github_start").then(function (d) {
@@ -447,7 +461,11 @@
   });
 
   /* ---------- start ---------- */
+  var booted = false;
   function boot() {
+    if (booted) return;
+    booted = true;
+    ghCheck();
     Promise.all([api("survey"), api("places"), api("catalog"), api("default_model"), api("checklist")]).then(function (r) {
       state.info = r[0]; state.places = r[1]; state.catalog = r[2]; state.checklist = r[4];
       state.catalog.forEach(function (m) { state.models[m.tag] = !!(m.locked || m.tag === r[3]); });
@@ -460,6 +478,5 @@
       if (m && +m[1] === 8) startInstall();
     });
   }
-  if (window.pywebview) boot(); else window.addEventListener("pywebviewready", boot);
-  setTimeout(function () { if (!state.info) boot(); }, 600);     // a plain browser: the stand-in API
+  READY.then(boot);
 })();
