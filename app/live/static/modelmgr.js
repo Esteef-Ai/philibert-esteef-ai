@@ -31,14 +31,14 @@
   }
   function row(o) {
     return '<div class="row"><div><b>' + esc(o.plain) + '</b><span class="real">' + esc(o.real) + "</span>" +
-      '<div class="good">' + esc(o.good) + "</div>" +
+      '<div class="good">' + esc(o.good) + "</div>" + (o.score ? '<div class="meta"><span style="color:#a78bfa">' + esc(o.score) + "</span></div>" : "") +
       '<div class="meta">' + (o.size ? "<span>" + gb(o.size) + "</span>" : "") +
       (o.fit ? '<span class="fit ' + o.fit + '">' + FIT[o.fit] + "</span>" : "") +
       (o.installed ? '<span class="tag on">ON THE DRIVE</span>' : "") + (o.keep ? '<span class="tag keep">PHILIBERT NEEDS IT</span>' : "") + "</div>" +
       (o.progress != null ? '<div class="bar"><div style="width:' + Math.round(o.progress * 100) + '%"></div></div>' : "") +
       (o.error ? '<div class="note">' + esc(o.error) + "</div>" : "") + "</div>" +
       "<div>" + (o.progress != null ? '<span class="real">downloading…</span>'
-        : o.installed ? (o.keep ? "" : '<button class="btn danger" data-rm="' + esc(o.key) + '">REMOVE</button>')
+        : o.installed ? (o.keep || o.ro ? "" : '<button class="btn danger" data-rm="' + esc(o.key) + '">REMOVE</button>')
         : '<button class="btn primary" data-add="' + esc(o.key) + '">ADD</button>') + "</div></div>";
   }
   function draw() {
@@ -47,13 +47,17 @@
       var p = m.pull && ["done", "error"].indexOf(m.pull.status) < 0 ? m.pull : null;
       groups[kindOf(m)].push(row({
         key: "c:" + m.tag, plain: m.plain_name || m.label || m.tag, real: (m.label || "") + " · " + m.tag,
-        good: m.good_for || (m.extra ? "Added to this drive outside Philibert's list." : ""), size: m.size_gb,
+        good: m.good_for || (m.extra ? "On this computer, not in the catalog." : ""), size: m.size_gb, score: m.score,
         fit: m.extra ? null : chatFit(m), installed: m.installed, keep: !!m.required,
         progress: p ? (p.total ? p.done / p.total : 0) : null, error: m.pull && m.pull.status === "error" ? m.pull.error : ""
       }));
     });
     var dl = (img && img.download) || {};
-    var pics = ((img && img.models) || []).map(function (m) {
+    var native = chat.images;                    // native ND: its ComfyUI's files, managed there
+    var pics = native ? native.map(function (m) {
+      return row({ key: "n:" + m.file, plain: m.plain_name, real: m.name, good: m.good_for, size: (m.size || 0) / 1e9,
+                   installed: m.installed, ro: true });
+    }) : ((img && img.models) || []).map(function (m) {
       var going = dl.state === "running" && dl.id === m.id;
       return row({ key: "i:" + m.id, plain: m.plain_name || m.name, real: m.name + (m.own ? " · your own file" : ""), good: m.good_for || m.about,
                    size: (m.size || 0) / 1e9, fit: m.own ? null : m.fit, installed: m.installed, keep: !!m.own,
@@ -64,7 +68,8 @@
       "<h2>Seeing pictures</h2>" + groups.eyes.join("") +
       "<h2>Finding notes</h2>" + groups.notes.join("") +
       "<h2>Making pictures (Image Generation)</h2>" + (pics.join("") || '<p class="lead">No picture models are listed on this drive yet - updating Philibert from the App Store brings the list.</p>') +
-      (img && img.installed === false && pics.length ? '<p class="note">Image Generation isn\'t set up on this computer yet - the models can download now, and its app sets up the rest.</p>' : "");
+      (native ? '<p class="note">These are the picture models in ComfyUI on this PC - add or remove them in ComfyUI\'s models folder.</p>' : "") +
+      (!native && img && img.installed === false && pics.length ? '<p class="note">Image Generation isn\'t set up on this computer yet - the models can download now, and its app sets up the rest.</p>' : "");
   }
   document.addEventListener("click", function (ev) {
     var a = ev.target.closest("[data-add]"), r = ev.target.closest("[data-rm]");

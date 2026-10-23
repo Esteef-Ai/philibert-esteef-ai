@@ -33,7 +33,8 @@ from pathlib import Path
 
 ROOT = Path(os.environ.get("PHILIBERT_ROOT") or Path(__file__).resolve().parent.parent)
 OLLAMA_URL = os.environ.get("ND_OLLAMA_URL") or "http://127.0.0.1:11435"
-CATALOG = ROOT / "models.json"
+# Native ND points this at its own catalog (nd_models.json); a drive uses its models.json.
+CATALOG = Path(os.environ.get("ND_MODEL_CATALOG") or ROOT / "models.json")
 REPO_FILE = ROOT / "philibert.json"
 # What an update may replace. data/, models/, runtime/ and secrets/ are the
 # user's or the machine's and are never touched.
@@ -115,7 +116,24 @@ def view():
         if not any(_same(h, m["tag"]) for m in catalog()):
             out.append({"tag": h, "label": h.split("/")[-1], "kind": "embed" if "embed" in h else "chat",
                         "installed": True, "pull": None, "extra": True})
-    return {"models": out, "default": pick_default(), "gpu_gb": gpu_gb()}
+    return {"models": out, "default": pick_default(), "gpu_gb": gpu_gb(), "images": image_models()}
+
+
+def image_models():
+    """Native ND: the picture models in its ComfyUI, in plain words (nd_models.json
+    image_models). None on a drive - Image Generation lists its own."""
+    try:
+        d = json.loads(CATALOG.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not d.get("image_models"):
+        return None
+    root = Path(d.get("image_root") or "")
+    out = []
+    for m in d["image_models"]:
+        f = root / m["file"]
+        out.append({**m, "installed": f.is_file(), "size": f.stat().st_size if f.is_file() else 0})
+    return out
 
 
 # ── downloads ────────────────────────────────────────────────────────────────
@@ -171,7 +189,7 @@ def remove(tag, log=None):
     (vision, note search), and only models this drive has."""
     m = next((x for x in catalog() if _same(x["tag"], tag)), None)
     if m and m.get("required"):
-        return {"ok": False, "error": m.get("label", tag) + " is part of Philibert and stays."}
+        return {"ok": False, "error": m.get("label", tag) + " is needed and stays."}
     if not any(_same(tag, h) for h in installed()):
         return {"ok": False, "error": "That model is not on this drive."}
     # Philibert needs something to talk with: never the last chat model on the drive

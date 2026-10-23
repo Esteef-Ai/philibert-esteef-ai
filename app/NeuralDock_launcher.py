@@ -18476,6 +18476,20 @@ class Handler(BaseHTTPRequestHandler):
                                            lambda op, p: vault_event(op, p, "you")))
             return
 
+        # Native ND: the model picker and Model Manager use the same catalog code over
+        # ND's own nd_models.json and ND's Ollama. Updating and GitHub stay Philibert's.
+        if (not PORTABLE and path.startswith("/api/philibert/")
+                and path.rsplit("/", 1)[-1] in ("models", "pull", "remove", "preload", "load_state")):
+            _origin = self.headers.get("Origin")
+            if _origin and urllib.parse.urlparse(_origin).netloc != self.headers.get("Host"):
+                self.send_json({"ok": False, "message": "refused: another site"}, 403)
+                return
+            os.environ.setdefault("ND_MODEL_CATALOG", str(Path(__file__).resolve().parent / "nd_models.json"))
+            os.environ.setdefault("ND_OLLAMA_URL", OLLAMA_URL)
+            import nd_philibert
+            self.send_json(nd_philibert.handle(path, body, log))
+            return
+
         if PORTABLE and path.startswith("/api/philibert/"):
             # Model catalog, downloads and updates for the drive (nd_philibert.py).
             # It installs code and holds a GitHub sign-in: same site only.

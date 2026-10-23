@@ -987,10 +987,10 @@ async function probe(){
       // Ollama's list lands in ND's cache a few seconds after start; ask again.
       if(!ms.length) setTimeout(probe, 3000);
       let have = ms;
-      if(d.portable && await loadCatalog(fit)){
+      if(await loadCatalog(fit)){
         // The drive's catalog (models.json) drives the list; Ollama says what is here.
         have = PCAT.models.filter(m => m.installed && (m.kind || "chat") === "chat").map(m => m.tag);
-        if(PCAT.default && have.includes(PCAT.default)) MODEL = PCAT.default;
+        if(d.portable && PCAT.default && have.includes(PCAT.default)) MODEL = PCAT.default;
         else if(!have.includes(MODEL)) MODEL = have[have.length - 1] || MODEL;
       } else {
         fillModels(ms, fit);
@@ -2519,5 +2519,8 @@ scheduleEscape();
 setState("idle");
 probe();
 </script>
+<script src="/live/modelpicker.js"></script>
+<script>/* the model picker: plain names, download and delete, on the drive and in native ND */
+if (window.PhilModelPicker) PhilModelPicker.attach(document.getElementById("modelsel"));</script>
 </body>
 </html>

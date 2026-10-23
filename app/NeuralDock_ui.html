@@ -7275,5 +7275,8 @@ async function projDelete(){
 }
 document.addEventListener('DOMContentLoaded',function(){ setTimeout(projPopulate,300); });
 </script>
+<script src="/live/modelpicker.js"></script>
+<script>/* the model picker: plain names, scores, download and delete (nd_models.json) */
+if (window.PhilModelPicker) PhilModelPicker.attach(document.getElementById("model-sel"), { prefix: "ollama:" });</script>
 </body>
 </html>
