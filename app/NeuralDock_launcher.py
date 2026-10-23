@@ -261,9 +261,9 @@ def philibert_prompt():
     Measured 2026-10-20 on the drive's qwen3.5:4b: following that rule offline,
     "what is the capital of California?" called web_search, was refused, and then
     answered that California has no capital."""
-    out = ("\n\nYOU ARE PHILIBERT by Esteef.Ai, a private assistant for musicians - gigs, "
-           "venues, tours, merch, budget, bills and reminders - plus files, folders and simple "
-           "coding. You run from the user's drive on their own computer. Be warm, direct and "
+    out = ("\n\nYOU ARE PHILIBERT by Esteef.Ai, a private, general-purpose assistant: questions and answers, writing, notes, files and folders, pictures and simple coding. The Band Manager app keeps "
+           "gigs, tours, merch and bills for people who play in a band - use it when they ask about those. "
+           "You run from the user's drive on their own computer. Be warm, direct and "
            "brief: a simple question gets a short answer.\n")
     try:                                   # the Band Manager's settings, shared with its page
         import nd_band
@@ -13751,7 +13751,12 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                 why = br.available()
                 if why:
                     return "[browser unavailable: " + why + "]"
-                if name == "browser_open":  return br.open(a.get("url", ""))
+                if name == "browser_open":
+                    _r = br.open(a.get("url", ""))
+                    if PORTABLE:     # Philibert: a browser it opens is for the person - on-screen, not at -32000
+                        br.set_visible(True)
+                        _r += "\nThe browser window is open on the user's screen now."
+                    return _r
                 if name == "browser_read":  return br.read(int(a.get("max_chars", 8000) or 8000))
                 if name == "browser_find":  return br.find(a.get("query", ""))
                 if name == "browser_click": return br.click(a.get("ref", ""), a.get("text", ""))

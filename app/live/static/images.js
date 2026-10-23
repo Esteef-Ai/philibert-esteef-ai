@@ -26,6 +26,21 @@
   function toast(m) { var t = $("toast"); t.textContent = m; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(function () { t.classList.remove("on"); }, 3200); }
   function src(name) { return "/api/images/file?name=" + encodeURIComponent(name); }
   function gb(b) { return b >= 1e9 ? (b / 1e9).toFixed(1) + " GB" : Math.max(1, Math.round(b / 1e6)) + " MB"; }
+  var showMore = false;
+  function groups() {
+    var out = [];
+    (st.more_styles || []).forEach(function (s) {
+      var g = out.find(function (x) { return x[0] === s.group; });
+      if (!g) { g = [s.group, []]; out.push(g); }
+      g[1].push(s);
+    });
+    return out;
+  }
+  function moreName() {           // a More style that is chosen shows up beside the quick ones
+    var m = (st.more_styles || []).find(function (s) { return s.id === form.style; });
+    return m && !showMore ? m.name : "";
+  }
+  function sdxlOk() { return pictureModels().some(function (m) { return m.kind === "sdxl"; }); }
   function model(id) { return (st.models || []).find(function (m) { return m.id === id; }); }
   function pictureModels() { return (st.models || []).filter(function (m) { return m.installed && (m.kind === "zimage" || m.kind === "sdxl"); }); }
   var FIT = { green: "suits this computer", yellow: "works here, slowly", red: "too big for this computer" };
@@ -94,13 +109,23 @@
         return '<option value="' + esc(x.id) + '"' + (x.id === m.id ? " selected" : "") + ">" + esc(x.name) + "</option>"; }).join("") +
       '</select><p class="tip">' + esc(m.about || "") + ' <a href="#" id="to-models" style="color:var(--cyan)">More models</a></p>' +
       "<h2>Style</h2><div class=\"chips\">" + st.styles.map(function (s) {
-        return '<span class="chip' + (s.id === form.style ? " on" : "") + '" data-style="' + s.id + '">' + esc(s.name) + "</span>"; }).join("") + "</div>" +
+        return '<span class="chip' + (s.id === form.style ? " on" : "") + '" data-style="' + s.id + '">' + esc(s.name) + "</span>"; }).join("") +
+      (moreName() ? '<span class="chip on" data-style="' + esc(form.style) + '">' + esc(moreName()) + "</span>" : "") +
+      '<span class="chip more" id="more-styles">' + (showMore ? "FEWER STYLES" : "MORE STYLES…") + "</span></div>" +
+      (showMore ? '<div class="morestyles">' + groups().map(function (g) {
+        return '<div class="k">' + esc(g[0]) + '</div><div class="chips">' + g[1].map(function (s) {
+          return '<span class="chip' + (s.id === form.style ? " on" : "") + '" data-style="' + s.id + '">' + esc(s.name) + "</span>"; }).join("") + "</div>";
+      }).join("") + "</div>" : "") +
       "<h2>What to draw</h2><textarea id=\"f-prompt\" placeholder=\"" + (z
         ? 'A vintage gig poster: a saxophone player on a rooftop at dusk, the city in neon behind. The words &quot;FRIDAY 9PM&quot; across the top.'
         : "saxophone player on a rooftop at dusk, neon city, vintage gig poster, bold colours") + '">' + esc(form.prompt) + "</textarea>" +
       '<p class="tip">' + (z ? "Describe it in sentences: what is in it, where, the light, the mood. Put any words that should appear in the picture in &quot;quotes&quot;."
                              : "Short phrases separated by commas work best: subject, setting, style, light, colours.") + "</p>" +
-      (z ? "" : "<h2>Leave out</h2><textarea class=\"neg\" id=\"f-neg\" placeholder=\"text, extra fingers, frame\">" + esc(form.negative) + "</textarea>") +
+      "<h2>Leave out</h2><textarea class=\"neg\" id=\"f-neg\" placeholder=\"" + (z ? "umbrellas, people in the background" : "text, extra fingers, frame") +
+      "\">" + esc(form.negative) + "</textarea>" +
+      (z ? '<p class="tip" id="neg-note"' + (String(form.negative || "").trim() ? "" : " hidden") + ' style="color:var(--amber)">Z-Image Turbo can\'t leave things out - '
+           + "it is built for speed and ignores this list. " + (sdxlOk() ? '<a href="#" id="use-sdxl" style="color:var(--cyan)">Use SDXL for this picture</a>'
+           : "SDXL or Juggernaut (in Models) can.") + "</p>" : "") +
       "<h2>Size</h2><div class=\"sizes\">" + Object.keys(SIZE_NAMES).map(function (k) {
         var wh = st.sizes[k], sc = 22 / Math.max(wh[0], wh[1]);
         return '<div class="size' + (k === form.size ? " on" : "") + '" data-size="' + k + '"><i style="width:' + Math.round(wh[0] * sc) + "px;height:" +
@@ -122,6 +147,13 @@
     $("f-model").addEventListener("change", function () { form.model = this.value; form.steps = ""; form.cfg = ""; keep(); createView(); });
     $("to-models").addEventListener("click", function (ev) { ev.preventDefault(); show("models"); });
     body.querySelectorAll("[data-style]").forEach(function (el) { el.addEventListener("click", function () { form.style = el.dataset.style; keep(); createView(); }); });
+    $("more-styles").addEventListener("click", function () { showMore = !showMore; createView(); });
+    if ($("neg-note")) $("f-neg").addEventListener("input", function () { $("neg-note").hidden = !this.value.trim(); });
+    if ($("use-sdxl")) $("use-sdxl").addEventListener("click", function (ev) {
+      ev.preventDefault();
+      var x = pictureModels().find(function (m) { return m.kind === "sdxl"; });
+      if (x) { form.model = x.id; form.steps = ""; form.cfg = ""; keep(); createView(); toast("Using " + x.name + " - it leaves out what you list."); }
+    });
     body.querySelectorAll("[data-size]").forEach(function (el) { el.addEventListener("click", function () { form.size = el.dataset.size; keep(); createView(); }); });
     body.querySelectorAll("[data-count]").forEach(function (el) { el.addEventListener("click", function () { form.count = +el.dataset.count; keep(); createView(); }); });
     ["prompt", "neg", "seed", "steps", "cfg"].forEach(function (k) {
@@ -222,6 +254,26 @@
 
   /* ---------- one picture ---------- */
   var cur = null;
+  function refineBox(on) {
+    $("lb-refine").hidden = !on;
+    $("lb-rf-go").disabled = false; $("lb-rf-go").textContent = "REFINE";
+    if (on) { $("lb-rf-text").value = ""; $("lb-rf-text").focus(); }
+  }
+  $("lb-ref").addEventListener("click", function () { refineBox($("lb-refine").hidden); });
+  $("lb-rf-go").addEventListener("click", function () {
+    var t = $("lb-rf-text").value.trim();
+    if (!t) { $("lb-rf-text").focus(); return; }
+    var b = $("lb-rf-go"), t0 = Date.now(), name = cur.name;
+    b.disabled = true; b.textContent = "REFINING…";
+    var tick = setInterval(function () { b.textContent = "REFINING… " + Math.round((Date.now() - t0) / 1000) + "s"; }, 500);
+    api("refine", { name: name, prompt: t, strength: +$("lb-rf-strength").value, count: +$("lb-rf-count").value }).then(function (d) {
+      clearInterval(tick);
+      if (!d.ok) { b.disabled = false; b.textContent = "REFINE"; toast(d.msg); return; }
+      fresh = d.images.concat(fresh).slice(0, 8);
+      closeLb(); show("create");
+      toast((d.images.length > 1 ? d.images.length + " refined versions" : "Refined") + " in " + Math.round((Date.now() - t0) / 1000) + "s.");
+    });
+  });
   function openLb(name) {
     cur = list.concat(fresh).find(function (x) { return x.name === name; }) || { name: name };
     $("lb-img").src = src(cur.name);
@@ -231,6 +283,7 @@
     $("lb-save").href = src(cur.name); $("lb-save").download = cur.name;
     $("lb-up").hidden = !!cur.upscaled_from;
     $("lb-vary").hidden = !cur.prompt;
+    refineBox(false);
     $("lb").classList.add("on");
   }
   function closeLb() { $("lb").classList.remove("on"); }

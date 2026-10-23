@@ -308,6 +308,10 @@ button:disabled{color:var(--dim); border-color:var(--s2); cursor:default}
 .embed .tip{width:40px; margin-left:-48px;}
 /* picture mode (Philibert): the button lights, and the box says what will happen */
 #imgbtn[aria-pressed="true"]{color:#04131c; background:#00f2fe; border-color:#00f2fe;}
+.turnend{margin:6px 0 14px; font:10.5px "IBM Plex Mono",monospace; letter-spacing:.06em; color:#10b981;
+  display:flex; align-items:center; gap:8px; text-transform:uppercase;}
+.turnend::before{content:""; width:7px; height:7px; border-radius:50%; background:currentColor;}
+.turnend.bad{color:#ff2e88;}
 .embed .cin{max-width:none; padding:10px 12px 6px;}
 
 /* ── the end-user view (embedded in Philibert) ── */
@@ -471,7 +475,7 @@ const CLEAN = document.documentElement.classList.contains("embed");
 /* The turn in flight: what it did, summarised once at the end in the clean view. */
 let TURN = {steps: []};
 function emptyText(){
-  return '<span class="welcome-line">Ask ' + esc(BRAND) + ' anything: your gigs, your notes, '
+  return '<span class="welcome-line">Ask ' + esc(BRAND) + ' anything: questions, your notes, your files, '
          + 'or this computer.</span>';
 }
 function showEmptyText(){                    // after probe(): BRAND is known by then
@@ -1453,6 +1457,20 @@ async function askImage(text){
   }catch(e){ body.textContent = "That picture didn't work: " + e.message; }
   setState("idle", 0);
   busy = false; send.disabled = false;
+  turnEnd(body.querySelector("img") ? "Philibert is done - your turn" : "Philibert stopped: no picture", !body.querySelector("img"));
+  follow();
+}
+
+/* The end of a turn, said plainly under the latest reply - only the newest one stays,
+   so the thread is not filled with them. */
+let ENDED = "";
+function turnEnd(text, bad){
+  if(!CLEAN) return;
+  document.querySelectorAll(".turnend").forEach(x => x.remove());
+  const d = document.createElement("div");
+  d.className = "turnend" + (bad ? " bad" : "");
+  d.textContent = text;
+  thread.appendChild(d);
   follow();
 }
 
@@ -1577,7 +1595,8 @@ async function ask(text, opts){
           if(wantsTools && !useAgent) offerTools(text);
         }
         if(res.status !== "done"){ setState("error", seen);
-          node("err", res.status || "error", res.why || ""); }
+          node("err", res.status || "error", res.why || "");
+          ENDED = "Philibert stopped: " + (res.why || res.status || "something went wrong"); }
         break;
       }
     }
@@ -1585,9 +1604,13 @@ async function ask(text, opts){
     clearStage(); clearStall(); clearLong(); setState("error");
     flowFinish(null);
     node("err", "not sent", String(e.message || e));
+    ENDED = "Philibert stopped: the message did not get through";
   }
   clearStage(); clearStall(); clearLong(); clearPermission(); clearQuestion();
-  if(STOPPED === rid){ STOPPED = null; setState(live ? "idle" : "error"); }
+  if(STOPPED === rid){ STOPPED = null; setState(live ? "idle" : "error"); ENDED = "Stopped - your turn"; }
+  turnEnd(ENDED || ("Philibert is done - your turn  \u00b7  " + Math.max(1, Math.round((Date.now() - tStart) / 1000)) + " s"),
+          !!ENDED && ENDED.indexOf("stopped") >= 0);
+  ENDED = "";
   RID = null;
   saveChat();                       // answered, stopped or failed: the question is kept
   busy = false; send.disabled = !live;

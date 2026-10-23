@@ -101,6 +101,11 @@
   .lb .side { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 9px; overflow: auto; }
   .lb .side p { font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
   .lb .side .k { font: 10.5px var(--mono); color: var(--faint); }
+  .refine { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .chip.more { border-style: dashed; color: var(--cyan); }
+  .morestyles { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; max-height: 260px; overflow: auto;
+                border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+  .morestyles .k { font: 10px var(--mono); color: var(--faint); letter-spacing: .1em; text-transform: uppercase; margin-top: 4px; }
   .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(10px); z-index: 80; font: 12px var(--mono);
            background: #102038; border: 1px solid rgba(0,242,254,.4); border-radius: 7px; padding: 9px 15px; opacity: 0;
            transition: opacity .25s, transform .25s; pointer-events: none; }
@@ -131,6 +136,17 @@
     <div class="k" id="lb-meta"></div>
     <button class="btn" id="lb-again" type="button">USE THIS PROMPT AGAIN</button>
     <button class="btn" id="lb-vary" type="button">FOUR MORE LIKE THIS</button>
+    <button class="btn" id="lb-ref" type="button">REFINE THIS PICTURE…</button>
+    <div id="lb-refine" class="refine" hidden>
+      <div class="k">WHAT TO CHANGE</div>
+      <textarea id="lb-rf-text" class="neg" placeholder="make it night, add rain on the window, give the singer a red guitar"></textarea>
+      <div class="row2" style="grid-template-columns:2fr 1fr">
+        <div><label>HOW MUCH</label><select id="lb-rf-strength"><option value="0.5">A touch</option>
+          <option value="0.7" selected>Some</option><option value="0.85">A lot</option></select></div>
+        <div><label>HOW MANY</label><select id="lb-rf-count"><option>1</option><option>2</option><option>4</option></select></div>
+      </div>
+      <button class="btn primary" id="lb-rf-go" type="button">REFINE</button>
+    </div>
     <button class="btn" id="lb-up" type="button">MAKE IT 4x BIGGER</button>
     <a class="btn" id="lb-save" download>SAVE A COPY</a>
     <button class="btn danger" id="lb-del" type="button">DELETE</button>

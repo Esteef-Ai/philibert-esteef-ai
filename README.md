@@ -1,8 +1,8 @@
 # Philibert by Esteef.Ai
 
-A private AI assistant for musicians that runs entirely from a USB drive: gigs,
-venues, tours, merch, budget and reminders, plus files, folders, a browser and
-simple coding. Nothing is installed on the computer you plug it into, and it
+A private, general-purpose AI assistant that runs entirely from a USB drive:
+answers, writing, notes, files and folders, pictures, a browser and simple coding,
+with apps you add from its App Store (a Band Manager for people in a band among them). Nothing is installed on the computer you plug it into, and it
 works offline - the Internet is used only when you turn it on.
 
 ## Set up a drive (once)

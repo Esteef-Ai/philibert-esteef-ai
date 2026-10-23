@@ -328,16 +328,76 @@ STYLES = [
      "professional graphic design, high detail", "neg": "border, frame, mockup"},
     {"id": "poster", "name": "Gig poster", "add": "vintage screen-printed gig poster, limited colour palette, halftone texture, "
      "bold typography, retro concert poster design", "neg": "photo, blurry"},
-    {"id": "photo", "name": "Band photo", "add": "35mm film photograph, natural light, shallow depth of field, candid, "
-     "film grain, realistic", "neg": "illustration, cartoon, painting, deformed hands"},
+    {"id": "photographic", "name": "Photographic", "add": "photography, DSLR, bokeh, natural lighting, high resolution, "
+     "sharp focus", "neg": "illustration, cartoon, painting"},
+    {"id": "realistic", "name": "Realistic", "add": "photorealistic, hyperdetailed, 8k uhd, sharp focus, professional "
+     "photography", "neg": "illustration, cartoon, painting, deformed hands"},
     {"id": "logo", "name": "Logo", "add": "clean vector logo emblem, flat design, simple shapes, centred on a plain "
      "background, high contrast", "neg": "photo, clutter, gradient noise"},
+    {"id": "anime", "name": "Anime", "add": "anime style, cel shading, vibrant colors, studio quality, detailed linework",
+     "neg": "photo, 3d render"},
+    {"id": "fantasy", "name": "Fantasy", "add": "fantasy art, magical atmosphere, detailed illustration, epic composition",
+     "neg": ""},
+    {"id": "paint", "name": "Oil painting", "add": "oil painting, textured brushstrokes, classical composition, rich colors, "
+     "painterly", "neg": "photo, 3d render"},
     {"id": "neon", "name": "Neon night", "add": "neon-lit night scene, synthwave colours, glowing signs, wet reflections, "
      "cinematic lighting", "neg": "daylight, washed out"},
-    {"id": "paint", "name": "Painted", "add": "expressive oil painting, visible brush strokes, rich texture, gallery "
-     "quality", "neg": "photo, 3d render"},
 ]
+# The longer list (MORE): the art styles NeuralDock's image tab has carried since
+# ImageForgery, in their groups. The page shows STYLES first and these on "More styles".
+MORE_STYLES = [
+    {"id": "scifi", "name": "Sci-Fi", "group": "Popular", "add": "science fiction, futuristic, neon lighting, cyberpunk "
+     "aesthetic, detailed technology", "neg": ""},
+    {"id": "cyberpunk", "name": "Cyberpunk", "group": "Popular", "add": "cyberpunk, neon noir, rain-slicked streets, dystopian "
+     "future, glowing holograms", "neg": ""},
+    {"id": "cartoon", "name": "Cartoon", "group": "Popular", "add": "cartoon style, bold outlines, flat colors, playful "
+     "composition, animated", "neg": "photo"},
+    {"id": "watercolor", "name": "Watercolour", "group": "Popular", "add": "watercolor painting, soft washes, delicate details, "
+     "artistic, flowing colors", "neg": "photo"},
+    {"id": "pixel", "name": "Pixel art", "group": "Popular", "add": "pixel art, 16-bit style, retro game graphics, crisp pixels, "
+     "limited palette", "neg": "photo, blurry"},
+    {"id": "photo", "name": "Band photo", "group": "Popular", "add": "35mm film photograph, natural light, shallow depth of field, "
+     "candid, film grain, realistic", "neg": "illustration, cartoon, painting, deformed hands"},
+    {"id": "x-cinematic", "name": "Cinematic", "group": "Film & Photo", "add": "cinematic still, anamorphic, dramatic lighting, film grain", "neg": ""},
+    {"id": "x-film-noir", "name": "Film Noir", "group": "Film & Photo", "add": "film noir, black and white, hard shadows, venetian blinds", "neg": ""},
+    {"id": "x-analog-35mm", "name": "Analog 35mm", "group": "Film & Photo", "add": "analog 35mm film photo, kodak portra, natural grain", "neg": ""},
+    {"id": "x-polaroid", "name": "Polaroid", "group": "Film & Photo", "add": "polaroid photo, instant film, faded colors, white border", "neg": ""},
+    {"id": "x-long-exposure", "name": "Long Exposure", "group": "Film & Photo", "add": "long exposure photograph, light trails, motion blur", "neg": ""},
+    {"id": "x-macro", "name": "Macro", "group": "Film & Photo", "add": "macro photography, extreme close-up, shallow depth of field", "neg": ""},
+    {"id": "x-studio-portrait", "name": "Studio Portrait", "group": "Film & Photo", "add": "studio portrait, softbox lighting, seamless backdrop", "neg": ""},
+    {"id": "x-golden-hour", "name": "Golden Hour", "group": "Film & Photo", "add": "golden hour photography, warm sunlight, long shadows", "neg": ""},
+    {"id": "x-impressionism", "name": "Impressionism", "group": "Art Movements", "add": "impressionist painting, loose brushwork, dappled light", "neg": ""},
+    {"id": "x-surrealism", "name": "Surrealism", "group": "Art Movements", "add": "surrealist art, dreamlike, impossible geometry", "neg": ""},
+    {"id": "x-art-deco", "name": "Art Deco", "group": "Art Movements", "add": "art deco style, geometric patterns, gold accents", "neg": ""},
+    {"id": "x-baroque", "name": "Baroque", "group": "Art Movements", "add": "baroque painting, dramatic chiaroscuro, rich detail", "neg": ""},
+    {"id": "x-ukiyo-e", "name": "Ukiyo-e", "group": "Art Movements", "add": "ukiyo-e japanese woodblock print, flat perspective", "neg": ""},
+    {"id": "x-pop-art", "name": "Pop Art", "group": "Art Movements", "add": "pop art, bold colors, halftone dots, screen print", "neg": ""},
+    {"id": "x-minimalism", "name": "Minimalism", "group": "Art Movements", "add": "minimalist, simple shapes, negative space, clean", "neg": ""},
+    {"id": "x-graffiti", "name": "Graffiti", "group": "Art Movements", "add": "graffiti street art, spray paint, urban wall", "neg": ""},
+    {"id": "x-3d-render", "name": "3D Render", "group": "Digital & Render", "add": "3d render, octane, physically based rendering, studio lighting", "neg": ""},
+    {"id": "x-unreal-engine", "name": "Unreal Engine", "group": "Digital & Render", "add": "unreal engine 5 render, ray tracing, hyperreal", "neg": ""},
+    {"id": "x-low-poly", "name": "Low Poly", "group": "Digital & Render", "add": "low poly 3d art, faceted, flat shading", "neg": ""},
+    {"id": "x-voxel", "name": "Voxel", "group": "Digital & Render", "add": "voxel art, cubes, isometric", "neg": ""},
+    {"id": "x-vaporwave", "name": "Vaporwave", "group": "Digital & Render", "add": "vaporwave aesthetic, pink and teal, retro grid, statue", "neg": ""},
+    {"id": "x-synthwave", "name": "Synthwave", "group": "Digital & Render", "add": "synthwave, neon sunset, 80s retro futurism", "neg": ""},
+    {"id": "x-claymation", "name": "Claymation", "group": "Digital & Render", "add": "claymation style, plasticine, stop motion look", "neg": ""},
+    {"id": "x-papercraft", "name": "Papercraft", "group": "Digital & Render", "add": "papercraft, layered paper cutout, folded paper", "neg": ""},
+    {"id": "x-comic-book", "name": "Comic Book", "group": "Comic & Illustration", "add": "comic book art, ink outlines, dynamic panels", "neg": ""},
+    {"id": "x-manga", "name": "Manga", "group": "Comic & Illustration", "add": "manga style, screentone, black and white", "neg": ""},
+    {"id": "x-western-cartoon", "name": "Western Cartoon", "group": "Comic & Illustration", "add": "western animation style, expressive, clean lines", "neg": ""},
+    {"id": "x-storybook", "name": "Storybook", "group": "Comic & Illustration", "add": "children’s storybook illustration, warm, whimsical", "neg": ""},
+    {"id": "x-ink-sketch", "name": "Ink Sketch", "group": "Comic & Illustration", "add": "ink sketch, crosshatching, pen and ink", "neg": ""},
+    {"id": "x-charcoal", "name": "Charcoal", "group": "Comic & Illustration", "add": "charcoal drawing, smudged shading, textured paper", "neg": ""},
+    {"id": "x-cel-shaded", "name": "Cel Shaded", "group": "Comic & Illustration", "add": "cel shaded, toon shading, bold rim light", "neg": ""},
+]
+ALL_STYLES = STYLES + MORE_STYLES
 NEG_BASE = "blurry, low quality, jpeg artifacts, watermark, signature, distorted, extra fingers"
+# Z-Image Turbo is distilled to run at guidance 1, where a "leave out" list does nothing -
+# and there is no way round it. Measured 2026-10-23 ("leave out: umbrellas", same seed):
+# guidance 2 kept the umbrella and softened the picture, guidance 3 blurred and washed it
+# out, and "there are no umbrellas" in the prompt ADDED umbrellas. SDXL / Juggernaut do it
+# properly (umbrella gone, picture unchanged), so the page offers them for a leave-out list.
+ZIMAGE_TAKES_NEGATIVE = False
 DEFAULTS = {"zimage": {"steps": 8, "cfg": 1.0, "sampler": "res_multistep", "scheduler": "simple"},
             "sdxl": {"steps": 28, "cfg": 6.0, "sampler": "dpmpp_2m", "scheduler": "karras"}}
 
@@ -465,9 +525,9 @@ def remove_model(root, mid):
 
 
 # --- workflows ------------------------------------------------------------------------
-def wf_sdxl(prompt, negative, w, h, steps, cfg, sampler, scheduler, seed, ckpt, count):
+def wf_sdxl(prompt, negative, w, h, steps, cfg, sampler, scheduler, seed, ckpt, count, init=None, denoise=1.0):
     """Checkpoint -> prompts -> sampler -> pictures (count of them, one seed each)."""
-    return {
+    wf = {
         "4": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": ckpt}},
         "5": {"class_type": "EmptyLatentImage", "inputs": {"width": w, "height": h, "batch_size": count}},
         "6": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["4", 1]}},
@@ -478,25 +538,45 @@ def wf_sdxl(prompt, negative, w, h, steps, cfg, sampler, scheduler, seed, ckpt, 
         "8": {"class_type": "VAEDecode", "inputs": {"samples": ["3", 0], "vae": ["4", 2]}},
         "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": "Philibert", "images": ["8", 0]}},
     }
+    return _from_picture(wf, "5", "3", ["4", 2], init, denoise, count)
 
 
-def wf_zimage(prompt, w, h, steps, seed, files, count):
-    """Z-Image Turbo (Lumina 2): its own loaders, AuraFlow sampling (shift 3), 8 steps, guidance 1."""
+def _from_picture(wf, latent_node, sampler_node, vae_ref, init, denoise, count):
+    """Start from a picture already made (refine): encode it, sample with less than full denoise."""
+    if not init:
+        return wf
+    wf["21"] = {"class_type": "LoadImage", "inputs": {"image": init}}
+    wf["22"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["21", 0], "vae": vae_ref}}
+    lat = ["22", 0]
+    if count > 1:
+        wf["23"] = {"class_type": "RepeatLatentBatch", "inputs": {"samples": ["22", 0], "amount": count}}
+        lat = ["23", 0]
+    del wf[latent_node]
+    wf[sampler_node]["inputs"]["latent_image"] = lat
+    wf[sampler_node]["inputs"]["denoise"] = float(denoise)
+    return wf
+
+
+def wf_zimage(prompt, w, h, steps, seed, files, count, negative="", init=None, denoise=1.0):
+    """Z-Image Turbo (Lumina 2): its own loaders, AuraFlow sampling (shift 3), 8 steps, guidance 1
+    - or ZIMAGE_NEG_CFG when there is a "leave out" list, so it is used."""
     by = {f["dir"]: f["file"] for f in files}
-    return {
+    cfg = 1.0
+    wf = {
         "1": {"class_type": "UNETLoader", "inputs": {"unet_name": by["diffusion_models"], "weight_dtype": "default"}},
         "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": by["text_encoders"], "type": "lumina2"}},
         "3": {"class_type": "VAELoader", "inputs": {"vae_name": by["vae"]}},
         "4": {"class_type": "ModelSamplingAuraFlow", "inputs": {"shift": 3, "model": ["1", 0]}},
         "5": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}},
-        "6": {"class_type": "CLIPTextEncode", "inputs": {"text": "", "clip": ["2", 0]}},
+        "6": {"class_type": "CLIPTextEncode", "inputs": {"text": negative.strip(), "clip": ["2", 0]}},
         "7": {"class_type": "EmptySD3LatentImage", "inputs": {"width": w, "height": h, "batch_size": count}},
-        "8": {"class_type": "KSampler", "inputs": {"seed": seed, "steps": steps, "cfg": 1.0, "sampler_name": "res_multistep",
+        "8": {"class_type": "KSampler", "inputs": {"seed": seed, "steps": steps, "cfg": cfg, "sampler_name": "res_multistep",
                                                    "scheduler": "simple", "denoise": 1.0, "model": ["4", 0],
                                                    "positive": ["5", 0], "negative": ["6", 0], "latent_image": ["7", 0]}},
         "9": {"class_type": "VAEDecode", "inputs": {"samples": ["8", 0], "vae": ["3", 0]}},
         "10": {"class_type": "SaveImage", "inputs": {"filename_prefix": "Philibert", "images": ["9", 0]}},
     }
+    return _from_picture(wf, "7", "8", ["3", 0], init, denoise, count)
 
 
 def wf_upscale(image_name, model_file):
@@ -526,7 +606,8 @@ def _run_prompt(wf, timeout):
 
 
 def generate(root, prompt, negative="", size="square", width=None, height=None, steps=None, cfg=None, seed=None,
-             ckpt=None, free_gpu=None, timeout=1200, model=None, count=1, style="none"):
+             ckpt=None, free_gpu=None, timeout=1200, model=None, count=1, style="none", init=None, denoise=1.0,
+             refined_from=None):
     """Make count pictures (variations: one seed each, from seed up). Returns a list."""
     prompt = str(prompt or "").strip()
     if not prompt:
@@ -543,7 +624,7 @@ def generate(root, prompt, negative="", size="square", width=None, height=None, 
         raise RuntimeError("No picture model is on the drive yet - open Models and download one.")
     count = max(1, min(int(count or 1), 4))
     seed = int(seed) if seed not in (None, "") else random.randint(1, 2**31)
-    st_ = next((s for s in STYLES if s["id"] == style), STYLES[0])
+    st_ = next((s for s in ALL_STYLES if s["id"] == style), STYLES[0])
     d = {**DEFAULTS[m["kind"]], **(m.get("settings") or {})}
     steps = max(1, min(int(steps or d["steps"]), 60))
     if not st_["add"]:
@@ -556,24 +637,50 @@ def generate(root, prompt, negative="", size="square", width=None, height=None, 
     if m["kind"] == "zimage":
         files = next(x for x in catalog(root) if x["id"] == m["id"])["files"]
         steps = min(steps, 12)
-        wf = wf_zimage(full, w, h, steps, seed, files, count)
-        neg_used, cfg = "", 1.0
+        wf = wf_zimage(full, w, h, steps, seed, files, count, "", init, denoise)
+        cfg = 1.0
     else:
         ck = m["id"][4:] if m.get("own") else next(x for x in catalog(root) if x["id"] == m["id"])["files"][0]["file"]
         cfg = float(cfg or d["cfg"])
         neg_used = ", ".join(x for x in (negative.strip(), st_["neg"], NEG_BASE) if x)
-        wf = wf_sdxl(full, neg_used, w, h, steps, cfg, d["sampler"], d["scheduler"], seed, ck, count)
+        wf = wf_sdxl(full, neg_used, w, h, steps, cfg, d["sampler"], d["scheduler"], seed, ck, count, init, denoise)
     imgs = _run_prompt(wf, timeout)
     out = []
     for i, im in enumerate(imgs):
         f = paths(root)["out"] / im.get("subfolder", "") / im["filename"]
         meta = {"prompt": prompt, "style": st_["id"], "negative": negative, "w": w, "h": h, "seed": seed + i,
                 "model": m["name"], "model_id": m["id"], "steps": steps, "cfg": cfg, "batch": i + 1, "of": len(imgs)}
+        if refined_from:
+            meta.update(refined_from=refined_from, strength=round(float(denoise), 2))
         f.with_suffix(".json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
         out.append({"name": f.name, "path": str(f), **meta})
     if not out:
         raise RuntimeError("ComfyUI finished but gave back no picture.")
     return out
+
+
+def refine(root, name, extra, strength=0.5, count=1, negative="", free_gpu=None):
+    """A picture already made, changed by an extra instruction: same model, size and
+    prompt plus the change; strength 0.2 (a touch) .. 0.9 (mostly new)."""
+    f = image_file(root, name)
+    if not f:
+        raise ValueError("no such picture")
+    extra = str(extra or "").strip()
+    if not extra:
+        raise ValueError("say what to change")
+    try:
+        meta = json.loads(f.with_suffix(".json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        meta = {}
+    inp = paths(root)["out"] / "input"
+    inp.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(f, inp / f.name)
+    base = str(meta.get("prompt") or "").strip()
+    prompt = (base.rstrip(". ") + ". Change: " + extra) if base else extra
+    w, h = meta.get("w") or 1024, meta.get("h") or 1024
+    return generate(root, prompt, negative or meta.get("negative") or "", width=w, height=h,
+                    model=meta.get("model_id"), count=count, style=meta.get("style") or "none", init=f.name,
+                    denoise=max(0.15, min(0.95, float(strength))), refined_from=f.name, free_gpu=free_gpu)
 
 
 def upscale(root, name, free_gpu=None):
@@ -612,7 +719,8 @@ def images(root):
         except (OSError, ValueError):
             pass
         res.append({"name": f.name, "when": f.stat().st_mtime, **{k: meta.get(k) for k in (
-            "prompt", "seed", "w", "h", "model", "model_id", "style", "negative", "steps", "cfg", "upscaled_from")}})
+            "prompt", "seed", "w", "h", "model", "model_id", "style", "negative", "steps", "cfg", "upscaled_from",
+            "refined_from", "strength")}})
     return res
 
 
@@ -643,7 +751,9 @@ def status(root):
     return {"ok": True, "installed": installed(root), "running": running(), "checkpoints": checkpoints(root),
             "rating": r["rating"], "why": r["why"], "platform": plat(), "setup": dict(_job),
             "models": models(root), "default_model": dm["id"] if dm else None, "download": dict(_mjob),
-            "styles": [{"id": s["id"], "name": s["name"]} for s in STYLES], "defaults": DEFAULTS,
+            "styles": [{"id": s["id"], "name": s["name"]} for s in STYLES],
+            "more_styles": [{"id": s["id"], "name": s["name"], "group": s["group"]} for s in MORE_STYLES],
+            "defaults": DEFAULTS, "zimage_takes_negative": ZIMAGE_TAKES_NEGATIVE,
             "editor": URL + "/", "sizes": {k: list(v) for k, v in SIZES.items()}}
 
 
@@ -664,6 +774,10 @@ def handle(body, root, internet=True, free_gpu=None):
                          steps=body.get("steps"), cfg=body.get("cfg"), seed=body.get("seed"),
                          model=body.get("model"), count=body.get("count") or 1, style=body.get("style") or "none",
                          free_gpu=free_gpu)
+            return {"ok": True, "images": r, **r[0]}
+        if op == "refine":
+            r = refine(root, str(body.get("name") or ""), body.get("prompt"), body.get("strength") or 0.5,
+                       body.get("count") or 1, body.get("negative") or "", free_gpu)
             return {"ok": True, "images": r, **r[0]}
         if op == "upscale":
             return {"ok": True, **upscale(root, str(body.get("name") or ""), free_gpu)}

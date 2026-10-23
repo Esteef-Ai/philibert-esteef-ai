@@ -14,8 +14,10 @@ same Philibert, with nothing installed on the computer.
 - [[Keeping things private]] - what stays on the drive and when the Internet is used
 
 ## Ready-made pages
-- [[Setlist template]]
-- [[Song idea template]]
-- [[Gig sheet template]]
+- [[Meeting notes template]]
+- [[To-do list template]]
+- [[Journal template]]
+
+For the Band Manager: [[Setlist template]], [[Song idea template]], [[Gig sheet template]].
 
 Delete or change any of these - they are yours now.
