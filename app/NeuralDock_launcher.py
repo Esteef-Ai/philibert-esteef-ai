@@ -138,6 +138,56 @@ def _drive_root():
     return Path(os.environ.get("PHILIBERT_ROOT") or _CONFIG_DIR.parent)
 
 
+# Philibert's own program on the drive: no tool may change it. A chat on the 4B model
+# (2026-10-22) "fixed" E:\Philibert\app\nd_obsidian_memory.py, nd_retro_vault.py and
+# nd_memory_index.py - auto-approved - and broke the drive; it reached them as "E:app\..."
+# (Windows: the app folder in E:'s current directory).
+PROTECTED_DIRS = ("app", "setup", "runtime", "models", "installer", "brand", "Entertainment/emulator")
+
+
+def protected_path(raw):
+    """The protected folder a path lands in, or "" - however the path is spelled."""
+    raw = str(raw or "").strip().strip('"').strip("'")
+    if not raw:
+        return ""
+    try:
+        root = _drive_root().resolve()
+        cands = [Path(os.path.abspath(raw)).resolve()]       # abspath reads "E:app" the way Windows does
+        m = re.match(r"^([A-Za-z]):(?![\\/])(.*)$", raw)   # "E:app\x" is relative to E:'s current folder,
+        if m:                                                # the root or Philibert's folder: check both
+            cands += [Path(m.group(1) + ":\\" + m.group(2)).resolve(), (root / m.group(2)).resolve()]
+    except (OSError, ValueError):
+        return ""
+    for d in PROTECTED_DIRS:
+        base = (root / d).resolve()
+        if any(q == base or base in q.parents for q in cands):
+            return d
+    return ""
+
+
+# Does this message need Philibert's tools (this computer, files, notes, the band's
+# records, the web, pictures)? If not, it is answered WITHOUT the tool list. Measured
+# 2026-10-23 on qwen3.5:4b: with 23 tool schemas in the request the model barely
+# reasons ("How many US states start with N?" -> "one: Nevada", 3/3 wrong even with
+# thinking on); with no tools it thinks it through and answers 8, 3/3.
+_TOOL_WORDS = re.compile(
+    r"\b(drives?|disk|folders?|files?|computer|pc|laptop|ram|memory|cpu|gpu|graphics|storage|space|usb|"
+    r"windows|mac|battery|install\w*|open|launch|run|program|apps?|screen|desktop|download\w*|"
+    r"notes?|vault|write (it )?down|remember|journal|save|saved|export|document|spreadsheet|csv|"
+    r"gigs?|shows?|tours?|venues?|setlists?|merch|booking|booked|fees?|bills?|suppliers?|invoices?|"
+    r"money|budget|income|expenses?|paid|pay|reminders?|remind|schedule|calendar|contacts?|band|"
+    r"search|look up|google|news|today|tonight|tomorrow|yesterday|latest|current|price|weather|"
+    r"website|link|url|online|internet|picture|image|draw|photo|poster|cover art|logo|generate|"
+    r"my|mine|our)\b|https?://|[a-z]:[\\/]|\.\w{2,4}\b", re.I)
+
+
+def wants_tools(text, history=None):
+    """True unless the message (with the previous user message, for follow-ups like
+    "and the E drive?") is plainly a question for the model's own knowledge."""
+    probe = " ".join([str(text or "")] + [str(h) for h in (history or [])[-1:]])
+    return bool(_TOOL_WORDS.search(probe))
+
+
 def portable_drop():
     """PORTABLE_DROP_TOOLS, less generate_image once Image Generation is set up on this computer."""
     try:
@@ -179,6 +229,17 @@ def _portable_defaults():
     _config["obsidian_vault"] = "vault"
     (_CONFIG_DIR / "vault").mkdir(parents=True, exist_ok=True)
     _config.setdefault("online", False)
+    # Philibert thinks before it answers. ND turns thinking off for its coding loops (a
+    # 27B thought for minutes a round), but Philibert answers questions on a 4B model,
+    # and without thinking it guesses: measured 2026-10-23 on qwen3.5:4b, "How many US
+    # states start with N?" was wrong 3/3 (0, 1, 2 states) with thinking off and right
+    # with it on; 5 questions x 3: 12/15 -> 15/15, ~2.5 s -> ~7 s an answer.
+    _config.setdefault("agent_thinking", True)
+    # Writes ask first. Philibert's default config shipped "trusted" (every write and
+    # edit approved without asking); nothing in Philibert lets a person choose that, so
+    # a drive that has it got it from that default - put it back to asking.
+    if str(_config.get("agent_autonomy", "ask")).lower() != "ask" and not _config.get("agent_autonomy_chosen"):
+        _config["agent_autonomy"] = "ask"
     # Speech runs from the drive on the CPU, the same on every computer: no torch
     # to probe, no CUDA libraries to ship. small.en answers a spoken sentence in a
     # second or two; large-v3 would be 3 GB to download and slow on a CPU.
@@ -13273,6 +13334,10 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
         _off = set() if internet_on() else {"web_search", "web_fetch"}
         active_tools = [t for t in active_tools
                         if t.get("function", {}).get("name") not in (portable_drop() | _off)]
+        _prev_users = [str(m.get("content") or "") for m in messages[:-1] if m.get("role") == "user"]
+        if not wants_tools(_last_user, _prev_users):
+            log("A plain question - answered without the tool list, so the model thinks it through", "info")
+            active_tools = []
     pending_images = []          # screen_capture output, attached to the next message
 
     def _tier(name):
@@ -13393,6 +13458,14 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
             return (f"[NOT AVAILABLE] {name} is not part of {PRODUCT} and never will be - do not "
                     f"call it again. For drive sizes, memory or hardware call computer_info; for "
                     f"files use list_dir / read_file. Otherwise answer from what you know.")
+        if PORTABLE and name in ("write_file", "edit_file", "run_script", "delete_file", "move_file"):
+            _hit = next((protected_path((a or {}).get(k)) for k in ("path", "dest", "destination", "src", "source", "cwd")
+                         if protected_path((a or {}).get(k))), "")
+            if _hit:
+                log(f"{name} refused: {PRODUCT}'s own {_hit} folder", "warn")
+                return (f"[PROTECTED] That is {PRODUCT}'s own program ({_hit} on the drive). {PRODUCT} never "
+                        f"changes itself - nothing was written. Do not try again or by another path. If "
+                        f"something in {PRODUCT} seems broken, tell the user and suggest the UPDATE button.")
         _net = network_refusal(name, a)
         if _net:
             log(f"{name} refused - Internet switch is off", "info")
@@ -14021,6 +14094,16 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
     KEEP_VERBATIM = _prof["keep_verbatim"]
     native = True
     convo = list(full_messages)
+    if PORTABLE and not active_tools:
+        # A plain question gets Philibert's own short prompt, not ND's coding-agent
+        # rulebook (file access, PowerShell, plans, tests). Measured 2026-10-23: with the
+        # rulebook the 4B model cut its thinking short and guessed; 10 everyday
+        # questions x2 through this prompt with thinking: 4B 19/20, 8B 19/20, 27B 20/20.
+        _mem = system_content[system_content.find("USER MEMORY"):] if "USER MEMORY" in system_content else ""
+        convo[0] = {"role": "system", "content": (
+            philibert_prompt().strip() + "\n\nToday is " + time.strftime("%A %d %B %Y") + ". Answer from your own "
+            "knowledge. Think it through and check your answer before you give it - count, add up and list "
+            "carefully. If you are not sure, say so rather than guess." + ("\n\n" + _mem[:3000] if _mem else ""))}
     all_tool_calls, all_tool_results = [], []
     # Every .py this turn writes, for the integration gate at the end.
     # all_tool_calls rows are {"tool", "arg"} and carry NO path (see the note at
@@ -14141,7 +14224,7 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
         a trailing system message, and text inside an existing message cannot
         break any template. Not written back into `convo`, so it never accumulates.
         """
-        if not msgs:
+        if not msgs or (PORTABLE and not active_tools):    # no tools offered: no tool reminder
             return msgs
         out = list(msgs)
         last = dict(out[-1])
