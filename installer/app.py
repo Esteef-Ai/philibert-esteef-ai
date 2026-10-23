@@ -114,9 +114,16 @@ class Api:
     def catalog(self):
         return core.rated_catalog(self.survey(), _bundle_file("models.json"))
 
+    DEFAULT_MODEL = "qwen3:8b"
+
     def default_model(self):
-        """The biggest everyday model that runs fully on this computer's graphics card."""
-        ok = [m for m in self.catalog() if m.get("auto") and m["rating"] == "green"]
+        """The 8B: as right as the bigger ones on everyday questions and fast (measured
+        2026-10-23). Only a computer that can't run it gets the biggest one that fits."""
+        cat = self.catalog()
+        eight = next((m for m in cat if m["tag"] == self.DEFAULT_MODEL), None)
+        if eight and eight["rating"] != "red":
+            return eight["tag"]
+        ok = [m for m in cat if m.get("auto") and m["rating"] == "green"]
         if not ok:
             ok = [m for m in self.catalog() if m.get("auto")][:1]
         return max(ok, key=lambda m: m["size_gb"])["tag"] if ok else ""

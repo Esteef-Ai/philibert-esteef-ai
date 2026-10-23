@@ -42,7 +42,7 @@
         return Object.assign({ tag: tag, label: label, size_gb: size, need_gb: need, rating: rating, why: why, note: "" }, extra || {});
       }
       return [
-        m("qwen3.5:4b", "Qwen3.5 4B", 3.3, 4.0, "green", "Runs fully on the graphics card - fast.", { auto: true, note: "Fast on any computer." }),
+        m("qwen3.5:4b", "Qwen3.5 4B", 3.3, 4.0, "green", "Runs fully on the graphics card - fast.", { auto: true, note: "Fast on any computer.", setup_editions: ["slim"] }),
         m("qwen3:8b", "Qwen3 8B", 5.2, 5.9, "green", "Runs fully on the graphics card - fast.", { auto: true, note: "The everyday tier." }),
         m("qwen3:14b", "Qwen3 14B", 9.3, 10.1, "green", "Runs fully on the graphics card - fast.", { auto: true, note: "Sharper answers." }),
         m("hf.co/x/27b", "Qwen3.8 27B", 13.7, 14.6, "green", "Runs fully on the graphics card - fast.", { note: "The strongest for a 16 GB card." }),
@@ -51,7 +51,7 @@
         m("qwen2.5vl:7b", "Qwen2.5-VL 7B (vision)", 6.0, 6.7, "green", "Runs fully on the graphics card - fast.", { required: true, locked: true, note: "Reads pictures." }),
         m("nomic-embed-text", "nomic-embed-text", 0.3, 0.9, "green", "Runs fully on the graphics card - fast.", { required: true, locked: true, kind: "embed", note: "Searches your notes." })];
     },
-    default_model: function () { return "qwen3:14b"; },
+    default_model: function () { return "qwen3:8b"; },
     imagegen_rating: function () { return { rating: "green", backend: "cu130", why: "NVIDIA card with 16 GB: about 10-30 seconds a picture." }; },
     check_place: function (path, pcs) {
       var p = mock.places().filter(function (x) { return path.indexOf(x.path) === 0; })[0] || mock.places()[0];
@@ -328,9 +328,13 @@
   }
 
   /* models */
+  // A model can be offered by Setup for one edition only (the 4B: Slim). Philibert's own
+  // model menu still offers every model, so the rest can be downloaded later.
+  function offered(m) { return !m.setup_editions || m.setup_editions.indexOf(state.edition) >= 0; }
   function renderModels() {
     var gpu = state.info && state.info.fast_gb;
-    $("models").innerHTML = state.catalog.filter(function (m) { return m.kind !== "embed" || true; }).map(function (m) {
+    state.catalog.forEach(function (m) { if (!offered(m)) state.models[m.tag] = false; });
+    $("models").innerHTML = state.catalog.filter(offered).map(function (m) {
       return '<div class="row" data-tag="' + esc(m.tag) + '"><input type="checkbox" ' + (state.models[m.tag] ? "checked" : "") + (m.locked ? " disabled" : "") + ">" +
         '<i class="dot ' + m.rating + '" title="' + esc(m.why) + '"></i>' +
         '<div class="t"><b>' + esc(m.label) + "</b>" + (m.locked ? ' <span class="note">&middot; always included</span>' : "") +
@@ -382,7 +386,7 @@
     return { dest: state.dest, pcs: pcsList(), edition: state.edition,
              full: state.edition === "full" ? { themes: themes, retro_vault: state.retro, image_gen: state.imagegen, default_theme: "win95",
                                               themes_offered: THEMES.map(function (t) { return t.id; }) } : {},
-             models: state.catalog.filter(function (m) { return state.models[m.tag]; }).map(function (m) { return m.tag; }),
+             models: state.catalog.filter(function (m) { return state.models[m.tag] && offered(m); }).map(function (m) { return m.tag; }),
              shortcut: !!state.checks.shortcut };
   }
   function renderReview() {
