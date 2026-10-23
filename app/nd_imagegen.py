@@ -408,9 +408,17 @@ def download_model(root, mid, say=lambda line, frac=-1: None):
         dst = _mfile(root, f)
         if not dst.is_file():
             base = done
-            url = (m.get("mirror") or {}).get(f["file"]) if isinstance(m.get("mirror"), dict) else None
-            _get(url or f["url"], dst, lambda line, fr, base=base, sz=f["size"]:
-                 say(f"{m['name']}: {line.split(': ', 1)[-1]}", (base + max(fr, 0) * sz) / total), f["file"], f["size"])
+            # our copy on huggingface.co/EsteefAi first, the original publisher if it fails
+            mirror = (m.get("mirror") or {}).get(f["file"]) if isinstance(m.get("mirror"), dict) else None
+            urls = [u for u in (mirror, f["url"]) if u]
+            for k, url in enumerate(urls):
+                try:
+                    _get(url, dst, lambda line, fr, base=base, sz=f["size"]:
+                         say(f"{m['name']}: {line.split(': ', 1)[-1]}", (base + max(fr, 0) * sz) / total), f["file"], f["size"])
+                    break
+                except (urllib.error.URLError, OSError):
+                    if k == len(urls) - 1:
+                        raise
         done += f["size"]
     say(f"{m['name']} is ready.", 1.0)
 
