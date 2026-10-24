@@ -17858,7 +17858,9 @@ def open_ui(url):
                         _config.get("ui_window_open_devtools", False))
                 except Exception:
                     pass
-                webview.start(gui="edgechromium", private_mode=False,
+                # edgechromium is Windows' WebView2; elsewhere pywebview picks the
+                # platform's own (WebKit on a Mac - mac.sh installs its pyobjc parts)
+                webview.start(gui="edgechromium" if sys.platform == "win32" else None, private_mode=False,
                               debug=bool(_config.get("ui_window_devtools", True)))
                 return True
             except Exception as e:
@@ -17931,6 +17933,7 @@ def _open_portable_browser(url):
         log(f"Portable browser failed to start ({e})", "warn")
         return False
     log(f"Opening {PRODUCT} in the drive's browser", "ok")
+    t0 = time.time()
     proc.wait()
 
     def still_open():
@@ -17953,6 +17956,17 @@ def _open_portable_browser(url):
                 continue
         return False
 
+    # Gone within seconds and no window left: it never really opened (on a Mac, Chromium
+    # wants symlinks in its profile, which an exFAT drive can't hold). Say so and let
+    # open_ui try the next window instead of shutting down as if it had been closed.
+    try:
+        quick_exit = time.time() - t0 < 8 and not still_open()
+    except Exception:
+        quick_exit = False
+    if quick_exit:
+        log(f"The drive's browser closed straight away (exit code {proc.returncode}) - "
+            "trying another window", "warn")
+        return False
     while True:
         try:
             if not still_open():
