@@ -19729,7 +19729,8 @@ def main():
         except Exception:
             pass
         try:
-            import os
+            # no "import os" here: it made os local to all of main(), so on a Mac (which
+            # skips this block) main() crashed at its first use of os (2026-10-24)
             os.system("chcp 65001 > nul 2>&1")  # set Windows console to UTF-8
         except Exception:
             pass
@@ -19741,6 +19742,18 @@ def main():
     threading.Thread(target=ensure_ollama_running, daemon=True).start()
     threading.Thread(target=refresh_status_cache, daemon=True).start()
     threading.Thread(target=_sysmon_loop, daemon=True).start()
+    # Housekeeping: clear temp/'s scratch a minute after start (nd_cleanup.py). Off
+    # until temp_cleanup_days is set (days a file may sit untouched; 0 = off).
+    def _temp_cleanup():
+        time.sleep(60)
+        try:
+            days = int(_config.get("temp_cleanup_days") or 0)
+            if days > 0 and not PORTABLE:
+                import nd_cleanup
+                nd_cleanup.prune(days, apply=True, log=log)
+        except Exception as e:
+            log(f"temp clean-up skipped: {e}", "warn")
+    threading.Thread(target=_temp_cleanup, daemon=True).start()
     start_status_loop()
     _reap_stale_chat_jobs()   # flag chat jobs orphaned by a previous restart
     if PORTABLE:
