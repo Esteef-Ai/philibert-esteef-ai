@@ -1,0 +1,19 @@
+# Label every issue sent with Philibert's Feedback Shooter (relay or the sender's own
+# GitHub sign-in). Neither can set labels itself: GitHub drops them for tokens without
+# triage rights, and the relay's fine-grained token gets 403 on the labels API.
+name: Label feedback
+on:
+  issues:
+    types: [opened]
+permissions:
+  issues: write
+jobs:
+  label:
+    if: contains(github.event.issue.body, 'Sent with Philibert''s Feedback Shooter')
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh issue edit "$NUMBER" --repo "$REPO" --add-label feedback
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
