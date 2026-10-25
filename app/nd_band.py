@@ -37,7 +37,9 @@ SCHEMA = {
                "contact_id": "INTEGER", "notes": "TEXT"},
     "gigs": {"date": "TEXT", "title": "TEXT", "venue_id": "INTEGER", "status": "TEXT", "fee": "REAL",
              "deposit_paid": "INTEGER", "load_in": "TEXT", "set_time": "TEXT", "set_length": "INTEGER",
-             "setlist_id": "INTEGER", "contact_id": "INTEGER", "notes": "TEXT", "tour_id": "INTEGER"},
+             "setlist_id": "INTEGER", "contact_id": "INTEGER", "notes": "TEXT", "tour_id": "INTEGER",
+             # the band calendar's event for this gig, and what was last sent there (nd_gigcal)
+             "cal_event": "TEXT", "cal_synced": "TEXT"},
     "songs": {"title": "TEXT", "key": "TEXT", "bpm": "INTEGER", "length_sec": "INTEGER", "notes": "TEXT"},
     "setlists": {"name": "TEXT", "notes": "TEXT"},
     "merch": {"name": "TEXT", "variant": "TEXT", "price": "REAL", "cost": "REAL", "stock": "INTEGER", "notes": "TEXT",

@@ -269,7 +269,12 @@
       return '<div class="field' + (f[2] === "check" ? " check" : "") + '">' + (f[2] === "check" ? "" : "<label>" + f[1] + "</label>") + input(f, vals[f[0]]) + "</div>";
     });
     var addr = !isNew && t === "gigs" ? gigAddr(r) : !isNew && t === "venues" ? venueAddr(r) : "";
-    $("d-body").innerHTML = (addr ? '<div class="field"><label>Where</label><div class="where">' + where(addr) + "</div></div>" : "") +
+    var cal = t !== "gigs" ? "" : r.cal_synced === "pending" ? '<div class="field"><label>Band calendar</label><div class="where" style="color:var(--amber)">' +
+        "Waiting to go on the band calendar (needs the Internet, and the band linked to a Group Board group in Schedule).</div></div>"
+      : r.cal_event && r.cal_synced !== "cancelled" ? '<div class="field"><label>Band calendar</label><div class="where" style="color:var(--green)">On the band calendar - ' +
+        "changes here update it for everyone.</div></div>"
+      : !isNew ? '<div class="field"><label>Band calendar</label><div class="where" style="color:var(--dim)">Goes on the band calendar when it\'s confirmed.</div></div>' : "";
+    $("d-body").innerHTML = (addr ? '<div class="field"><label>Where</label><div class="where">' + where(addr) + "</div></div>" : "") + cal +
       fields.join("") + (!isNew && t === "gigs" ? '<div class="extras">' +
       '<button class="btn small" data-x="ics">ADD TO CALENDAR</button><button class="btn small" data-x="sheet">MAKE A GIG SHEET NOTE</button>' +
       '<button class="btn small" data-x="paid">LOG PAYMENT</button><button class="btn small" data-x="remind">ADD REMINDER</button></div>' : "") +

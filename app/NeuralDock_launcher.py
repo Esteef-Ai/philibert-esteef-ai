@@ -18505,8 +18505,27 @@ class Handler(BaseHTTPRequestHandler):
                         r = nd_band.handle({"op": op}, nd_bands.db_path(_CONFIG_DIR, b["id"]))
                         out["bands"].append({"id": b["id"], "name": b["name"], **r})
                     self.send_json(out)
+                elif op == "gigs_sync":               # gigs -> the band calendar, now
+                    import nd_gigcal
+                    self.send_json({"ok": True, **nd_gigcal.sync_all(_CONFIG_DIR, internet_on(), body.get("band") or None)})
+                elif op == "gig_from_event":          # a show from the Schedule, added as a gig
+                    import nd_gigcal
+                    try:
+                        self.send_json({"ok": True, "row": nd_gigcal.gig_from_event(_CONFIG_DIR, body.get("event") or {})})
+                    except Exception as e:
+                        self.send_json({"ok": False, "msg": f"Could not add it: {e}"})
                 else:
-                    self.send_json(nd_band.handle(body, nd_bands.db_path(_CONFIG_DIR, body.get("band") or None)))
+                    res = nd_band.handle(body, nd_bands.db_path(_CONFIG_DIR, body.get("band") or None))
+                    self.send_json(res)
+                    if res.get("ok") and op in ("save", "delete", "restore") and body.get("table") in ("gigs", "venues"):
+                        # the band calendar follows its gigs (in the background: it may go online)
+                        def _gigcal(band=body.get("band") or None):
+                            try:
+                                import nd_gigcal
+                                nd_gigcal.sync_all(_CONFIG_DIR, internet_on(), band)
+                            except Exception as e:
+                                log(f"band calendar sync: {e}", "warn")
+                        threading.Thread(target=_gigcal, daemon=True).start()
                 return
             if path == "/api/board":
                 import nd_board

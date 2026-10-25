@@ -6,7 +6,7 @@
   "use strict";
   var DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   var KINDS = { practice: "Practice", show: "Show", other: "Event" };
-  var view, tab = "calendar", st = {}, me = null, members = [], events = [], lastSlots = [], GROUP = "", BAND = null;
+  var view, tab = "calendar", st = {}, me = null, members = [], events = [], lastSlots = [], GROUP = "", BAND = null, GIGS = {};
   try { tab = localStorage.getItem("band.schedtab") || tab; } catch (e) { /* private */ }
 
   function $(id) { return document.getElementById(id); }
@@ -77,7 +77,12 @@
         fetch("/api/band", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ op: "bands_link", id: BAND.id, group: d.group.id }) });
         GROUP = d.group.id;
       }
-      return Promise.all([api("avail_get"), api("events")]).then(function (r) {
+      var bandApi = function (x) { return fetch("/api/band", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(x) }).then(function (r) { return r.json(); }); };
+      return bandApi({ op: "gigs_sync" }).catch(function () { return {}; }).then(function () {
+        return Promise.all([api("avail_get"), api("events"), bandApi({ op: "list", table: "gigs" }).catch(function () { return {}; })]);
+      }).then(function (r) {
+        GIGS = {};
+        ((r[2] && r[2].rows) || []).forEach(function (g) { if (g.cal_event) GIGS[g.cal_event] = g; });
         if (!r[0].ok) { view.innerHTML = "<h1>Schedule</h1><p class=\"lead\">" + esc(r[0].msg) + "</p>"; return; }
         members = r[0].members; events = r[1].events || [];
         draw();
@@ -112,7 +117,9 @@
         esc(niceTime(e.start)) + (e.end ? "–" + esc(niceTime(e.end)) : "") + '</span><span class="what">' + esc(e.title) +
         (e.address ? '<div class="sch-who">' + maps(e.address) + "</div>" : "") + (e.notes ? '<div class="sch-who">' + esc(e.notes) + "</div>" : "") +
         '<div class="sch-who">booked by ' + esc(e.by) + (e.gcal_id ? ' · <span style="color:var(--green,#10b981)">on Google Calendar</span>' : "") +
-        (e.gcal_error ? ' · <span class="sch-out">' + esc(e.gcal_error) + "</span>" : "") + "</div></span>" +
+        (e.gcal_error ? ' · <span class="sch-out">' + esc(e.gcal_error) + "</span>" : "") +
+        (GIGS[e.id] ? ' · <span style="color:var(--green,#10b981)">a gig in ' + esc(BAND ? BAND.name : "the Band Manager") + "</span>"
+          : e.kind === "show" && !e.cancelled ? ' · <a href="#" data-addgig="' + esc(e.id) + '" style="color:var(--cyan,#00f2fe)">add to gigs</a>' : "") + "</div></span>" +
         '<span class="pill ' + (e.cancelled ? "cancelled" : esc(e.kind)) + '">' + (e.cancelled ? "cancelled" : esc(KINDS[e.kind] || e.kind)) + "</span></div>";
     };
     $("sch-body").innerHTML = '<div class="card" id="gcard" style="margin-bottom:12px"><h2>Google Calendar</h2><p class="lead">Checking...</p></div>' +
@@ -122,7 +129,17 @@
       (past.length ? '<div class="card" style="margin-top:12px"><h2>Recently</h2>' + past.reverse().map(li).join("") + "</div>" : "");
     googleCard();
     $("sch-body").onclick = function (ev) {
-      var n = ev.target.closest("[data-new]"), e = ev.target.closest("[data-ev]");
+      var n = ev.target.closest("[data-new]"), e = ev.target.closest("[data-ev]"), ag = ev.target.closest("[data-addgig]");
+      if (ag) {
+        ev.preventDefault();
+        var x = events.filter(function (y) { return y.id === ag.dataset.addgig; })[0];
+        fetch("/api/band", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ op: "gig_from_event", event: x }) })
+          .then(function (r) { return r.json(); }).then(function (d) {
+            if (!d.ok) { toast(d.msg); return; }
+            GIGS[x.id] = d.row; toast("Added to Gigs - changes there now update the calendar."); draw();
+          });
+        return;
+      }
       if (ev.target.closest("a")) return;
       if (n) eventForm({ kind: n.dataset.new });
       else if (e) eventForm(events.filter(function (x) { return x.id === e.dataset.ev; })[0]);
