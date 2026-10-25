@@ -131,6 +131,7 @@
     select(d);
     var id = d.dataset.id, app = appById(id);
     var items = [{ label: "Open", run: function () { open(id); } }];
+    if (id === "trash") items.push("-", { label: "Empty Trash", run: emptyTrash });
     if (app && app.published) items.push("-", { label: "Remove from desktop", run: function () {
       api("/api/desktop", { op: "app_remove", id: id.slice(4) }).then(function (r) {
         if (!r.ok) { msgbox("Remove", r.msg || "Could not remove it.", "error"); return; }
@@ -681,10 +682,29 @@
 
   /* ================= built-in apps ================= */
   function trashWin(body) {
-    body.innerHTML = '<div class="explorer"><div class="menubar"><span>File</span><span>Edit</span><span>View</span><span>Help</span></div>' +
+    body.innerHTML = '<div class="explorer"><div class="menubar"><span>File</span><span>Edit</span><span>View</span><span>Help</span>' +
+      '<button class="btn" id="trash-empty" style="margin-left:auto;min-width:0;padding:2px 10px">Empty Trash</button></div>' +
       '<div class="rows well" style="margin:0 2px"><div class="row head"><span>Name</span><span>Was in</span><span>Deleted</span></div>' +
       '<div id="trash-rows"></div></div><div class="status sunk" id="trash-status">Loading...</div></div>';
+    $("trash-empty").addEventListener("click", emptyTrash);
     loadTrash();
+  }
+  // Permanent: each source deletes for good what its trash holds (one item, or all)
+  function purge(x) {
+    return x.kind === "note" ? api("/api/notes", { op: "purge", name: x.key })
+      : x.kind === "band" ? api("/api/band", { op: "purge", table: x.key.split(":")[0], id: +x.key.split(":")[1] })
+      : x.kind === "file" ? api("/api/files", { op: "purge", id: x.key })
+      : api("/api/chats", { op: "purge", id: x.key });
+  }
+  function emptyTrash() {
+    trashSources().then(function (r) {
+      var n = (r[0].items || []).length + (r[1].chats || []).length + bandRows(r[2]).length + (r[3].items || []).length;
+      if (!n) { msgbox("Empty Trash", "The Trash is already empty.", "info"); return; }
+      if (!confirm("Delete the " + n + " item" + (n === 1 ? "" : "s") + " in the Trash for good?\n\nThis can't be undone.")) return;
+      Promise.all([api("/api/notes", { op: "purge" }), api("/api/chats", { op: "purge" }),
+                   api("/api/band", { op: "purge" }), api("/api/files", { op: "purge" })].map(function (p) { return p.catch(function () { return {}; }); }))
+        .then(function () { S.play("ding"); loadTrash(); updateTrashIcon(); });
+    });
   }
   // the Band Manager's deleted rows, as Trash rows: what it was, and which list it came from
   var BAND_LISTS = { gigs: "Gigs", tours: "Tours", venues: "Venues", contacts: "Contacts", suppliers: "Suppliers", songs: "Songs",
@@ -722,7 +742,20 @@
                I.svg(x.kind === "note" ? "notes" : x.kind === "band" ? "band" : x.kind === "file" ? "files" : "chat", 16) + esc(x.name) + "</span><span>" + esc(x.from) +
                "</span><span>" + esc(new Date(x.at * 1000).toLocaleDateString()) + "</span></div>";
       }).join("");
-      $("trash-status").textContent = rows.length + " object(s). Double-click one to put it back.";
+      $("trash-status").textContent = rows.length + " object(s). Double-click one to put it back; right-click to delete it for good.";
+      el.oncontextmenu = function (ev) {
+        var row = ev.target.closest("[data-i]");
+        if (!row) return;
+        ev.preventDefault();
+        var x = rows[+row.dataset.i];
+        dropMenu(row, [{ label: "Put back", run: function () { row.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); } }, "-",
+          { label: "Delete forever", run: function () {
+            if (!confirm('Delete "' + x.name + '" for good? This can\'t be undone.')) return;
+            purge(x).then(function () { loadTrash(); updateTrashIcon(); });
+          } }]);
+        fly.style.left = Math.min(ev.clientX, innerWidth - fly.offsetWidth - 4) + "px";
+        fly.style.top = Math.min(ev.clientY, innerHeight - fly.offsetHeight - 4) + "px";
+      };
       el.ondblclick = function (ev) {
         var row = ev.target.closest("[data-i]");
         if (!row) return;

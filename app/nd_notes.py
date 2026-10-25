@@ -362,6 +362,25 @@ def restore(vault, name):
     return {"ok": True, "id": _rel(vault, dest)}
 
 
+def purge(vault, name=None):
+    """Delete from the trash for good: one note, or all of them (name None)."""
+    d = (Path(vault) / TRASH).resolve()
+    with _lock:
+        idx = _trash_index(vault)
+        targets = [p for p in d.glob("*.md")] if name is None and d.is_dir() else []
+        if name is not None:
+            p = (d / str(name)).resolve()
+            if p.parent != d or p.suffix.lower() != ".md" or not p.is_file():
+                raise NoteError("not in the trash")
+            targets = [p]
+        for p in targets:
+            p.unlink()
+            idx.pop(p.name, None)
+        if d.is_dir():
+            _save_trash_index(vault, idx)
+    return {"ok": True, "deleted": len(targets)}
+
+
 def search(vault, q, limit=60):
     words = [w for w in str(q or "").lower().split() if w]
     if not words:
@@ -449,6 +468,8 @@ def handle(body, vault, on_event=None):
             return {"ok": True, **trash_list(vault)}
         if op == "restore":
             return restore(vault, body.get("name"))
+        if op == "purge":
+            return purge(vault, body.get("name"))
         if op == "search":
             return {"ok": True, **search(vault, body.get("q"))}
         if op == "obsidian":

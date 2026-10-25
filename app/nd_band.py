@@ -256,6 +256,27 @@ def set_deleted(con, t, rid, flag):
         raise BandError("no such entry")
 
 
+def purge(con, t=None, rid=None):
+    """Delete Trash rows for good: one (t, rid) or every deleted row. Rows elsewhere that
+    pointed at them lose the link (set to empty) instead of pointing at nothing."""
+    targets = [(_table(t), int(rid))] if t else [(tb, r[0]) for tb in SCHEMA
+                                                  for r in con.execute(f"SELECT id FROM {tb} WHERE deleted = 1")]
+    n = 0
+    for tb, i in targets:
+        n += con.execute(f"DELETE FROM {tb} WHERE id = ? AND deleted = 1", (i,)).rowcount
+        col = {"setlists": "setlist_id", "songs": "song_id"}.get(tb)
+        if col:
+            con.execute(f"DELETE FROM setlist_songs WHERE {col} = ?", (i,))
+        ref = {"money": "money_id", "merch": "merch_id"}.get(tb, tb[:-1] + "_id")   # gigs -> gig_id ...
+        for other, cols in SCHEMA.items():
+            if ref in cols:
+                con.execute(f'UPDATE {other} SET "{ref}" = NULL WHERE "{ref}" = ?', (i,))
+    con.commit()
+    if t and not n:
+        raise BandError("not in the trash")
+    return n
+
+
 def setlist(con, sid):
     s = con.execute("SELECT * FROM setlists WHERE id = ?", (sid,)).fetchone()
     if not s:
@@ -500,6 +521,8 @@ def handle(body, db_path):
                 return {"ok": True}
             if op == "trash":
                 return {"ok": True, "rows": {t: rows(con, t, include_deleted=True) for t in SCHEMA}}
+            if op == "purge":
+                return {"ok": True, "deleted": purge(con, body.get("table"), body.get("id"))}
             if op == "setlist":
                 return {"ok": True, "setlist": setlist(con, body.get("id"))}
             if op == "setlist_songs":

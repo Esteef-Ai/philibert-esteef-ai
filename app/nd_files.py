@@ -212,6 +212,18 @@ def restore(root, key):
     return {"path": rel_of(root, q)}
 
 
+def purge(root, key=None):
+    """Delete from the Trash for good: one item (its key), or all of them."""
+    idx = _index(root)
+    targets = idx if key is None else [x for x in idx if x["id"] == key]
+    if key is not None and not targets:
+        raise FilesError("not in the Trash")
+    for it in targets:
+        shutil.rmtree(_trash_dir(root) / it["id"], ignore_errors=True)
+    _save_index(root, [x for x in idx if x not in targets])
+    return {"deleted": len(targets)}
+
+
 def file_for(root, rel):
     """A file to show or download (GET), or None."""
     try:
@@ -239,6 +251,8 @@ def handle(body, root):
             return {"ok": True, **trash_list(root)}
         if op == "restore":
             return {"ok": True, **restore(root, str(body.get("id") or ""))}
+        if op == "purge":
+            return {"ok": True, **purge(root, str(body["id"]) if body.get("id") else None)}
         return {"ok": False, "msg": f"unknown op {op!r}"}
     except FilesError as e:
         return {"ok": False, "msg": str(e)}

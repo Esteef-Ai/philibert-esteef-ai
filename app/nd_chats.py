@@ -179,6 +179,22 @@ def restore(root, cid):
     return {"ok": True}
 
 
+def purge(root, cid=None):
+    """Delete from the trash for good: one chat, or all of them (cid None)."""
+    d = Path(root) / ".trash"
+    with _lock:
+        if cid is None:
+            targets = list(d.glob("c*.json")) if d.is_dir() else []
+        else:
+            p = d / _path(root, cid).name
+            if not p.exists():
+                raise ChatError("not in the trash")
+            targets = [p]
+        for p in targets:
+            p.unlink()
+    return {"ok": True, "deleted": len(targets)}
+
+
 def trash_list(root):
     d = Path(root) / ".trash"
     items = []
@@ -297,6 +313,8 @@ def handle(body, root):
             return restore(root, body.get("id"))
         if op == "trash_list":
             return {"ok": True, **trash_list(root)}
+        if op == "purge":
+            return purge(root, body.get("id"))
         if op == "folder_create":
             return folder_create(root, body.get("name"))
         if op == "folder_rename":
