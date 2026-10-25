@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy policy - Philibert Group Board</title>
+<style>
+  body { margin: 0; background: #0f172a; color: #d7e3f4; font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 780px; margin: 0 auto; padding: 48px 22px; }
+  h1 { color: #fff; font-size: 28px; margin: 0 0 4px; } h2 { color: #fff; font-size: 19px; margin-top: 30px; }
+  .by { color: #8ea3c4; margin: 0 0 22px; } a { color: #00f2fe; } code { color: #fff; }
+  .box { background: #111d36; border: 1px solid #1e3054; border-radius: 10px; padding: 14px 18px; }
+</style>
+</head>
+<body><main>
+<h1>Privacy policy</h1>
+<p class="by">Philibert Group Board and band scheduler, by Esteef.Ai · Effective 25 October 2026</p>
+
+<p>Philibert is an AI assistant that runs on your own computer, from a USB drive. Your chats, notes, files and AI models stay on that drive and
+are never sent here. This policy covers only the optional shared service at this address, which a group uses when its members want to share a
+message board and a schedule between their Philibert drives.</p>
+
+<h2>What is kept, and why</h2>
+<ul>
+  <li><b>Your group:</b> its name, its invite code, and a random phone-alert topic.</li>
+  <li><b>Members:</b> the display name each person chooses, whether they are the group's admin, and a scrambled (hashed) copy of the key their
+    Philibert uses to sign in. No email address or password is needed to join.</li>
+  <li><b>What the group posts:</b> posts, replies, poll choices and votes, and attached files (up to 5 MB each), shown to the group's members.</li>
+  <li><b>Scheduling:</b> each member's usual free times and blackout dates (with an optional reason they type), the band calendar's events
+    (title, date, time, address, notes, who booked it), and - only if a member types it - their Gmail address, used to read their free/busy
+    and to send them calendar invitations.</li>
+  <li><b>Google Calendar connection (optional):</b> if the group's admin connects a Google account, a Google sign-in key for that account,
+    stored <b>encrypted</b>, and the id of the calendar Philibert created in it.</li>
+</ul>
+<p>Nothing is used for advertising, sold, or shared with anyone outside the group, and there are no tracking or analytics tools.</p>
+
+<h2>Google user data</h2>
+<div class="box">
+<p>When a group connects a Google account, Philibert asks for only two permissions:</p>
+<ul>
+  <li><code>calendar.app.created</code> - to create one calendar for the band in that account and to add, change and cancel the band's
+    practices and shows on it, inviting the members who gave their Gmail address. It cannot see or change any other calendar.</li>
+  <li><code>calendar.freebusy</code> - to see <i>when</i> members are busy (for members who shared their calendar's free/busy with the band's
+    account), so the scheduler doesn't suggest times they can't make. It never sees what an appointment is, who it is with, or where.</li>
+</ul>
+<p>Busy times are read at the moment someone looks for a practice time and are used only for that answer; they are not stored. The data is
+used only to provide these scheduling features to the group, is not transferred to others, not used for advertising, and not read by
+people except where a member asks for help with a problem.</p>
+<p>Philibert's use and transfer of information received from Google APIs adheres to the
+<a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+</div>
+
+<h2>Phone alerts</h2>
+<p>If members choose phone alerts, the service sends a short note to the group's topic on <a href="https://ntfy.sh">ntfy.sh</a> when something is
+posted or booked: the group's name, who posted, and the title - never the text of a post. Anyone who knows a topic can read its alerts,
+so it is a long random name that only the group sees.</p>
+
+<h2>Where it is kept</h2>
+<p>On Netlify (in the United States), encrypted in transit (HTTPS). Google Calendar events live in the Google account the group connected.</p>
+
+<h2>Removing it</h2>
+<ul>
+  <li><b>Disconnect Google:</b> the group's admin presses <i>Disconnect</i> in the Band Manager's Schedule. The Google key is revoked and
+    deleted at once. You can also remove access in your Google account at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</li>
+  <li><b>Your Gmail address:</b> clear it under <i>My availability</i> and save.</li>
+  <li><b>Posts:</b> delete your own at any time (the admin can delete any).</li>
+  <li><b>A whole group or member:</b> ask through <b>Feedback Shooter</b> in Philibert or
+    <a href="https://github.com/sskrobe/philibert-esteef-ai/issues">on GitHub</a>, and it will be deleted.</li>
+</ul>
+
+<h2>Changes and contact</h2>
+<p>If this policy changes, the new version will be posted here with a new date. Questions: use Feedback Shooter in Philibert or
+<a href="https://github.com/sskrobe/philibert-esteef-ai/issues">open an issue on GitHub</a>.</p>
+<p><a href="/">&larr; Philibert Group Board</a></p>
+</main></body>
+</html>
