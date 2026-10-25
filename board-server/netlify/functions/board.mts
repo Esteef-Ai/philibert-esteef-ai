@@ -143,7 +143,9 @@ async function unseal(box: Json) {
   const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(box.iv) }, await aesKey(), unb64(box.ct))
   return new TextDecoder().decode(pt)
 }
-function redirectUri(req: Request) { return new URL("/api/google/callback", req.url).toString() }
+// One registered callback for every address this server answers on (board.esteef.com and the
+// netlify.app name are the same server, so a sign-in started on either can finish here).
+function redirectUri(_req: Request) { return env("GOOGLE_REDIRECT_URI") || "https://board.esteef.com/api/google/callback" }
 
 async function gAccess(gid: string): Promise<{ token: string; g: Json } | null> {
   const g = await get(`g/${gid}/google`)
