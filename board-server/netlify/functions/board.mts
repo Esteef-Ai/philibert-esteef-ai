@@ -11,6 +11,8 @@
 //   g/<gid>/v/<tid>/<mid>          -> {options: [i...]}          a member's poll vote
 //   g/<gid>/a/<ts>-<pid>           -> activity (what "new since" reads)
 //   g/<gid>/f/<fid>                -> attachment meta;  files store: <gid>/<fid> -> bytes
+//   g/<gid>/av/<mid>               -> the band scheduler: {weekly: [{day, start, end}], blackouts: [{from, to, note}]}
+//   g/<gid>/ev/<eid>               -> the band calendar: {kind, title, date, start, end, address, notes, by, cancelled}
 // Members sign in with the token they got when they created or joined the group
 // (Authorization: Bearer). New threads and replies also go to the group's ntfy topic.
 import type { Config, Context } from "@netlify/functions"
@@ -191,8 +193,8 @@ export default async (req: Request, context: Context) => {
     for (const k of recent) {
       const a = await get(k)
       if (!a || a.by_id === mid) continue                          // your own posts don't notify you
-      titles[a.tid] ||= (await get(`g/${gid}/th/${a.tid}`))?.title || ""
-      items.push({ ...a, title: titles[a.tid] })
+      if (a.tid) titles[a.tid] ||= (await get(`g/${gid}/th/${a.tid}`))?.title || ""
+      items.push({ ...a, title: a.title || titles[a.tid] || "" })
     }
     return json(200, { items, now: Date.now() })
   }
@@ -260,6 +262,65 @@ export default async (req: Request, context: Context) => {
       if (t) await put(`g/${gid}/th/${path[1]}`, { ...t, deleted: true })
     }
     return json(200, { ok: true })
+  }
+
+  // -- the band scheduler: availability (each member writes their own) ----------------
+  if (method === "GET" && path[0] === "avail") {
+    const out: Json[] = []
+    for (const m of await members(gid)) {
+      const a = (await get(`g/${gid}/av/${m.id}`)) || {}
+      out.push({ id: m.id, name: m.name, weekly: a.weekly || [], blackouts: a.blackouts || [], updated: a.updated || 0 })
+    }
+    return json(200, { members: out, me: mid })
+  }
+  if (method === "POST" && path[0] === "avail") {
+    const d = await req.json().catch(() => ({}))
+    const hm = (x: unknown) => /^([01]\d|2[0-3]):[0-5]\d$|^24:00$/.test(String(x)) ? String(x) : null
+    const ymd = (x: unknown) => /^\d{4}-\d{2}-\d{2}$/.test(String(x)) ? String(x) : null
+    const weekly = (Array.isArray(d.weekly) ? d.weekly : []).slice(0, 40).map((w: Json) => ({
+      day: Number(w.day), start: hm(w.start), end: hm(w.end) }))
+      .filter((w: Json) => w.day >= 0 && w.day <= 6 && w.start && w.end && w.start < w.end)
+    const blackouts = (Array.isArray(d.blackouts) ? d.blackouts : []).slice(0, 200).map((b: Json) => ({
+      from: ymd(b.from), to: ymd(b.to) || ymd(b.from), note: clean(b.note, 80) }))
+      .filter((b: Json) => b.from && b.to && b.from <= b.to)
+    await put(`g/${gid}/av/${mid}`, { weekly, blackouts, updated: Date.now() })
+    return json(200, { weekly, blackouts })
+  }
+
+  // -- the band calendar ---------------------------------------------------------------
+  if (method === "GET" && path[0] === "events") {
+    const out: Json[] = []
+    for (const k of await keys(`g/${gid}/ev/`)) {
+      const e = await get(k)
+      if (e) out.push({ id: k.split("/").pop(), ...e })
+    }
+    return json(200, { events: out.sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start)) })
+  }
+  if (method === "POST" && path[0] === "events") {
+    const d = await req.json().catch(() => ({}))
+    const kind = ["practice", "show", "other"].includes(d.kind) ? d.kind : "other"
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(d.date)) ? String(d.date) : ""
+    const hm = (x: unknown) => /^([01]\d|2[0-3]):[0-5]\d$|^24:00$/.test(String(x)) ? String(x) : ""
+    const start = hm(d.start), end = hm(d.end)
+    if (!date || !start) return bad(400, "Give it a date and a start time.")
+    if (end && end <= start) return bad(400, "It has to end after it starts.")
+    const eid = path[1] ? path[1].replace(/[^a-z0-9]/g, "") : ts() + rand(4)
+    const old = path[1] ? await get(`g/${gid}/ev/${eid}`) : null
+    if (path[1] && !old) return bad(404, "That event is gone.")
+    if (old && old.by_id !== mid && !me.admin) return bad(403, "Only whoever booked it (or the admin) can change it.")
+    const label = { practice: "Practice", show: "Show", other: "Event" }[kind as "practice"]
+    const ev = { kind, title: clean(d.title, 120) || label, date, start, end, address: clean(d.address, 200), notes: clean(d.notes, 2000),
+                 by: old ? old.by : me.name, by_id: old ? old.by_id : mid, created: old ? old.created : Date.now(),
+                 updated: Date.now(), cancelled: !!d.cancelled }
+    await put(`g/${gid}/ev/${eid}`, ev)
+    const [hh, mm] = start.split(":").map(Number)
+    const when = new Date(date + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" })
+      + ", " + ((hh % 12) || 12) + (mm ? ":" + String(mm).padStart(2, "0") : "") + (hh < 12 ? " AM" : " PM")
+    const what = `${ev.title} ${d.cancelled ? "cancelled" : old ? "changed" : "booked"}: ${when}`
+    const at = Date.now()
+    await put(`g/${gid}/a/${ts(at)}-${eid}`, { tid: "", eid, title: what, by: me.name, by_id: mid, at, kind: "event" })
+    alert(context, g.ntfy, g.name, what, ev.address ? `${ev.address}` : "")
+    return json(path[1] ? 200 : 201, { id: eid, ...ev })
   }
 
   if (method === "POST" && path[0] === "files") {

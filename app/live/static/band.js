@@ -109,6 +109,7 @@
                 ["text", "Reminder"], ["due", "Due", function (r) { return nice(r.due); }]],
   };
   var NAV = [["overview", "Overview", "M3 12l9-8 9 8v8a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"],
+             ["schedule", "Schedule", "M4 5h16v15H4zM4 9h16M8 3v4M16 3v4M8 13h2M12 13h2M16 13h1M8 16h2M12 16h2"],
              ["gigs", "Gigs", "M4 5h16v15H4zM4 9h16M8 3v4M16 3v4"],
              ["tours", "Tours", "M3 17h2l2-6h10l2 6h2M7 17a2 2 0 1 0 4 0M13 17a2 2 0 1 0 4 0M9 11V7h6v4"],
              ["setlists", "Setlists", "M5 6h14M5 12h14M5 18h9"],
@@ -144,6 +145,7 @@
     if (v === "trash") return trash();
     if (v === "tours") return tours();
     if (v === "settings") return settingsView();
+    if (v === "schedule") return window.BandSchedule ? window.BandSchedule.render(view) : null;     // band_schedule.js
     return listView(v);
   }
 

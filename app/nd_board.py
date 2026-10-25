@@ -150,6 +150,34 @@ def handle(body, data_dir, online):
             m["seen"] = int(body.get("now") or time.time() * 1000)
             _save(data_dir, m)
             return {"ok": True}
+        # -- the band scheduler (nd_sched does the arithmetic, here on the drive) --
+        if op == "avail_get":
+            return {"ok": True, **_call("GET", "avail", token=tok)}
+        if op == "avail_set":
+            return {"ok": True, **_call("POST", "avail", {"weekly": body.get("weekly") or [],
+                                                         "blackouts": body.get("blackouts") or []}, token=tok)}
+        if op == "events":
+            return {"ok": True, **_call("GET", "events", token=tok)}
+        if op == "event_save":
+            fields = {k: body.get(k) for k in ("kind", "title", "date", "start", "end", "address", "notes", "cancelled")}
+            eid = urllib.parse.quote(str(body.get("id") or ""), safe="")
+            return {"ok": True, "event": _call("POST", "events/" + eid if eid else "events", fields, token=tok)}
+        if op in ("suggest", "check"):
+            import nd_sched
+            av = _call("GET", "avail", token=tok)["members"]
+            ev = _call("GET", "events", token=tok)["events"]
+            if op == "check":
+                return {"ok": True, "days": nd_sched.check_dates(av, ev, body["from"], body["to"], body.get("start") or None,
+                                                                 body.get("end") or None)}
+            kw = {k: body[k] for k in ("duration", "earliest", "latest", "required", "min_people", "limit", "kind") if body.get(k)}
+            return {"ok": True, "slots": nd_sched.suggest(av, ev, body["from"], body["to"], **kw),
+                    "members": [{"id": x["id"], "name": x["name"], "filled": bool(x["weekly"])} for x in av]}
+        if op == "ask_band":                  # the top suggestions as a poll on the board
+            opts = [str(o)[:100] for o in (body.get("options") or [])][:10]
+            return {"ok": True, **_call("POST", "threads", {"title": str(body.get("title") or "When can we practice?")[:120],
+                                                            "body": str(body.get("body") or "")[:2000],
+                                                            "poll": {"question": "Which works for you?", "options": opts, "multi": True}},
+                                         token=tok)}
     except BoardError as e:
         return {"ok": False, "msg": str(e)}
     return {"ok": False, "msg": f"unknown op {op!r}"}
