@@ -66,6 +66,21 @@ export default async (req: Request, context: Context) => {
     return json(502, { error: `GitHub did not take it (${res.status}). Try again later.` })
   }
   const issue = await res.json()
+  // GitHub drops labels given at creation for a fine-grained token (no error), so add the
+  // label in a second call. Best effort: the issue is already open either way.
+  if (!(issue.labels || []).some((l: { name?: string }) => l.name === "feedback")) {
+    const lab = await fetch(`https://api.github.com/repos/${repo}/issues/${issue.number}/labels`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "philibert-feedback-relay",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ labels: ["feedback"] }),
+    })
+    if (!lab.ok) console.log("label not added:", lab.status, (await lab.text()).slice(0, 200))
+  }
   return json(201, { number: issue.number, url: issue.html_url })
 }
 
