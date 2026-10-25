@@ -155,7 +155,15 @@ def handle(body, data_dir, online):
             return {"ok": True, **_call("GET", "avail", token=tok)}
         if op == "avail_set":
             return {"ok": True, **_call("POST", "avail", {"weekly": body.get("weekly") or [],
-                                                         "blackouts": body.get("blackouts") or []}, token=tok)}
+                                                         "blackouts": body.get("blackouts") or [],
+                                                         "email": body.get("email") or ""}, token=tok)}
+        # -- Google Calendar (the board server holds the band's Google key) --
+        if op == "google_status":
+            return {"ok": True, **_call("GET", "google/status", token=tok)}
+        if op == "google_start":
+            return {"ok": True, **_call("POST", "google/start", {"tz": body.get("tz") or ""}, token=tok)}
+        if op == "google_disconnect":
+            return {"ok": True, **_call("POST", "google/disconnect", {}, token=tok)}
         if op == "events":
             return {"ok": True, **_call("GET", "events", token=tok)}
         if op == "event_save":
@@ -166,11 +174,17 @@ def handle(body, data_dir, online):
             import nd_sched
             av = _call("GET", "avail", token=tok)["members"]
             ev = _call("GET", "events", token=tok)["events"]
+            # everyone's Google Calendar busy times (only when; never what)
+            gb = _call("POST", "google/busy", {"from": body.get("from"), "to": body.get("to")}, token=tok)
+            busy = {mid: [tuple(x) for x in xs] for mid, xs in (gb.get("busy") or {}).items()}
+            unseen = gb.get("unseen") or []
             if op == "check":
                 return {"ok": True, "days": nd_sched.check_dates(av, ev, body["from"], body["to"], body.get("start") or None,
-                                                                 body.get("end") or None)}
+                                                                 body.get("end") or None, busy=busy), "unseen": unseen,
+                        "google": bool(gb.get("connected"))}
             kw = {k: body[k] for k in ("duration", "earliest", "latest", "required", "min_people", "limit", "kind") if body.get(k)}
-            return {"ok": True, "slots": nd_sched.suggest(av, ev, body["from"], body["to"], **kw),
+            return {"ok": True, "slots": nd_sched.suggest(av, ev, body["from"], body["to"], busy=busy, **kw),
+                    "unseen": unseen, "google": bool(gb.get("connected")),
                     "members": [{"id": x["id"], "name": x["name"], "filled": bool(x["weekly"])} for x in av]}
         if op == "ask_band":                  # the top suggestions as a poll on the board
             opts = [str(o)[:100] for o in (body.get("options") or [])][:10]

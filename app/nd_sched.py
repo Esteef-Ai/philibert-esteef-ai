@@ -51,9 +51,9 @@ def free(m, d, start, end, busy=()):
     for b in m.get("blackouts") or []:
         if b["from"] <= ds <= b["to"]:
             return False, "blackout" + (f" ({b['note']})" if b.get("note") else "")
-    for (bd, bs, be) in busy:
+    for (bd, bs, be) in busy:                  # Google Calendar busy times, already in local time
         if bd == ds and bs < end and start < be:
-            return False, "busy then"
+            return False, "busy (Google Calendar)"
     if not m.get("weekly"):
         return True, "hasn't said"
     if any(a <= start and end <= b for a, b in _windows(m, weekday(d))):

@@ -79,19 +79,54 @@
       return '<div class="li sch-ev' + (e.cancelled ? " cancelled" : "") + '" data-ev="' + esc(e.id) + '"><span class="when">' + esc(niceDate(e.date)) + " " +
         esc(niceTime(e.start)) + (e.end ? "–" + esc(niceTime(e.end)) : "") + '</span><span class="what">' + esc(e.title) +
         (e.address ? '<div class="sch-who">' + maps(e.address) + "</div>" : "") + (e.notes ? '<div class="sch-who">' + esc(e.notes) + "</div>" : "") +
-        '<div class="sch-who">booked by ' + esc(e.by) + "</div></span>" +
+        '<div class="sch-who">booked by ' + esc(e.by) + (e.gcal_id ? ' · <span style="color:var(--green,#10b981)">on Google Calendar</span>' : "") +
+        (e.gcal_error ? ' · <span class="sch-out">' + esc(e.gcal_error) + "</span>" : "") + "</div></span>" +
         '<span class="pill ' + (e.cancelled ? "cancelled" : esc(e.kind)) + '">' + (e.cancelled ? "cancelled" : esc(KINDS[e.kind] || e.kind)) + "</span></div>";
     };
-    $("sch-body").innerHTML = '<div style="display:flex;gap:8px;margin-bottom:12px"><button class="btn primary" data-new="practice">+ PRACTICE</button>' +
+    $("sch-body").innerHTML = '<div class="card" id="gcard" style="margin-bottom:12px"><h2>Google Calendar</h2><p class="lead">Checking...</p></div>' +
+      '<div style="display:flex;gap:8px;margin-bottom:12px"><button class="btn primary" data-new="practice">+ PRACTICE</button>' +
       '<button class="btn" data-new="show">+ SHOW</button><button class="btn" data-new="other">+ OTHER</button></div>' +
       '<div class="card"><h2>Coming up</h2>' + (up.map(li).join("") || '<div class="empty">Nothing booked yet. Try "Find a practice time".</div>') + "</div>" +
       (past.length ? '<div class="card" style="margin-top:12px"><h2>Recently</h2>' + past.reverse().map(li).join("") + "</div>" : "");
+    googleCard();
     $("sch-body").onclick = function (ev) {
       var n = ev.target.closest("[data-new]"), e = ev.target.closest("[data-ev]");
       if (ev.target.closest("a")) return;
       if (n) eventForm({ kind: n.dataset.new });
       else if (e) eventForm(events.filter(function (x) { return x.id === e.dataset.ev; })[0]);
     };
+  }
+  function googleCard() {
+    api("google_status").then(function (g) {
+      var c = $("gcard"); if (!c) return;
+      if (!g.ok) { c.innerHTML = "<h2>Google Calendar</h2><p class=\"lead\">" + esc(g.msg) + "</p>"; return; }
+      var shared = members.filter(function (m) { return m.google; }).map(function (m) { return m.name; });
+      var missing = members.filter(function (m) { return !m.google; }).map(function (m) { return m.name; });
+      c.innerHTML = "<h2>Google Calendar</h2>" + (!g.configured ? '<p class="lead">Not set up on the board server yet.</p>'
+        : g.connected ? '<p class="lead"><span style="color:var(--green,#10b981)">Connected</span> (by ' + esc(g.by) + ", " + esc(g.tz) + "). Bookings go onto the band's " +
+          "Google calendar with everyone invited, and each member's busy times block the scheduler." + (g.error ? ' <span class="sch-out">' + esc(g.error) + "</span>" : "") + "</p>" +
+          '<p class="lead" style="font-size:12.5px">Busy times seen for: ' + (shared.length ? esc(shared.join(", ")) : "nobody yet") +
+          (missing.length ? ' · <span class="sch-out">not yet: ' + esc(missing.join(", ")) + "</span> (add your Gmail under My availability)" : "") + "</p>" +
+          (me.admin ? '<button class="btn small danger" id="g-off">DISCONNECT</button>' : "")
+        : '<p class="lead">Connect the band\'s Google account: practices and shows then land in everyone\'s Google Calendar, and appointments in their own ' +
+          "calendars block the scheduler (only when they're busy - never what it is).</p>" +
+          (me.admin ? '<button class="btn primary" id="g-on">CONNECT GOOGLE CALENDAR</button>' : '<p class="lead">Ask the group\'s admin to connect it.</p>'));
+      if ($("g-on")) $("g-on").onclick = function () {
+        var tz = ""; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (x) { /* old browser */ }
+        api("google_start", { tz: tz }).then(function (r) {
+          if (!r.ok) { toast(r.msg); return; }
+          window.open(r.url, "_blank");
+          c.querySelector(".lead").textContent = "Sign in with the BAND's Google account in the window that opened, allow both permissions, then come back here.";
+          var tries = 0, t = setInterval(function () {
+            api("google_status").then(function (x) { if ((x.connected || ++tries > 60) && $("gcard")) { clearInterval(t); if (x.connected) { toast("Google Calendar connected."); googleCard(); } } });
+          }, 5000);
+        });
+      };
+      if ($("g-off")) $("g-off").onclick = function () {
+        if (!confirm("Disconnect the band's Google account? Events already on Google Calendar stay there; new ones won't be added.")) return;
+        api("google_disconnect").then(function () { googleCard(); });
+      };
+    });
   }
   function eventForm(e) {
     e = e || {};
@@ -135,13 +170,19 @@
         return '<div class="sch-row" data-day="' + i + '"><b>' + n + '</b><div class="sch-wins">' + m.weekly.filter(function (w) { return +w.day === i; }).map(win).join("") +
           '<button class="btn small" data-add>+ TIME</button></div></div>';
       }).join("") + "</div>" +
+      '<div class="card" style="margin-top:12px"><h2>Your Google Calendar</h2><p class="lead">So your own appointments block practice times (e.g. you\'re usually free ' +
+      'on Tuesdays, but not this Tuesday): type your Gmail address, then in Google Calendar open <b>Settings</b> → your calendar → <b>Share with specific people</b> → ' +
+      'add the band\'s Google account with <b>See only free/busy (hide details)</b>. The band then sees only <i>when</i> you\'re busy, never what it is. ' +
+      'You also get practices and shows as Google Calendar invites.</p><div class="sch-form"><div><label>Your Gmail</label>' +
+      '<input id="av-email" type="email" maxlength="200" value="' + esc(m.email || "") + '" placeholder="you@gmail.com"></div></div></div>' +
       '<div class="card" style="margin-top:12px"><h2>Blackout dates</h2><p class="lead">Days you can\'t do anything - holidays, work trips, family things.</p><div id="bo">' +
       m.blackouts.map(boRow).join("") + '</div><button class="btn small" id="bo-add">+ BLACKOUT</button></div>' +
       '<div style="margin-top:14px;display:flex;gap:10px;align-items:center"><button class="btn primary" id="av-save">SAVE MY AVAILABILITY</button>' +
       '<span class="lead" id="av-msg">' + (m.updated ? "Last saved " + new Date(m.updated).toLocaleString() : "Not filled in yet - the others can't plan around you until you do.") + "</span></div>" +
       '<div class="card" style="margin-top:16px"><h2>The band</h2>' + members.map(function (x) {
         return '<div class="li"><span class="what">' + esc(x.name) + '</span><span class="sch-who" style="margin:0 0 0 auto;white-space:nowrap">' + (x.weekly.length ? x.weekly.length + " time" + (x.weekly.length === 1 ? "" : "s") + " a week" : '<span class="sch-out">not filled in</span>') +
-          (x.blackouts.length ? " · " + x.blackouts.length + " blackout" + (x.blackouts.length === 1 ? "" : "s") : "") + "</span></div>";
+          (x.blackouts.length ? " · " + x.blackouts.length + " blackout" + (x.blackouts.length === 1 ? "" : "s") : "") +
+          (x.google ? " · Google ✓" : "") + "</span></div>";
       }).join("") + "</div>";
     $("sch-body").onclick = function (ev) {
       if (ev.target.closest("[data-rm]")) { ev.target.closest(".sch-win, .sch-bo").remove(); return; }
@@ -160,7 +201,7 @@
       var blackouts = [].map.call(view.querySelectorAll(".sch-bo"), function (b) {
         return { from: b.querySelector("[data-f]").value, to: b.querySelector("[data-t]").value || b.querySelector("[data-f]").value, note: b.querySelector("[data-n]").value };
       }).filter(function (b) { return b.from; });
-      api("avail_set", { weekly: weekly, blackouts: blackouts }).then(function (r) {
+      api("avail_set", { weekly: weekly, blackouts: blackouts, email: ($("av-email") || {}).value || "" }).then(function (r) {
         if (!r.ok) { toast(r.msg); return; }
         toast("Saved.");
         api("avail_get").then(function (x) { members = x.members; draw(); });
@@ -189,6 +230,8 @@
                        earliest: $("f-early").value, latest: $("f-late").value, required: req.length ? req : ["-none-"], limit: 6 }).then(function (r) {
         if (!r.ok) { $("f-out").innerHTML = '<p class="lead">' + esc(r.msg) + "</p>"; return; }
         lastSlots = r.slots;
+        var note = r.google && r.unseen && r.unseen.length ? '<p class="lead sch-out" style="margin-top:10px">Couldn\'t see ' + esc(r.unseen.join(", ")) +
+          "'s Google Calendar - they haven't shared free/busy with the band's account yet, so only their usual times count.</p>" : "";
         $("f-out").innerHTML = r.slots.length ? '<div class="card" style="margin-top:12px"><h2>Best times</h2>' + r.slots.map(function (s, i) {
           return '<div class="li sch-slot"><div><b>' + esc(niceDate(s.date)) + " · " + esc(niceTime(s.start)) + "–" + esc(niceTime(s.end)) + "</b>" +
             '<div class="sch-who">Free: ' + esc(s.free.join(", ")) + (s.unknown.length ? ' <span class="sch-out">(' + esc(s.unknown.join(", ")) + " hasn't filled in availability)</span>" : "") + "</div>" +
@@ -197,6 +240,7 @@
         }).join("") + '<div style="margin-top:12px;display:flex;gap:10px;align-items:center"><button class="btn" id="f-ask">ASK THE BAND (POLL ON THE BOARD)</button>' +
           '<span class="lead" style="font-size:12.5px">Puts the top three in a Group Board poll.</span></div></div>'
           : '<div class="card" style="margin-top:12px"><div class="empty">No time suits everyone who has to be there. Try a longer date range, a shorter practice, or fewer required people.</div></div>';
+        $("f-out").insertAdjacentHTML("afterbegin", note);
         if ($("f-ask")) $("f-ask").onclick = askBand;
       });
     };

@@ -125,6 +125,88 @@ function alert(context: Context, topic: string, group: string, title: string, me
   }).catch(() => {}))
 }
 
+// -- Google Calendar ------------------------------------------------------------------
+const G_SCOPES = "https://www.googleapis.com/auth/calendar.app.created https://www.googleapis.com/auth/calendar.freebusy"
+const env = (k: string) => Netlify.env.get(k) || ""
+const b64 = (u: Uint8Array) => btoa(String.fromCharCode(...u))
+const unb64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0))
+async function aesKey() {
+  const raw = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(env("TOKEN_KEY")))
+  return crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"])
+}
+async function seal(text: string) {
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await aesKey(), new TextEncoder().encode(text)))
+  return { iv: b64(iv), ct: b64(ct) }
+}
+async function unseal(box: Json) {
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(box.iv) }, await aesKey(), unb64(box.ct))
+  return new TextDecoder().decode(pt)
+}
+function redirectUri(req: Request) { return new URL("/api/google/callback", req.url).toString() }
+
+async function gAccess(gid: string): Promise<{ token: string; g: Json } | null> {
+  const g = await get(`g/${gid}/google`)
+  if (!g?.refresh) return null
+  const r = await fetch("https://oauth2.googleapis.com/token", { method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ client_id: env("GOOGLE_CLIENT_ID"), client_secret: env("GOOGLE_CLIENT_SECRET"),
+                                refresh_token: await unseal(g.refresh), grant_type: "refresh_token" }) })
+  const d = await r.json().catch(() => ({}))
+  if (!r.ok || !d.access_token) {
+    await put(`g/${gid}/google`, { ...g, error: `Google sign-in stopped working (${d.error || r.status}) - connect again.` })
+    return null
+  }
+  if (g.error) await put(`g/${gid}/google`, { ...g, error: "" })
+  return { token: d.access_token, g }
+}
+async function gFetch(token: string, url: string, init: RequestInit = {}) {
+  const r = await fetch(url, { ...init, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init.headers || {}) } })
+  const text = await r.text()
+  let body: Json = {}
+  try { body = text ? JSON.parse(text) : {} } catch { body = {} }
+  return { ok: r.ok, status: r.status, body }
+}
+
+// local wall time in a time zone, for an instant
+function localParts(t: Date, tz: string) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(t).map((x) => [x.type, x.value]))
+  return { date: `${p.year}-${p.month}-${p.day}`, min: Number(p.hour) * 60 + Number(p.minute) }
+}
+function addMinutes(date: string, hm: string, plus: number) {
+  const [h, m] = hm.split(":").map(Number)
+  const d = new Date(date + "T00:00:00Z")
+  d.setUTCMinutes(h * 60 + m + plus)
+  return { date: d.toISOString().slice(0, 10), hm: d.toISOString().slice(11, 16) }
+}
+
+async function gEventSync(gid: string, eid: string, ev: Json) {
+  const a = await gAccess(gid)
+  if (!a || !a.g.calendar) return ev
+  const attendees: Json[] = []
+  for (const k of await keys(`g/${gid}/av/`)) {
+    const av = await get(k)
+    if (av?.email) attendees.push({ email: av.email })
+  }
+  const cal = encodeURIComponent(a.g.calendar), tz = a.g.tz || "UTC"
+  const end = ev.end ? { date: ev.date, hm: ev.end } : addMinutes(ev.date, ev.start, 120)
+  const maps = ev.address ? "\nDirections: https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(ev.address) : ""
+  const body = { summary: ev.title, location: ev.address || undefined, description: (ev.notes || "") + maps + "\n\nBooked in Philibert by " + ev.by,
+                 start: { dateTime: `${ev.date}T${ev.start}:00`, timeZone: tz }, end: { dateTime: `${end.date}T${end.hm}:00`, timeZone: tz },
+                 attendees, status: ev.cancelled ? "cancelled" : "confirmed" }
+  const base = `https://www.googleapis.com/calendar/v3/calendars/${cal}/events`
+  let r
+  if (ev.gcal_id && ev.cancelled) r = await gFetch(a.token, `${base}/${encodeURIComponent(ev.gcal_id)}?sendUpdates=all`, { method: "DELETE" })
+  else if (ev.gcal_id) r = await gFetch(a.token, `${base}/${encodeURIComponent(ev.gcal_id)}?sendUpdates=all`, { method: "PUT", body: JSON.stringify(body) })
+  else if (!ev.cancelled) r = await gFetch(a.token, `${base}?sendUpdates=all`, { method: "POST", body: JSON.stringify(body) })
+  if (!r) return ev
+  const out = { ...ev, gcal_id: r.ok && r.body.id ? r.body.id : ev.gcal_id || "",
+                gcal_error: r.ok || r.status === 410 ? "" : `Google Calendar said ${r.status}: ${r.body?.error?.message || ""}`.slice(0, 200) }
+  await put(`g/${gid}/ev/${eid}`, out)
+  return out
+}
+
 async function files(gid: string, ids: unknown) {
   const out: Json[] = []
   for (const id of Array.isArray(ids) ? ids.slice(0, 10) : []) {
@@ -163,6 +245,33 @@ export default async (req: Request, context: Context) => {
     const { mid, token } = await newMember(gid, name, admin)
     const g = (await get(`g/${gid}/meta`))!
     return json(201, { group: { id: gid, name: g.name, invite: g.invite, ntfy: g.ntfy }, member: { id: mid, name, admin }, token })
+  }
+
+  if (method === "GET" && path[0] === "google" && path[1] === "callback") {
+    const page = (msg: string, ok: boolean) => new Response(`<!doctype html><meta charset="utf-8"><title>Philibert</title>
+<body style="font:16px system-ui;background:#0f172a;color:#d7e3f4;display:grid;place-items:center;height:100vh;margin:0">
+<div style="max-width:440px;text-align:center"><h2 style="color:${ok ? "#10b981" : "#f59e0b"}">${ok ? "Connected" : "Not connected"}</h2><p>${msg}</p>
+<p style="color:#8ea3c4">You can close this window and go back to Philibert.</p></div>`, { headers: { "content-type": "text/html; charset=utf-8" } })
+    const nonce = (url.searchParams.get("state") || "").replace(/[^a-z0-9]/g, "")
+    const st = nonce ? await get(`gstate/${nonce}`) : null
+    if (nonce) await db().delete(`gstate/${nonce}`)
+    if (!st || Date.now() - st.at > 15 * 60 * 1000) return page("That sign-in link has expired - press Connect Google Calendar again.", false)
+    if (url.searchParams.get("error")) return page(`Google said: ${clean(url.searchParams.get("error"), 80)}.`, false)
+    const tr = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ code: url.searchParams.get("code") || "", client_id: env("GOOGLE_CLIENT_ID"), client_secret: env("GOOGLE_CLIENT_SECRET"),
+                                  redirect_uri: redirectUri(req), grant_type: "authorization_code" }) })
+    const tok = await tr.json().catch(() => ({}))
+    if (!tr.ok || !tok.refresh_token) return page(`Google did not hand over a key (${tok.error || tr.status}). Try again.`, false)
+    const scopes = String(tok.scope || "")
+    if (!scopes.includes("calendar.app.created") || !scopes.includes("calendar.freebusy"))
+      return page("Both permissions are needed (the Band calendar, and free/busy) - tick both boxes on Google's page and try again.", false)
+    const meta = await get(`g/${st.gid}/meta`)
+    const cal = await gFetch(tok.access_token, "https://www.googleapis.com/calendar/v3/calendars",
+                             { method: "POST", body: JSON.stringify({ summary: `${meta?.name || "Band"} (Band)`, timeZone: st.tz || "UTC" }) })
+    if (!cal.ok) return page(`Could not make the Band calendar (${cal.status}).`, false)
+    await put(`g/${st.gid}/google`, { refresh: await seal(tok.refresh_token), calendar: cal.body.id, tz: st.tz || "UTC",
+                                      by: st.by, at: Date.now(), error: "" })
+    return page(`The "${meta?.name || "Band"} (Band)" calendar is ready in that Google account.`, true)
   }
 
   // -- everything else: a member's token
@@ -264,12 +373,79 @@ export default async (req: Request, context: Context) => {
     return json(200, { ok: true })
   }
 
+  // -- Google Calendar -------------------------------------------------------------------
+  if (path[0] === "google") {
+    if (method === "GET" && path[1] === "status") {
+      const gg = await get(`g/${gid}/google`)
+      return json(200, { configured: !!(env("GOOGLE_CLIENT_ID") && env("GOOGLE_CLIENT_SECRET") && env("TOKEN_KEY")),
+                         connected: !!gg?.refresh, tz: gg?.tz || "", by: gg?.by || "", at: gg?.at || 0, error: gg?.error || "" })
+    }
+    if (method === "POST" && path[1] === "start") {
+      if (!me.admin) return bad(403, "Only the group's admin can connect the band's Google account.")
+      if (!env("GOOGLE_CLIENT_ID") || !env("TOKEN_KEY")) return bad(503, "Google Calendar isn't set up on the board server yet.")
+      const d = await req.json().catch(() => ({}))
+      const nonce = rand(24)
+      await put(`gstate/${nonce}`, { gid, by: me.name, tz: clean(d.tz, 60) || "UTC", at: Date.now() })
+      const q = new URLSearchParams({ client_id: env("GOOGLE_CLIENT_ID"), redirect_uri: redirectUri(req), response_type: "code",
+                                      scope: G_SCOPES, access_type: "offline", prompt: "consent", include_granted_scopes: "true", state: nonce })
+      return json(200, { url: "https://accounts.google.com/o/oauth2/v2/auth?" + q })
+    }
+    if (method === "POST" && path[1] === "disconnect") {
+      if (!me.admin) return bad(403, "Only the group's admin can disconnect it.")
+      const gg = await get(`g/${gid}/google`)
+      if (gg?.refresh) {
+        try { await fetch("https://oauth2.googleapis.com/revoke?token=" + encodeURIComponent(await unseal(gg.refresh)), { method: "POST" }) } catch { /* forget it anyway */ }
+      }
+      await db().delete(`g/${gid}/google`)
+      return json(200, { ok: true })
+    }
+    if (method === "POST" && path[1] === "busy") {
+      const d = await req.json().catch(() => ({}))
+      const a = await gAccess(gid)
+      if (!a) return json(200, { connected: false, busy: {}, unseen: [] })
+      const from = /^\d{4}-\d{2}-\d{2}$/.test(String(d.from)) ? String(d.from) : new Date().toISOString().slice(0, 10)
+      const to = /^\d{4}-\d{2}-\d{2}$/.test(String(d.to)) ? String(d.to) : from
+      const who: Json[] = []
+      for (const m of await members(gid)) {
+        const av = await get(`g/${gid}/av/${m.id}`)
+        if (av?.email) who.push({ id: m.id, name: m.name, email: av.email })
+      }
+      if (!who.length) return json(200, { connected: true, busy: {}, unseen: [] })
+      const tmin = new Date(from + "T00:00:00Z"); tmin.setUTCDate(tmin.getUTCDate() - 1)
+      const tmax = new Date(to + "T00:00:00Z"); tmax.setUTCDate(tmax.getUTCDate() + 2)
+      const r = await gFetch(a.token, "https://www.googleapis.com/calendar/v3/freeBusy", { method: "POST",
+        body: JSON.stringify({ timeMin: tmin.toISOString(), timeMax: tmax.toISOString(), items: who.map((w) => ({ id: w.email })) }) })
+      if (!r.ok) return json(200, { connected: true, busy: {}, unseen: who.map((w) => w.name), error: `Google said ${r.status}` })
+      const busy: Record<string, number[][] | (string | number)[][]> = {}, unseen: string[] = []
+      const tz = a.g.tz || "UTC"
+      for (const w of who) {
+        const c = r.body.calendars?.[w.email]
+        if (!c || c.errors?.length) { unseen.push(w.name); continue }
+        const out: (string | number)[][] = []
+        for (const b of c.busy || []) {
+          let s = localParts(new Date(b.start), tz)
+          const e = localParts(new Date(b.end), tz)
+          while (s.date < e.date) {                                   // split across midnights
+            out.push([s.date, s.min, 24 * 60])
+            const nd = new Date(s.date + "T00:00:00Z"); nd.setUTCDate(nd.getUTCDate() + 1)
+            s = { date: nd.toISOString().slice(0, 10), min: 0 }
+          }
+          if (e.min > s.min) out.push([s.date, s.min, e.min])
+        }
+        busy[w.id] = out
+      }
+      return json(200, { connected: true, busy, unseen })
+    }
+    return bad(404, "No such thing.")
+  }
+
   // -- the band scheduler: availability (each member writes their own) ----------------
   if (method === "GET" && path[0] === "avail") {
     const out: Json[] = []
     for (const m of await members(gid)) {
       const a = (await get(`g/${gid}/av/${m.id}`)) || {}
-      out.push({ id: m.id, name: m.name, weekly: a.weekly || [], blackouts: a.blackouts || [], updated: a.updated || 0 })
+      out.push({ id: m.id, name: m.name, weekly: a.weekly || [], blackouts: a.blackouts || [], updated: a.updated || 0,
+                 email: m.id === mid ? a.email || "" : "", google: !!a.email })
     }
     return json(200, { members: out, me: mid })
   }
@@ -283,8 +459,9 @@ export default async (req: Request, context: Context) => {
     const blackouts = (Array.isArray(d.blackouts) ? d.blackouts : []).slice(0, 200).map((b: Json) => ({
       from: ymd(b.from), to: ymd(b.to) || ymd(b.from), note: clean(b.note, 80) }))
       .filter((b: Json) => b.from && b.to && b.from <= b.to)
-    await put(`g/${gid}/av/${mid}`, { weekly, blackouts, updated: Date.now() })
-    return json(200, { weekly, blackouts })
+    const email = /^[^@\s]{1,64}@[^@\s]{1,190}\.[a-z]{2,}$/i.test(String(d.email || "").trim()) ? String(d.email).trim().toLowerCase() : ""
+    await put(`g/${gid}/av/${mid}`, { weekly, blackouts, email, updated: Date.now() })
+    return json(200, { weekly, blackouts, email })
   }
 
   // -- the band calendar ---------------------------------------------------------------
@@ -312,7 +489,8 @@ export default async (req: Request, context: Context) => {
     const ev = { kind, title: clean(d.title, 120) || label, date, start, end, address: clean(d.address, 200), notes: clean(d.notes, 2000),
                  by: old ? old.by : me.name, by_id: old ? old.by_id : mid, created: old ? old.created : Date.now(),
                  updated: Date.now(), cancelled: !!d.cancelled }
-    await put(`g/${gid}/ev/${eid}`, ev)
+    await put(`g/${gid}/ev/${eid}`, { ...ev, gcal_id: old?.gcal_id || "" })
+    const synced = await gEventSync(gid, eid, { ...ev, gcal_id: old?.gcal_id || "" }).catch((e) => ({ ...ev, gcal_error: String(e).slice(0, 200) }))
     const [hh, mm] = start.split(":").map(Number)
     const when = new Date(date + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" })
       + ", " + ((hh % 12) || 12) + (mm ? ":" + String(mm).padStart(2, "0") : "") + (hh < 12 ? " AM" : " PM")
@@ -320,7 +498,7 @@ export default async (req: Request, context: Context) => {
     const at = Date.now()
     await put(`g/${gid}/a/${ts(at)}-${eid}`, { tid: "", eid, title: what, by: me.name, by_id: mid, at, kind: "event" })
     alert(context, g.ntfy, g.name, what, ev.address ? `${ev.address}` : "")
-    return json(path[1] ? 200 : 201, { id: eid, ...ev })
+    return json(path[1] ? 200 : 201, { id: eid, ...synced })
   }
 
   if (method === "POST" && path[0] === "files") {
