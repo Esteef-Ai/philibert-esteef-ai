@@ -20,7 +20,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-DEFAULT_SERVER = "https://philibert-board.netlify.app/api/"
+DEFAULT_SERVER = "https://board.esteef.com/api/"
 
 
 def _server():
