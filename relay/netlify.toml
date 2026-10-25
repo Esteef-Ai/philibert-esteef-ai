@@ -1,0 +1,5 @@
+# Philibert's feedback relay (Netlify project "philibert-feedback").
+# Deploy: cd relay && netlify deploy --prod   (no build step)
+[build]
+  publish = "public"
+  functions = "netlify/functions"

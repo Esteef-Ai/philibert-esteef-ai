@@ -1,0 +1,7 @@
+{
+  "name": "philibert-feedback-relay",
+  "private": true,
+  "type": "module",
+  "description": "Turns a Feedback Shooter message from a Philibert drive into an issue on the Philibert GitHub repo, for people without a GitHub account.",
+  "devDependencies": { "@netlify/functions": "^4.0.0" }
+}

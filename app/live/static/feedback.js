@@ -21,7 +21,8 @@
         $("part").innerHTML = d.parts.map(function (p) { return "<option>" + esc(p) + "</option>"; }).join("");
       }
       $("status").innerHTML = '<span class="' + (d.online ? "on" : "off") + '">INTERNET ' + (d.online ? "ON" : "OFF - messages wait on the drive") + "</span>" +
-        "<span>" + (d.signed_in ? "GitHub: " + esc(d.user) : "GitHub: not signed in") + "</span>" +
+        "<span>" + (d.signed_in ? "Posting as " + esc(d.user) + " on GitHub" : d.relay ? "No account needed" : "GitHub: not signed in") +
+        (!d.signed_in && d.relay ? ' · <a href="#" id="asme" style="color:#00f2fe">post under my GitHub name</a>' : "") + "</span>" +
         (d.waiting ? '<span class="off">' + d.waiting + " waiting to send</span>" : "") +
         (d.repo ? '<span>to github.com/' + esc(d.repo) + "</span>" : "");
       $("resend").hidden = !(d.waiting && d.online);
@@ -81,6 +82,10 @@
       say("Saved. Sign in to GitHub below to send it.");
       return signin().then(function (ok) { return ok ? api("send").then(outcome) : null; });
     }
+    if (r.relay_down) {
+      say((r.error || "The feedback relay is not answering.") + " You can send it with your own GitHub account instead.");
+      return signin().then(function (ok) { return ok ? api("send").then(outcome) : null; });
+    }
     if (r.offline) say("Saved on the drive. It goes out when you turn the Internet on (INTERNET in Philibert Chat).", true);
     else if (r.error) say(r.error);
     else if (r.sent) say("Sent - thank you! You'll find it below.", true);
@@ -110,6 +115,11 @@
   $("sys").addEventListener("change", function () { $("sysinfo").style.display = $("sys").checked ? "" : "none"; later(); });
   $("send").addEventListener("click", function () { submit(true); });
   $("later").addEventListener("click", function () { submit(false); });
+  $("status").addEventListener("click", function (ev) {
+    if (ev.target.id !== "asme") return;
+    ev.preventDefault();
+    signin().then(function (ok) { if (ok) { say("Signed in - your messages now go out under your GitHub name.", true); status(); } });
+  });
   $("resend").addEventListener("click", function () { say("Sending..."); api("send").then(outcome); });
   $("list").addEventListener("click", function (ev) {
     var d = ev.target.closest("[data-del]"); if (!d) return;

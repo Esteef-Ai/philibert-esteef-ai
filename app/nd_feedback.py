@@ -3,9 +3,12 @@ that's wrong, a change they want. Each message becomes an issue on Philibert's (
 GitHub repository, so the maker reads them all in one place and can answer there.
 
 Messages are written to data/feedback/ first (the outbox): with the Internet switch off
-they wait there and go out when it is on. Sending needs a GitHub sign-in - the same
-device sign-in as updates (nd_philibert), asking only for public repositories, and
-kept in memory only. Nothing is sent that the person has not seen in the preview.
+they wait there and go out when it is on. Two ways out:
+  * the relay (philibert.json "feedback_relay", a Netlify function holding the maker's
+    token) - no account needed; the default;
+  * the person's own GitHub sign-in (the device sign-in updates use, public_repo only,
+    in memory only) - optional, so the issue shows under their name.
+Nothing is sent that the person has not seen in the preview.
 
     handle(body, data_dir, online) -> dict      ops: status, system, list, save, send, delete, refresh
 """
@@ -84,6 +87,32 @@ def preview(item):
     return {"title": _title(item), "body": _body(item)}
 
 
+def _relay_url():
+    import nd_philibert
+    try:
+        return json.loads(nd_philibert.REPO_FILE.read_text(encoding="utf-8")).get("feedback_relay", "")
+    except Exception:
+        return ""
+
+
+def _post_relay(url, item):
+    """-> {"number", "url"}; raises urllib.error.HTTPError with the relay's answer."""
+    req = urllib.request.Request(url, method="POST", headers={"Content-Type": "application/json", "User-Agent": "Philibert-Feedback"},
+                                 data=json.dumps({k: item.get(k) for k in ("kind", "part", "title", "message", "system")}).encode())
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read())
+
+
+def _relay_error(e):
+    try:
+        msg = json.loads(e.read()).get("error", "")
+    except Exception:
+        msg = ""
+    if e.code == 429:
+        return "Too many messages in a row - wait a minute and send again."
+    return msg or f"The feedback relay said {e.code}."
+
+
 def _post_issue(repo, token, item):
     req = urllib.request.Request(f"{API}/repos/{repo}/issues", method="POST",
                                  data=json.dumps({"title": _title(item), "body": _body(item)}).encode(),
@@ -102,25 +131,37 @@ def send(data_dir, online, only=None):
         return {"sent": 0}
     if not online:
         return {"sent": 0, "offline": True}
-    if not repo:
-        return {"sent": 0, "error": "This copy has no repository to send to (philibert.json)."}
-    if not gh.get("token"):
+    relay = _relay_url()
+    if not repo and not relay:
+        return {"sent": 0, "error": "This copy has nowhere to send to (philibert.json)."}
+    if not gh.get("token") and not relay:
         return {"sent": 0, "need_signin": True}
     sent = 0
     for item in reversed(waiting):                       # oldest first
         try:
-            d = _post_issue(repo, gh["token"], item)
-            item.update(status="sent", sent_at=time.time(), number=d.get("number"), url=d.get("html_url"),
-                        by=gh.get("user", ""), error="")
+            if gh.get("token"):                          # signed in: under their own name
+                d = _post_issue(repo, gh["token"], item)
+                item.update(status="sent", sent_at=time.time(), number=d.get("number"), url=d.get("html_url"),
+                            by=gh.get("user", ""), via="github", error="")
+            else:                                        # no account: through the relay
+                d = _post_relay(relay, item)
+                item.update(status="sent", sent_at=time.time(), number=d.get("number"), url=d.get("url"),
+                            by="", via="relay", error="")
             sent += 1
         except urllib.error.HTTPError as e:
-            item.update(status="failed", error=f"GitHub said {e.code}: {e.reason}")
-            if e.code in (401, 403):
-                gh["token"] = ""                          # a stale sign-in: ask again
-                _write(data_dir, item)
-                return {"sent": sent, "need_signin": True, "error": item["error"]}
+            if gh.get("token"):
+                item.update(status="failed", error=f"GitHub said {e.code}: {e.reason}")
+                if e.code in (401, 403):
+                    gh["token"] = ""                      # a stale sign-in: ask again
+                    _write(data_dir, item)
+                    return {"sent": sent, "need_signin": True, "error": item["error"]}
+            else:
+                item.update(status="failed", error=_relay_error(e))
+                if e.code >= 500:                         # the relay is down or not set up: offer GitHub
+                    _write(data_dir, item)
+                    return {"sent": sent, "relay_down": True, "error": item["error"]}
         except Exception as e:
-            item.update(status="failed", error=f"Could not reach GitHub: {e}")
+            item.update(status="failed", error=f"Could not reach {'GitHub' if gh.get('token') else 'the feedback relay'}: {e}")
         _write(data_dir, item)
     return {"sent": sent}
 
@@ -153,6 +194,7 @@ def handle(body, data_dir, online):
         if op == "status":
             nd_philibert, gh = _gh()
             return {"ok": True, "online": bool(online), "signed_in": bool(gh.get("token")), "user": gh.get("user", ""),
+                    "relay": bool(_relay_url()),
                     "repo": nd_philibert._repo()[0], "kinds": KINDS, "parts": PARTS,
                     "waiting": sum(1 for i in _items(data_dir) if i["status"] in ("queued", "failed"))}
         if op == "system":
