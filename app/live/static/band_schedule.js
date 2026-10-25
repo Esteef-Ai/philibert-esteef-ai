@@ -174,7 +174,7 @@
       'on Tuesdays, but not this Tuesday): type your Gmail address, then in Google Calendar open <b>Settings</b> → your calendar → <b>Share with specific people</b> → ' +
       'add the band\'s Google account with <b>See only free/busy (hide details)</b>. The band then sees only <i>when</i> you\'re busy, never what it is. ' +
       'You also get practices and shows as Google Calendar invites.</p><div class="sch-form"><div><label>Your Gmail</label>' +
-      '<input id="av-email" type="email" maxlength="200" value="' + esc(m.email || "") + '" placeholder="you@gmail.com"></div></div></div>' +
+      '<input id="av-email" type="email" maxlength="200" value="' + esc(m.email || "") + '" placeholder="you@example.com"></div></div></div>' +
       '<div class="card" style="margin-top:12px"><h2>Blackout dates</h2><p class="lead">Days you can\'t do anything - holidays, work trips, family things.</p><div id="bo">' +
       m.blackouts.map(boRow).join("") + '</div><button class="btn small" id="bo-add">+ BLACKOUT</button></div>' +
       '<div style="margin-top:14px;display:flex;gap:10px;align-items:center"><button class="btn primary" id="av-save">SAVE MY AVAILABILITY</button>' +
