@@ -223,7 +223,7 @@ export default async (req: Request, context: Context) => {
     const body = clean(d.body, 10000), fl = await files(gid, d.files)
     if (!body && !fl.length) return bad(400, "Write something first.")
     const p = await addPost(gid, path[1], mid, me.name, body, fl)
-    alert(context, g.ntfy, g.name, `${me.name} replied`, `${t.title}: ${body}`)
+    alert(context, g.ntfy, g.name, `${me.name} replied`, t.title)     // titles only: ntfy topics are shared secrets on a public server
     return json(201, p)
   }
 
