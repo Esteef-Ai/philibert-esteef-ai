@@ -361,7 +361,10 @@ def gig_ics(con, gid):
 
 
 def _backup_dir(db_path):
-    return Path(db_path).parent / "exports" / "Band backups"
+    p = Path(db_path)
+    if p.parent.name == "bands":              # a second (third...) band: its own backup folder
+        return p.parent.parent / "exports" / "Band backups" / p.stem
+    return p.parent / "exports" / "Band backups"
 
 
 def backup(con, db_path, auto=False):

@@ -24,7 +24,12 @@
   function start() {
     return api("status").then(function (d) {
       st = d;
-      $("joinview").hidden = !!d.joined; $("boardview").hidden = !d.joined;
+      var adding = start.adding; start.adding = false;
+      $("joinview").hidden = !!d.joined && !adding; $("boardview").hidden = !d.joined || adding;
+      $("backto").hidden = !(d.groups || []).length;
+      $("gsel").innerHTML = (d.groups || []).map(function (g) { return '<option value="' + esc(g.id) + '"' + (g.id === d.active ? " selected" : "") + ">" + esc(g.name) + "</option>"; }).join("") +
+        '<option value="+">+ Start or join another group...</option>';
+      if (adding) return;
       if (!d.joined) { $("jmsg").textContent = d.online ? "" : "Turn the Internet on first (INTERNET in Philibert Chat) - the board is shared online."; return; }
       seenAtOpen = d.seen || 0;
       $("gname").textContent = d.group.name; $("gname2").textContent = d.group.name;
@@ -180,5 +185,11 @@
   $("create").onclick = function () { joinish("create", { group_name: $("cg").value, name: $("cn").value }); };
   $("join").onclick = function () { joinish("join", { invite: $("ji").value, name: $("jn").value }); };
 
+  $("gsel").onchange = function () {
+    if (this.value === "+") { start.adding = true; cur = null; start(); return; }
+    cur = null; $("view").innerHTML = '<p class="empty">Pick a post on the left, or start one.</p>';
+    api("switch", { group: this.value }).then(start);
+  };
+  $("backto").onclick = function (ev) { ev.preventDefault(); start(); };
   start();
 })();

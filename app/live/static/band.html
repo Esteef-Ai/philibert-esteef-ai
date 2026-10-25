@@ -63,6 +63,9 @@
   td { padding: 9px 10px; border-bottom: 1px solid rgba(30,48,84,.55); }
   tbody tr { cursor: pointer; } tbody tr:hover td { background: rgba(0,242,254,.05); }
   td.num, th.num { text-align: right; font-family: var(--mono); }
+  .bandsel { display: flex; gap: 6px; align-items: center; margin-left: 18px; }
+  .bandsel select { background: #0b1426; color: #fff; border: 1px solid var(--line, #1e3054); border-radius: 7px; padding: 6px 10px; font: 600 13px var(--font, sans-serif); max-width: 260px; }
+  html.embed .bandsel { margin-left: 0; }
   a.maps { color: var(--cyan); font: 10.5px var(--mono); letter-spacing: .06em; text-decoration: none; margin-left: 6px; white-space: nowrap; }
   a.maps:hover { text-decoration: underline; }
   .where { padding: 6px 0; line-height: 1.5; }
@@ -125,6 +128,8 @@
       <circle cx="130" cy="104" r="25" fill="var(--bg)"/><circle cx="130" cy="104" r="17" fill="var(--mark)"/><circle cx="130" cy="104" r="6" fill="var(--bg)"/>
       <path d="M48 143 H86 L93 134 L100 150 L107 138 L112 143 H152" fill="none" stroke="var(--bg)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
     </svg><b>PHILIBERT</b><span>BAND MANAGER</span></a>
+    <div class="bandsel"><select id="bandsel" title="Which band"></select>
+      <button class="btn small" id="bandmenu" type="button" title="New band, rename, delete">&#8943;</button></div>
     <div class="spacer"></div>
     <button class="btn primary" id="new-gig" type="button">+ NEW GIG</button>
   </header>

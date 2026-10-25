@@ -64,7 +64,6 @@
     if (has("band")) list.push({ id: "band", name: "Band Manager", icon: "band", url: "/band?embed=1", w: 1180, h: 760, title: "Philibert Band Manager" });
     if (has("board")) list.push({ id: "board", name: "Group Board", icon: "board", url: "/board", w: 1100, h: 760, title: "Group Board" });
     if (has("feedback")) list.push({ id: "feedback", name: "Feedback Shooter", icon: "feedback", url: "/feedback", w: 900, h: 720, title: "Feedback Shooter" });
-    if (has("suite")) list.push({ id: "suite", name: "ND Suite", icon: "suite", url: "/full", w: 1280, h: 800, max: true });
     var sh = THEMES[st.settings.theme] ? THEMES[st.settings.theme].shell : "taskbar";
     if (sh === "phone" || sh === "c64")          // no Start menu there: shutting down is an app
       list.push({ id: "power", name: "Shut Down", icon: "shutdown", action: function () { shutdownDialog(); } });
@@ -693,7 +692,7 @@
   // Permanent: each source deletes for good what its trash holds (one item, or all)
   function purge(x) {
     return x.kind === "note" ? api("/api/notes", { op: "purge", name: x.key })
-      : x.kind === "band" ? api("/api/band", { op: "purge", table: x.key.split(":")[0], id: +x.key.split(":")[1] })
+      : x.kind === "band" ? api("/api/band", Object.assign({ op: "purge" }, bandKey(x.key)))
       : x.kind === "file" ? api("/api/files", { op: "purge", id: x.key })
       : api("/api/chats", { op: "purge", id: x.key });
   }
@@ -703,7 +702,7 @@
       if (!n) { msgbox("Empty Trash", "The Trash is already empty.", "info"); return; }
       if (!confirm("Delete the " + n + " item" + (n === 1 ? "" : "s") + " in the Trash for good?\n\nThis can't be undone.")) return;
       Promise.all([api("/api/notes", { op: "purge" }), api("/api/chats", { op: "purge" }),
-                   api("/api/band", { op: "purge" }), api("/api/files", { op: "purge" })].map(function (p) { return p.catch(function () { return {}; }); }))
+                   api("/api/band", { op: "purge", all_bands: true }), api("/api/files", { op: "purge" })].map(function (p) { return p.catch(function () { return {}; }); }))
         .then(function () { S.play("ding"); loadTrash(); updateTrashIcon(); });
     });
   }
@@ -711,20 +710,24 @@
   var BAND_LISTS = { gigs: "Gigs", tours: "Tours", venues: "Venues", contacts: "Contacts", suppliers: "Suppliers", songs: "Songs",
                      setlists: "Setlists", merch: "Merch", money: "Money", bills: "Bills", reminders: "Reminders", sales: "Sales" };
   function bandRows(d) {
-    var out = [];
-    Object.keys((d && d.rows) || {}).forEach(function (t) {
-      (d.rows[t] || []).forEach(function (r) {
-        var name = r.name || r.title || r.text || r.what ||
-                   (t === "gigs" ? "Gig on " + r.date : t === "money" ? (r.kind || "entry") + " " + (r.amount || "") + " " + (r.category || "") : "#" + r.id);
-        out.push({ kind: "band", key: t + ":" + r.id, name: name, from: "Band Manager \u203a " + (BAND_LISTS[t] || t), at: r.updated || 0 });
+    var out = [], bands = (d && d.bands) || (d && d.rows ? [{ id: "", name: "", rows: d.rows }] : []);
+    bands.forEach(function (b) {
+      Object.keys(b.rows || {}).forEach(function (t) {
+        (b.rows[t] || []).forEach(function (r) {
+          var name = r.name || r.title || r.text || r.what ||
+                     (t === "gigs" ? "Gig on " + r.date : t === "money" ? (r.kind || "entry") + " " + (r.amount || "") + " " + (r.category || "") : "#" + r.id);
+          out.push({ kind: "band", key: b.id + "|" + t + ":" + r.id, name: name,
+                     from: "Band Manager \u203a " + (bands.length > 1 && b.name ? b.name + " \u203a " : "") + (BAND_LISTS[t] || t), at: r.updated || 0 });
+        });
       });
     });
     return out;
   }
+  function bandKey(k) { var b = k.split("|"), t = b[1].split(":"); return { band: b[0], table: t[0], id: +t[1] }; }
   function trashSources() {
     return Promise.all([api("/api/notes", { op: "trash_list" }).catch(function () { return {}; }),
                         api("/api/chats", { op: "trash_list" }).catch(function () { return {}; }),
-                        api("/api/band", { op: "trash" }).catch(function () { return {}; }),
+                        api("/api/band", { op: "trash", all_bands: true }).catch(function () { return {}; }),
                         api("/api/files", { op: "trash_list" }).catch(function () { return {}; })]);
   }
   function loadTrash() {
@@ -762,7 +765,7 @@
         if (!row) return;
         var x = rows[+row.dataset.i];
         (x.kind === "note" ? api("/api/notes", { op: "restore", name: x.key })
-         : x.kind === "band" ? api("/api/band", { op: "restore", table: x.key.split(":")[0], id: +x.key.split(":")[1] })
+         : x.kind === "band" ? api("/api/band", Object.assign({ op: "restore" }, bandKey(x.key)))
          : x.kind === "file" ? api("/api/files", { op: "restore", id: x.key })
          : api("/api/chats", { op: "restore", id: x.key }))
           .then(function () { S.play("ding"); loadTrash(); updateTrashIcon(); });
@@ -1015,7 +1018,7 @@
   var boardShown = 0;
   function boardNews() {
     if (!has("board")) return;
-    api("/api/board", { op: "changes" }).then(function (d) {
+    api("/api/board", { op: "changes_all" }).then(function (d) {
       if (!d || !d.ok) return;
       var items = d.items || [];
       var ic = iconsEl.querySelector('[data-id="board"] .img');
@@ -1028,7 +1031,7 @@
       if (!fresh.length) return;
       boardShown = Math.max.apply(null, fresh.map(function (i) { return i.at; }));
       var last = fresh[fresh.length - 1];
-      notify("Group Board", fresh.length === 1 ? last.by + " posted in \u201c" + last.title + "\u201d"
+      notify("Group Board" + (last.group_name ? " \u00b7 " + last.group_name : ""), fresh.length === 1 ? last.by + " posted in \u201c" + last.title + "\u201d"
                                                : fresh.length + " new posts - latest from " + last.by, function () { open("board"); });
     }).catch(function () {});
   }

@@ -83,7 +83,7 @@
 </head>
 <body>
 <div id="joinview" class="join" hidden>
-  <h1>Group Board</h1>
+  <h1>Group Board <a href="#" id="backto" hidden style="font-size:13px;font-weight:400;margin-left:10px">&larr; back to my groups</a></h1>
   <p class="lead">A message board for your band - or any group: posts, replies, polls and attachments, shared between everyone's
     Philibert. New posts can reach your phone too. Start a group and share its invite code, or join with a code someone gave you.</p>
   <p class="msg" id="jmsg"></p>
@@ -101,7 +101,8 @@
 
 <div id="boardview" class="app" hidden>
   <div class="top">
-    <h1 id="gname">Group Board</h1>
+    <select id="gsel" title="Which group" style="background:#0b1426;color:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 10px;font:600 15px var(--font);max-width:300px"></select>
+    <h1 id="gname" style="display:none">Group Board</h1>
     <span class="who" id="who"></span>
     <button class="btn" id="b-invite">INVITE</button>
     <button class="btn" id="b-phone">PHONE ALERTS</button>

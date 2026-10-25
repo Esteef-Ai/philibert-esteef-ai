@@ -267,7 +267,8 @@ def philibert_prompt():
            "brief: a simple question gets a short answer.\n")
     try:                                   # the Band Manager's settings, shared with its page
         import nd_band
-        _bc = nd_band.connect(_CONFIG_DIR / "band.db")
+        import nd_bands
+        _bc = nd_band.connect(nd_bands.db_path(_CONFIG_DIR))
         try:
             _bs = nd_band.settings(_bc)
         finally:
@@ -13508,7 +13509,9 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
             if name == "computer_info": return "[INFO] " + computer_info()
             if name in ("band_info", "band_save"):
                 import nd_band
-                return "[BAND] " + nd_band.tool(name, a, _CONFIG_DIR / "band.db")
+                import nd_bands
+                _bn = nd_bands.active(_CONFIG_DIR)["name"]
+                return f"[BAND: {_bn}] " + nd_band.tool(name, a, nd_bands.db_path(_CONFIG_DIR))
             if name == "publish_app":
                 import nd_retro_desktop
                 r = nd_retro_desktop.publish(APPS_DIR, a.get("path", ""), a.get("name", ""),
@@ -18315,7 +18318,8 @@ class Handler(BaseHTTPRequestHandler):
             # Group Board: an attachment, fetched from the board server for this member
             import nd_board
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            got = nd_board.file(_CONFIG_DIR, (q.get("id") or [""])[0], internet_on()) if self.authed() else None
+            got = (nd_board.file(_CONFIG_DIR, (q.get("id") or [""])[0], internet_on(), (q.get("group") or [""])[0] or None)
+                   if self.authed() else None)
             if not got:
                 self.send_json({"error": "not found"}, 404)
                 return
@@ -18489,7 +18493,20 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/band":
                 import nd_band
-                self.send_json(nd_band.handle(body, _CONFIG_DIR / "band.db"))
+                import nd_bands
+                op = str(body.get("op") or "")
+                if op.startswith("bands_"):           # the list of bands on this drive
+                    self.send_json(nd_bands.handle(body, _CONFIG_DIR))
+                elif body.get("all_bands") and op in ("trash", "purge") and not body.get("table"):
+                    # the desktop Trash: every band's deleted rows, labelled by band
+                    reg = nd_bands.registry(_CONFIG_DIR)
+                    out = {"ok": True, "bands": []}
+                    for b in reg["bands"]:
+                        r = nd_band.handle({"op": op}, nd_bands.db_path(_CONFIG_DIR, b["id"]))
+                        out["bands"].append({"id": b["id"], "name": b["name"], **r})
+                    self.send_json(out)
+                else:
+                    self.send_json(nd_band.handle(body, nd_bands.db_path(_CONFIG_DIR, body.get("band") or None)))
                 return
             if path == "/api/board":
                 import nd_board

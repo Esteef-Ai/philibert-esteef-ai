@@ -574,7 +574,62 @@
     api("restore", { table: p[0], id: +p[1] }).then(function () { toast("Put back."); trash(); });
   });
 
+  /* ---------- several bands: the switcher in the header ---------- */
+  function bands() {
+    return api("bands_list").then(function (d) {
+      if (!d.ok) return;
+      var sel = $("bandsel");
+      sel.innerHTML = d.bands.map(function (b) { return '<option value="' + esc(b.id) + '"' + (b.id === d.active ? " selected" : "") + ">" + esc(b.name) + "</option>"; }).join("") +
+        '<option value="+">+ New band...</option>';
+      sel.dataset.active = d.active;
+      document.title = (d.bands.filter(function (b) { return b.id === d.active; })[0] || {}).name + " - Band Manager";
+    });
+  }
+  function newBand() {
+    var n = prompt("Name of the new band:");
+    if (!n) return bands();
+    api("bands_create", { name: n }).then(function (d) { if (!d.ok) { toast(d.msg); return bands(); } location.reload(); });
+  }
+  $("bandsel").addEventListener("change", function () {
+    var v = this.value;
+    if (v === "+") return newBand();
+    api("bands_select", { id: v }).then(function () { location.reload(); });
+  });
+  $("bandmenu").addEventListener("click", function () {
+    var id = $("bandsel").dataset.active, name = $("bandsel").selectedOptions[0] ? $("bandsel").selectedOptions[0].textContent : "";
+    dropMenu($("bandmenu"), [
+      ["New band...", newBand],
+      ["Rename this band...", function () {
+        var n = prompt("New name for " + name + ":", name);
+        if (n && n !== name) api("bands_rename", { id: id, name: n }).then(function (d) { if (!d.ok) toast(d.msg); bands(); });
+      }],
+      ["Delete this band...", function () {
+        if (!confirm("Delete " + name + " from this drive?\n\nIts gigs, songs, money and everything else are moved to exports/Deleted bands (a file you can keep), " +
+                     "and the Band Manager switches to another band.")) return;
+        api("bands_delete", { id: id }).then(function (d) { if (!d.ok) { toast(d.msg); return; } location.reload(); });
+      }]]);
+  });
+  function dropMenu(anchor, items) {
+    var old = document.getElementById("bm-menu"); if (old) old.remove();
+    var m = document.createElement("div");
+    m.id = "bm-menu";
+    var r = anchor.getBoundingClientRect();
+    m.style.cssText = "position:fixed;z-index:60;top:" + (r.bottom + 4) + "px;left:" + r.left + "px;background:#0d1729;border:1px solid #1e3054;border-radius:8px;padding:4px;min-width:190px;box-shadow:0 10px 30px rgba(0,0,0,.5)";
+    items.forEach(function (it) {
+      var b = document.createElement("button");
+      b.type = "button"; b.textContent = it[0];
+      b.style.cssText = "display:block;width:100%;text-align:left;background:none;border:none;color:inherit;padding:8px 10px;border-radius:5px;cursor:pointer;font:13px var(--font,sans-serif)";
+      b.onmouseover = function () { b.style.background = "rgba(0,242,254,.1)"; };
+      b.onmouseout = function () { b.style.background = "none"; };
+      b.onclick = function () { m.remove(); it[1](); };
+      m.appendChild(b);
+    });
+    document.body.appendChild(m);
+    setTimeout(function () { document.addEventListener("click", function off(e) { if (!m.contains(e.target)) { m.remove(); document.removeEventListener("click", off); } }); }, 0);
+  }
+
   /* ---------- start ---------- */
+  bands();
   api("overview").then(function (o) { setCurrency(o.currency); renderNav(o.counts); });
   var start = "overview";
   try { start = localStorage.getItem("band.view") || "overview"; } catch (e) { /* private */ }

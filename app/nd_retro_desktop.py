@@ -51,7 +51,6 @@ STORE = [
      "attachments, shared between everyone's Philibert, with alerts on your phone (ntfy) and here on the desktop."},
     {"id": "feedback", "name": "Feedback Shooter", "about": "Send the maker an idea, a problem or a change you'd like. "
      "It goes to Philibert's page on GitHub, where you can see the answer."},
-    {"id": "suite", "name": "ND Suite", "about": "NeuralDock's full interface - every model setting and tool, for power users."},
 ]
 STORE_IDS = {a["id"] for a in STORE}
 _APP_ID = re.compile(r"^[a-z0-9][a-z0-9_\-]{1,40}$")

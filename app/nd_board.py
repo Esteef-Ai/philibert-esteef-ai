@@ -1,7 +1,9 @@
 """Group Board: a message board for a band - or any group - shared between their Philibert
 drives. The posts live on the board server (philibert.json "board_server", a Netlify
-function - see the Philibert repo's board-server/); this drive keeps only its membership:
-data/board/membership.json (group, my name, my member key, when I last looked).
+function - see the Philibert repo's board-server/); this drive keeps only its memberships -
+one per group it belongs to (a drive can be in several: two bands, a band and a choir...):
+data/board/memberships.json {active, groups: {group id: {group, member, token, seen}}}.
+Every op takes an optional "group" (its id); without one it acts on the active group.
 
 Threads with replies, polls, attachments (up to 5 MB), pinning (the group's admin). New
 posts reach phones through ntfy (the server sends them to the group's topic) and the
@@ -34,17 +36,40 @@ def _mf(data_dir):
     return Path(data_dir) / "board" / "membership.json"
 
 
-def membership(data_dir):
+def _all_file(data_dir):
+    return Path(data_dir) / "board" / "memberships.json"
+
+
+def memberships(data_dir):
     try:
-        return json.loads(_mf(data_dir).read_text(encoding="utf-8"))
+        return json.loads(_all_file(data_dir).read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return None
+        pass
+    try:                                      # a drive from before several groups: its one group
+        m = json.loads(_mf(data_dir).read_text(encoding="utf-8"))
+        allm = {"active": m["group"]["id"], "groups": {m["group"]["id"]: m}}
+        _write_all(data_dir, allm)
+        return allm
+    except (OSError, ValueError, KeyError):
+        return {"active": "", "groups": {}}
+
+
+def _write_all(data_dir, allm):
+    f = _all_file(data_dir)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps(allm, indent=1), encoding="utf-8")
+
+
+def membership(data_dir, gid=None):
+    allm = memberships(data_dir)
+    return allm["groups"].get(gid or allm["active"])
 
 
 def _save(data_dir, m):
-    f = _mf(data_dir)
-    f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text(json.dumps(m, indent=1), encoding="utf-8")
+    allm = memberships(data_dir)
+    allm["groups"][m["group"]["id"]] = m
+    allm["active"] = allm["active"] or m["group"]["id"]
+    _write_all(data_dir, allm)
 
 
 class BoardError(Exception):
@@ -80,29 +105,48 @@ def _ntfy(topic):
     return {"topic": topic, "web": f"https://ntfy.sh/{topic}", "app": f"ntfy://ntfy.sh/{topic}"} if topic else None
 
 
-def status(data_dir, online):
-    m = membership(data_dir)
+def status(data_dir, online, gid=None):
+    allm = memberships(data_dir)
+    groups = [{"id": k, "name": v["group"]["name"], "admin": bool(v["member"].get("admin"))} for k, v in allm["groups"].items()]
+    m = membership(data_dir, gid)
     if not m:
-        return {"ok": True, "joined": False, "online": bool(online)}
+        return {"ok": True, "joined": False, "online": bool(online), "groups": groups, "active": allm["active"]}
     return {"ok": True, "joined": True, "online": bool(online), "group": m["group"], "member": m["member"],
-            "phone": _ntfy(m["group"].get("ntfy")), "seen": m.get("seen", 0)}
+            "phone": _ntfy(m["group"].get("ntfy")), "seen": m.get("seen", 0), "groups": groups, "active": allm["active"]}
 
 
 def _start(data_dir, d):
     m = {"group": d["group"], "member": d["member"], "token": d["token"], "seen": int(time.time() * 1000),
          "server": _server(), "joined": time.time()}
-    _save(data_dir, m)
+    allm = memberships(data_dir)
+    allm["groups"][d["group"]["id"]] = m
+    allm["active"] = d["group"]["id"]
+    _write_all(data_dir, allm)
     return m
 
 
 def handle(body, data_dir, online):
     body = body or {}
     op = body.get("op", "")
+    gsel = str(body.get("group") or "") or None
     if op == "status":
+        return status(data_dir, online, gsel)
+    if op == "switch":                        # which group the board shows
+        allm = memberships(data_dir)
+        if gsel not in allm["groups"]:
+            return {"ok": False, "msg": "This drive isn't in that group."}
+        allm["active"] = gsel
+        _write_all(data_dir, allm)
         return status(data_dir, online)
     if op == "leave":                         # this drive only: the group goes on without it
+        allm = memberships(data_dir)
+        gone = gsel or allm["active"]
+        allm["groups"].pop(gone, None)
+        if allm["active"] == gone:
+            allm["active"] = next(iter(allm["groups"]), "")
+        _write_all(data_dir, allm)
         try:
-            _mf(data_dir).unlink()
+            _mf(data_dir).unlink()            # the old single-group file, if it is still there
         except OSError:
             pass
         return {"ok": True}
@@ -110,13 +154,22 @@ def handle(body, data_dir, online):
         return {"ok": False, "offline": True, "msg": "The board is online - turn the Internet on to use it."}
     try:
         if op in ("create", "join"):
-            if membership(data_dir):
-                return {"ok": False, "msg": "This drive is already in a group - leave it first."}
             d = (_call("POST", "groups", {"group_name": body.get("group_name"), "name": body.get("name")}) if op == "create"
                  else _call("POST", "join", {"invite": body.get("invite"), "name": body.get("name")}))
+            if d["group"]["id"] in memberships(data_dir)["groups"]:
+                return {"ok": False, "msg": "This drive is already in that group."}
             _start(data_dir, d)
             return status(data_dir, online)
-        m = membership(data_dir)
+        if op == "changes_all":               # the desktop's news: every group this drive is in
+            items = []
+            for k, gm in memberships(data_dir)["groups"].items():
+                try:
+                    d = _call("GET", f"changes?since={int(gm.get('seen', 0))}", token=gm["token"])
+                except BoardError:
+                    continue
+                items += [{**i, "group": k, "group_name": gm["group"]["name"]} for i in d.get("items", [])]
+            return {"ok": True, "items": sorted(items, key=lambda i: i.get("at", 0))}
+        m = membership(data_dir, gsel)
         if not m:
             return {"ok": False, "msg": "Join or start a group first."}
         tok = m["token"]
@@ -197,9 +250,9 @@ def handle(body, data_dir, online):
     return {"ok": False, "msg": f"unknown op {op!r}"}
 
 
-def file(data_dir, fid, online):
+def file(data_dir, fid, online, gid=None):
     """An attachment, fetched from the board for viewing or saving."""
-    m = membership(data_dir)
+    m = membership(data_dir, gid)
     if not m or not online:
         return None
     try:

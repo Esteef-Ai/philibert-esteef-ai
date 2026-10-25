@@ -6,13 +6,13 @@
   "use strict";
   var DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   var KINDS = { practice: "Practice", show: "Show", other: "Event" };
-  var view, tab = "calendar", st = {}, me = null, members = [], events = [], lastSlots = [];
+  var view, tab = "calendar", st = {}, me = null, members = [], events = [], lastSlots = [], GROUP = "", BAND = null;
   try { tab = localStorage.getItem("band.schedtab") || tab; } catch (e) { /* private */ }
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
-  function api(op, d) {
-    return fetch("/api/board", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(Object.assign({ op: op }, d || {})) })
+  function api(op, d) {                       // always the open band's own Group Board group
+    return fetch("/api/board", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(Object.assign({ op: op, group: GROUP }, d || {})) })
       .then(function (r) { return r.json(); }).catch(function (e) { return { ok: false, msg: "Philibert could not do that (" + e.message + ")." }; });
   }
   function toast(m) { var t = $("toast"); if (!t) return; t.textContent = m; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(function () { t.classList.remove("on"); }, 2800); }
@@ -42,8 +42,29 @@
     view = el;
     if (!$("sch-css")) { var s = document.createElement("style"); s.id = "sch-css"; s.textContent = CSS; document.head.appendChild(s); }
     view.innerHTML = "<h1>Schedule</h1><p class=\"lead\">Loading...</p>";
-    api("status").then(function (d) {
+    fetch("/api/band", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ op: "bands_list" }) })
+      .then(function (r) { return r.json(); }).then(function (b) {
+        BAND = (b.bands || []).filter(function (x) { return x.id === b.active; })[0] || null;
+        GROUP = (BAND && BAND.board_group) || "";
+        return api("status");
+      }).then(function (d) {
       st = d;
+      // this band isn't linked to a Group Board group yet: pick one of this drive's groups
+      if (!GROUP && (d.groups || []).length) {
+        view.innerHTML = "<h1>Schedule</h1><p class=\"lead\">Which Group Board group is <b>" + esc(BAND ? BAND.name : "this band") + "</b>? Its members share the " +
+          "availability and the band calendar.</p><div class=\"card\" style=\"max-width:520px\"><div class=\"sch-form\"><div><label>Group</label><select id=\"lk-g\">" +
+          d.groups.map(function (g) { return '<option value="' + esc(g.id) + '">' + esc(g.name) + "</option>"; }).join("") +
+          '</select></div><div><button class="btn primary" id="lk-go">LINK</button></div></div><p class="lead" style="margin-top:10px;font-size:12.5px">' +
+          "Not there? Start or join the band's group in the Group Board first.</p></div>";
+        $("lk-go").onclick = function () {
+          var gname = $("lk-g").selectedOptions[0].textContent;
+          var post = function (x) { return fetch("/api/band", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(x) }); };
+          post({ op: "bands_link", id: BAND.id, group: $("lk-g").value })
+            .then(function () { return BAND.name === "My band" ? post({ op: "bands_rename", id: BAND.id, name: gname }) : null; })   // name it after its group
+            .then(function () { if (BAND.name === "My band") location.reload(); else render(view); });
+        };
+        return;
+      }
       if (!d.joined) {
         view.innerHTML = "<h1>Schedule</h1><p class=\"lead\">The schedule is shared with the band through the <b>Group Board</b>: add Group Board from the " +
           "App Store, start your band's group (or join it with the invite code), and come back here. Everyone then fills in when they're usually free, " +
@@ -52,6 +73,10 @@
       }
       if (!d.online) { view.innerHTML = "<h1>Schedule</h1><p class=\"lead\">The schedule is shared online - turn the Internet on (INTERNET in Philibert Chat).</p>"; return; }
       me = d.member;
+      if (BAND && !BAND.board_group) {        // the drive's only group: link it quietly
+        fetch("/api/band", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ op: "bands_link", id: BAND.id, group: d.group.id }) });
+        GROUP = d.group.id;
+      }
       return Promise.all([api("avail_get"), api("events")]).then(function (r) {
         if (!r[0].ok) { view.innerHTML = "<h1>Schedule</h1><p class=\"lead\">" + esc(r[0].msg) + "</p>"; return; }
         members = r[0].members; events = r[1].events || [];
@@ -61,9 +86,16 @@
   }
   function draw() {
     var tabs = [["calendar", "Band calendar"], ["mine", "My availability"], ["find", "Find a practice time"], ["check", "Check dates (shows, tours)"]];
-    view.innerHTML = "<h1>Schedule <span class=\"lead\" style=\"font-size:13px;font-weight:400\">" + esc(st.group.name) + "</span></h1>" +
+    view.innerHTML = "<h1>Schedule <span class=\"lead\" style=\"font-size:13px;font-weight:400\">" + esc(BAND ? BAND.name : "") +
+      (BAND && BAND.name !== st.group.name ? " · Group Board: " + esc(st.group.name) : "") +
+      (st.groups && st.groups.length > 1 ? ' · <a href="#" id="relink" style="color:var(--cyan,#00f2fe)">change group</a>' : "") + "</span></h1>" +
       '<div class="sch-tabs">' + tabs.map(function (t) { return '<button class="btn' + (t[0] === tab ? " on" : "") + '" data-tab="' + t[0] + '">' + t[1] + "</button>"; }).join("") +
       '</div><div id="sch-body"></div>';
+    if ($("relink")) $("relink").onclick = function (ev) {
+      ev.preventDefault();
+      fetch("/api/band", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ op: "bands_link", id: BAND.id, group: "" }) })
+        .then(function () { render(view); });
+    };
     view.querySelector(".sch-tabs").onclick = function (ev) {
       var b = ev.target.closest("[data-tab]"); if (!b) return;
       tab = b.dataset.tab; try { localStorage.setItem("band.schedtab", tab); } catch (e) { /* private */ }
