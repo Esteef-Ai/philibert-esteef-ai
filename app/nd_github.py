@@ -45,9 +45,11 @@ def repo_needs_signin(repo):
     return code != 200
 
 
-def start(client_id):
-    """-> {user_code, verification_uri, device_code, interval, expires_in}"""
-    d = _post("https://github.com/login/device/code", {"client_id": client_id, "scope": "repo"})
+def start(client_id, scope="repo"):
+    """-> {user_code, verification_uri, device_code, interval, expires_in}
+    scope: "repo" to read a private repository, "public_repo" when it is public (updates
+    need nothing then; Feedback Shooter needs it to open an issue)."""
+    d = _post("https://github.com/login/device/code", {"client_id": client_id, "scope": scope})
     if "user_code" not in d:
         raise RuntimeError(d.get("error_description") or d.get("error") or "GitHub did not give a code")
     return d

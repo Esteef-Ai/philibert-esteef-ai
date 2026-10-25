@@ -66,6 +66,10 @@
       r(6, 6, 20, 1, W) + r(6, 14, 20, 1, W) + r(6, 22, 20, 1, W) +
       r(8, 8, 9, 1, DG) + r(8, 16, 9, 1, DG) + r(8, 24, 9, 1, DG) +
       r(21, 8, 2, 2, LM) + r(21, 16, 2, 2, LM) + r(21, 24, 2, 2, YL),
+    // Feedback Shooter: a paper plane leaving a speech bubble
+    feedback:
+      p("M3.5 6.5h17v12h-9l-5 4v-4h-3z", W, K) + r(6, 10, 11, 1, NV) + r(6, 13, 8, 1, NV) +
+      p("M14.5 19.5l15-12-4 17-4-5z", YL, K) + p("M21.5 19.5l8-12", "none", K) + p("M14.5 19.5l7 0", "none", OL),
     // Control Panel: a window with sliders
     control:
       r(3.5, 5.5, 25, 21, LG, K) + r(4, 6, 24, 4, NV) + r(25, 7, 2, 2, LG) +
@@ -139,6 +143,7 @@
     images: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15.5 9.5m-1.5 0a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0",
     control: "M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4",
     store: "M5 8h14l-1 12H6zM9 8V6a3 3 0 0 1 6 0v2M10.5 11.5h3.5M10.5 11.5v5.5h3.5M10.5 14.2h3",
+    feedback: "M3 11l18-7-6 17-3-7zM12 14l9-10",
     files: "M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM7 16l3-3 2 2 2-2 3 3",
     models: "M12 3l8 4-8 4-8-4zM4 12l8 4 8-4M4 17l8 4 8-4",
     trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13",
@@ -155,7 +160,7 @@
   };
   var TINT = {
     chat: ["#22d3ee", "#0369a1"], notes: ["#fcd34d", "#d97706"], suite: ["#a78bfa", "#5b21b6"], vault: ["#fb7185", "#be123c"],
-    band: ["#fdba74", "#c2410c"], images: ["#f472b6", "#7e22ce"], control: ["#9ca3af", "#374151"], store: ["#2dd4bf", "#0f766e"],
+    band: ["#fdba74", "#c2410c"], images: ["#f472b6", "#7e22ce"], control: ["#9ca3af", "#374151"], store: ["#2dd4bf", "#0f766e"], feedback: ["#fde047", "#ea580c"],
     files: ["#fcd34d", "#ca8a04"], models: ["#67e8f9", "#0e7490"], trash: ["#d1d5db", "#4b5563"],
     trash_full: ["#d1d5db", "#4b5563"], app: ["#60a5fa", "#1d4ed8"], programs: ["#60a5fa", "#1d4ed8"], folder: ["#fcd34d", "#ca8a04"],
     help: ["#34d399", "#047857"], find: ["#60a5fa", "#1e40af"], docs: ["#93c5fd", "#1d4ed8"], gpu: ["#4ade80", "#15803d"],

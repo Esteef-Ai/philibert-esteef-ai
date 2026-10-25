@@ -235,6 +235,23 @@ class Installer:
                 self.emit(i / max(1, len(files)), f"Copying Philibert - {i} of {len(files)} files")
         self.pins = json.loads((self.dest / "setup" / "pins.json").read_text(encoding="utf-8"))
         self.log(f"app: {len(files)} files")
+        # the version this drive has (the App Store and Feedback Shooter show it; an update rewrites it)
+        ver = ""
+        try:
+            if src.get("local") and (root / ".git").exists():
+                ver = subprocess.run(["git", "-C", str(root), "log", "-1", "--format=%h %cs %s"], capture_output=True,
+                                     text=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout.strip()
+            elif src.get("repo"):
+                hdr = {"User-Agent": "Philibert-Setup", **({"Authorization": f"Bearer {src['token']}"} if src.get("token") else {})}
+                req = urllib.request.Request(f"https://api.github.com/repos/{src['repo']}/commits/{src.get('branch', 'main')}", headers=hdr)
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    c = json.loads(r.read())
+                ver = f"{c['sha'][:7]} {c['commit']['committer']['date'][:10]} {c['commit']['message'].splitlines()[0]}"
+        except Exception as e:
+            self.log(f"version: unknown ({e})")
+        if ver:
+            (self.dest / "VERSION").write_text(ver, encoding="utf-8")
+            self.log(f"version: {ver}")
 
     def _stamp_is(self, f, value):
         return f.exists() and f.read_text(encoding="utf-8").strip() == value

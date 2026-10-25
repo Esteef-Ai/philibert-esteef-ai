@@ -17907,6 +17907,9 @@ def _close_portable_browser():
     threading.Thread(target=_go, daemon=True).start()
 
 
+BROWSER_QUICK_EXIT_S = 8     # a browser gone this fast never really opened (see below)
+
+
 def _open_portable_browser(url):
     """Open `url` in the drive's Chromium as an app window and wait until it closes.
 
@@ -17960,7 +17963,7 @@ def _open_portable_browser(url):
     # wants symlinks in its profile, which an exFAT drive can't hold). Say so and let
     # open_ui try the next window instead of shutting down as if it had been closed.
     try:
-        quick_exit = time.time() - t0 < 8 and not still_open()
+        quick_exit = time.time() - t0 < BROWSER_QUICK_EXIT_S and not still_open()
     except Exception:
         quick_exit = False
     if quick_exit:
@@ -18233,6 +18236,8 @@ class Handler(BaseHTTPRequestHandler):
             bare_path = "/live/files.html"
         elif bare_path == "/modelmgr":
             bare_path = "/live/modelmgr.html"
+        elif bare_path == "/feedback":
+            bare_path = "/live/feedback.html"
         if bare_path in ("/", "/index.html"):
             if not self.authed():
                 page = PAIR_PAGE.encode("utf-8")
@@ -18451,7 +18456,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error":"unauthorized","hint":"Send X-ND-Token. Pair in Setup > Devices."}, 401)
             return
 
-        if path in ("/api/notes", "/api/chats", "/api/desktop", "/api/band", "/api/images", "/api/files"):
+        if path in ("/api/notes", "/api/chats", "/api/desktop", "/api/band", "/api/images", "/api/files", "/api/feedback"):
             # The Notes app (nd_notes.py) and saved chats (nd_chats.py). They
             # write files, so a page from another site in the user's own browser
             # must not be able to drive them.
@@ -18466,6 +18471,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/band":
                 import nd_band
                 self.send_json(nd_band.handle(body, _CONFIG_DIR / "band.db"))
+                return
+            if path == "/api/feedback":
+                import nd_feedback
+                self.send_json(nd_feedback.handle(body, _CONFIG_DIR, internet_on()))
                 return
             if path == "/api/files":
                 import nd_files

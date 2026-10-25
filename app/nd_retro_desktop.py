@@ -47,6 +47,8 @@ STORE = [
     {"id": "band", "name": "Band Manager", "about": "For people who play in a band: gigs, tours, setlists, merch, money and bills."},
     {"id": "vault", "name": "Retro Vault", "about": "Play your own classic games from the drive (NES, SNES, Genesis, GBA, N64 and "
      "more), with saves kept on the drive."},
+    {"id": "feedback", "name": "Feedback Shooter", "about": "Send the maker an idea, a problem or a change you'd like. "
+     "It goes to Philibert's page on GitHub, where you can see the answer."},
     {"id": "suite", "name": "ND Suite", "about": "NeuralDock's full interface - every model setting and tool, for power users."},
 ]
 STORE_IDS = {a["id"] for a in STORE}

@@ -62,6 +62,7 @@
     if (has("images") && st.imagegen) list.push({ id: "images", name: "Image Generation", icon: "images", url: "/images", w: 1240, h: 800, title: "Philibert Image Generation" });
     if (has("vault") && st.retro) list.push({ id: "vault", name: "Retro Vault", icon: "vault", url: "/retro/", w: 1240, h: 800, max: true });
     if (has("band")) list.push({ id: "band", name: "Band Manager", icon: "band", url: "/band?embed=1", w: 1180, h: 760, title: "Philibert Band Manager" });
+    if (has("feedback")) list.push({ id: "feedback", name: "Feedback Shooter", icon: "feedback", url: "/feedback", w: 900, h: 720, title: "Feedback Shooter" });
     if (has("suite")) list.push({ id: "suite", name: "ND Suite", icon: "suite", url: "/full", w: 1280, h: 800, max: true });
     var sh = THEMES[st.settings.theme] ? THEMES[st.settings.theme].shell : "taskbar";
     if (sh === "phone" || sh === "c64")          // no Start menu there: shutting down is an app

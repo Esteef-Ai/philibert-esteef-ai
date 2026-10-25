@@ -375,7 +375,8 @@ def github(name, body):
                 "private": bool(repo and nd_github.repo_needs_signin(repo))}
     if name == "github_start":
         try:
-            d = nd_github.start(_client_id())
+            # ask for the least that works: every repository only when ours is private
+            d = nd_github.start(_client_id(), "repo" if repo and nd_github.repo_needs_signin(repo) else "public_repo")
         except Exception as e:
             return {"ok": False, "message": f"Could not start signing in: {e}"}
         _GH["device"] = d
