@@ -62,6 +62,7 @@
     if (has("images") && st.imagegen) list.push({ id: "images", name: "Image Generation", icon: "images", url: "/images", w: 1240, h: 800, title: "Philibert Image Generation" });
     if (has("vault") && st.retro) list.push({ id: "vault", name: "Retro Vault", icon: "vault", url: "/retro/", w: 1240, h: 800, max: true });
     if (has("band")) list.push({ id: "band", name: "Band Manager", icon: "band", url: "/band?embed=1", w: 1180, h: 760, title: "Philibert Band Manager" });
+    if (has("board")) list.push({ id: "board", name: "Group Board", icon: "board", url: "/board", w: 1100, h: 760, title: "Group Board" });
     if (has("feedback")) list.push({ id: "feedback", name: "Feedback Shooter", icon: "feedback", url: "/feedback", w: 900, h: 720, title: "Feedback Shooter" });
     if (has("suite")) list.push({ id: "suite", name: "ND Suite", icon: "suite", url: "/full", w: 1280, h: 800, max: true });
     var sh = THEMES[st.settings.theme] ? THEMES[st.settings.theme].shell : "taskbar";
@@ -1006,6 +1007,45 @@
       if (r.ok) S.play("ding");
     });
   }
+
+  /* ================= Group Board: news on the desktop ================= */
+  // Once a minute (the board only answers while the Internet is on): a badge on the
+  // board's icon with how many new posts and replies there are, and a pop-up by the tray
+  // for ones not shown yet. Opening the board marks them read (it tells the server).
+  var boardShown = 0;
+  function boardNews() {
+    if (!has("board")) return;
+    api("/api/board", { op: "changes" }).then(function (d) {
+      if (!d || !d.ok) return;
+      var items = d.items || [];
+      var ic = iconsEl.querySelector('[data-id="board"] .img');
+      if (ic) {
+        var b = ic.querySelector(".badge");
+        if (!items.length) { if (b) b.remove(); }
+        else { if (!b) { b = document.createElement("span"); b.className = "badge"; ic.appendChild(b); } b.textContent = items.length > 9 ? "9+" : items.length; }
+      }
+      var fresh = items.filter(function (i) { return i.at > boardShown; });
+      if (!fresh.length) return;
+      boardShown = Math.max.apply(null, fresh.map(function (i) { return i.at; }));
+      var last = fresh[fresh.length - 1];
+      notify("Group Board", fresh.length === 1 ? last.by + " posted in \u201c" + last.title + "\u201d"
+                                               : fresh.length + " new posts - latest from " + last.by, function () { open("board"); });
+    }).catch(function () {});
+  }
+  function notify(title, text, onClick) {
+    var n = document.createElement("div");
+    n.className = "notify raised";
+    n.innerHTML = "<b>" + esc(title) + "</b><span>" + esc(text) + "</span>";
+    n.addEventListener("click", function () { n.remove(); if (onClick) onClick(); });
+    document.body.appendChild(n);
+    S.play("ding");
+    setTimeout(function () { n.remove(); }, 9000);
+  }
+  setInterval(boardNews, 60000);
+  setTimeout(boardNews, 8000);
+  window.addEventListener("message", function (ev) {        // the board page: "I've shown everything"
+    if (ev.origin === location.origin && ev.data === "board-seen") boardNews();
+  });
 
   /* ================= parked windows ================= */
   // Changing the theme reloads the page (it boots like the real thing), so the windows that

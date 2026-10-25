@@ -1,0 +1,8 @@
+{
+  "name": "philibert-board-server",
+  "private": true,
+  "type": "module",
+  "description": "The shared side of Philibert's Group Board: groups, threads, replies, polls, attachments; ntfy alerts.",
+  "dependencies": { "@netlify/blobs": "^10.0.0" },
+  "devDependencies": { "@netlify/functions": "^4.0.0" }
+}

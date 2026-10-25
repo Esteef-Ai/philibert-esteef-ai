@@ -1,0 +1,5 @@
+# Philibert's Group Board server (Netlify project "philibert-board").
+# Deploy from this folder (no build step besides npm install).
+[build]
+  publish = "public"
+  functions = "netlify/functions"

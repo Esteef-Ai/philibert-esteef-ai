@@ -47,6 +47,8 @@ STORE = [
     {"id": "band", "name": "Band Manager", "about": "For people who play in a band: gigs, tours, setlists, merch, money and bills."},
     {"id": "vault", "name": "Retro Vault", "about": "Play your own classic games from the drive (NES, SNES, Genesis, GBA, N64 and "
      "more), with saves kept on the drive."},
+    {"id": "board", "name": "Group Board", "about": "A message board for your band or any group: posts, replies, polls and "
+     "attachments, shared between everyone's Philibert, with alerts on your phone (ntfy) and here on the desktop."},
     {"id": "feedback", "name": "Feedback Shooter", "about": "Send the maker an idea, a problem or a change you'd like. "
      "It goes to Philibert's page on GitHub, where you can see the answer."},
     {"id": "suite", "name": "ND Suite", "about": "NeuralDock's full interface - every model setting and tool, for power users."},

@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Group Board</title>
+<link href="/live/fonts/fonts.css" rel="stylesheet">
+<link rel="icon" href="/live/philibert-p1.svg">
+<style>
+  :root { --navy:#0f172a; --deep:#0a1120; --panel:#111d36; --raise:#162544; --line:#1e3054; --cyan:#00f2fe; --amber:#f59e0b;
+          --green:#10b981; --pink:#ff2e88; --txt:#d7e3f4; --dim:#8ea3c4; --faint:#6f86a8;
+          --font:'Inter',system-ui,sans-serif; --mono:'JetBrains Mono',Consolas,monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { height:100%; background:var(--navy); color:var(--txt); font:14px var(--font); }
+  button, input, select, textarea { font:inherit; color:inherit; }
+  a { color:var(--cyan); }
+  .btn { font:11px var(--mono); letter-spacing:.08em; color:var(--dim); background:rgba(22,37,68,.6); border:1px solid var(--line);
+         border-radius:6px; padding:7px 12px; cursor:pointer; white-space:nowrap; text-decoration:none; display:inline-block; }
+  .btn:hover:not(:disabled) { color:var(--cyan); border-color:rgba(0,242,254,.5); }
+  .btn.primary { color:#04131c; background:var(--cyan); border-color:var(--cyan); font-weight:700; }
+  .btn.danger:hover { color:var(--pink); border-color:rgba(255,46,136,.5); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  input[type=text], textarea, select { width:100%; background:#0b1426; border:1px solid var(--line); border-radius:7px; padding:9px 11px; }
+  input:focus, textarea:focus { outline:none; border-color:rgba(0,242,254,.6); }
+  textarea { resize:vertical; line-height:1.5; }
+  label.k { display:block; font:600 10.5px var(--font); letter-spacing:.16em; text-transform:uppercase; color:var(--dim); margin:12px 0 6px; }
+  .msg { font:12px var(--mono); color:var(--amber); min-height:16px; }
+  .lead { color:var(--dim); line-height:1.5; }
+  .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:50; font:12px var(--mono); background:#102038;
+           border:1px solid rgba(0,242,254,.4); border-radius:7px; padding:8px 14px; opacity:0; transition:opacity .25s; pointer-events:none; }
+  .toast.on { opacity:1; }
+  /* joining */
+  .join { max-width:860px; margin:0 auto; padding:30px 22px; }
+  .join h1 { font-size:22px; color:#fff; margin-bottom:6px; }
+  .cards { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:18px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  .card h2 { font-size:15px; color:#fff; }
+  /* the board */
+  .app { display:grid; grid-template-rows:auto 1fr; height:100%; }
+  .top { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--line); background:linear-gradient(180deg,#101b33,#0d1729); flex-wrap:wrap; }
+  .top h1 { font-size:17px; color:#fff; margin-right:auto; }
+  .top .who { font:11px var(--mono); color:var(--faint); }
+  .main { display:grid; grid-template-columns:330px 1fr; min-height:0; }
+  .list { border-right:1px solid var(--line); overflow:auto; background:var(--deep); }
+  .th { padding:11px 14px; border-bottom:1px solid var(--line); cursor:pointer; position:relative; }
+  .th:hover { background:rgba(0,242,254,.05); } .th.on { background:rgba(0,242,254,.12); }
+  .th b { color:#fff; display:block; padding-right:14px; } .th .meta { font:10.5px var(--mono); color:var(--faint); margin-top:4px; }
+  .th .new { position:absolute; right:12px; top:15px; width:8px; height:8px; border-radius:50%; background:var(--pink); }
+  .pin { color:var(--amber); }
+  .view { overflow:auto; padding:18px 22px 30px; }
+  .view h2 { font-size:19px; color:#fff; }
+  .post { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-top:12px; }
+  .post .hd { font:11px var(--mono); color:var(--faint); display:flex; gap:10px; align-items:center; }
+  .post .hd b { color:var(--cyan); font:600 13px var(--font); }
+  .post .bd { margin-top:6px; white-space:pre-wrap; line-height:1.55; word-wrap:break-word; }
+  .post.gone .bd { color:var(--faint); font-style:italic; }
+  .post .del { margin-left:auto; background:none; border:none; color:var(--faint); cursor:pointer; font:11px var(--mono); }
+  .post .del:hover { color:var(--pink); }
+  .files { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .files a { font:11px var(--mono); padding:5px 9px; border:1px solid var(--line); border-radius:6px; text-decoration:none; }
+  .files img { max-width:260px; max-height:200px; border-radius:6px; display:block; }
+  .poll { background:#0b1426; border:1px solid rgba(0,242,254,.3); border-radius:10px; padding:12px 14px; margin-top:12px; }
+  .poll .q { font-weight:600; color:#fff; margin-bottom:8px; }
+  .opt { display:grid; grid-template-columns:22px 1fr auto; gap:8px; align-items:center; padding:5px 0; cursor:pointer; }
+  .opt .bar { grid-column:2 / 4; height:5px; background:var(--raise); border-radius:3px; overflow:hidden; }
+  .opt .bar div { height:100%; background:var(--cyan); }
+  .opt .n { font:11px var(--mono); color:var(--dim); } .opt .vs { grid-column:2 / 4; font:10.5px var(--mono); color:var(--faint); }
+  .compose { margin-top:16px; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+  .chip { font:11px var(--mono); padding:3px 8px; border-radius:10px; border:1px solid var(--line); color:var(--dim); }
+  .empty { color:var(--faint); padding:30px; text-align:center; }
+  /* modal */
+  .modal { position:fixed; inset:0; background:rgba(4,8,18,.8); display:none; align-items:center; justify-content:center; z-index:30; }
+  .modal.on { display:flex; }
+  .box { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px; width:min(620px,94vw); max-height:90vh; overflow:auto; }
+  .box h2 { color:#fff; font-size:17px; }
+  .opts input { margin-bottom:6px; }
+  .acts { display:flex; gap:10px; align-items:center; margin-top:14px; flex-wrap:wrap; }
+  .topic { font:13px var(--mono); color:#fff; background:#0b1426; border-radius:6px; padding:6px 10px; display:inline-block; user-select:all; word-break:break-all; }
+  ol.steps { margin:10px 0 0 18px; line-height:1.7; color:var(--dim); }
+  @media (max-width:760px) { .main { grid-template-columns:1fr; } .list { max-height:40vh; } .cards { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div id="joinview" class="join" hidden>
+  <h1>Group Board</h1>
+  <p class="lead">A message board for your band - or any group: posts, replies, polls and attachments, shared between everyone's
+    Philibert. New posts can reach your phone too. Start a group and share its invite code, or join with a code someone gave you.</p>
+  <p class="msg" id="jmsg"></p>
+  <div class="cards">
+    <div class="card"><h2>Start a group</h2>
+      <label class="k" for="cg">Group name</label><input type="text" id="cg" maxlength="60" placeholder="e.g. The Basement Tapes">
+      <label class="k" for="cn">Your name</label><input type="text" id="cn" maxlength="40" placeholder="what the others see">
+      <div class="acts"><button class="btn primary" id="create">START GROUP</button></div></div>
+    <div class="card"><h2>Join a group</h2>
+      <label class="k" for="ji">Invite code</label><input type="text" id="ji" maxlength="20" placeholder="8 letters and numbers">
+      <label class="k" for="jn">Your name</label><input type="text" id="jn" maxlength="40" placeholder="what the others see">
+      <div class="acts"><button class="btn primary" id="join">JOIN</button></div></div>
+  </div>
+</div>
+
+<div id="boardview" class="app" hidden>
+  <div class="top">
+    <h1 id="gname">Group Board</h1>
+    <span class="who" id="who"></span>
+    <button class="btn" id="b-invite">INVITE</button>
+    <button class="btn" id="b-phone">PHONE ALERTS</button>
+    <button class="btn" id="b-refresh" title="Check for new posts">REFRESH</button>
+    <button class="btn primary" id="b-new">+ NEW POST</button>
+  </div>
+  <div class="main">
+    <div class="list" id="list"></div>
+    <div class="view" id="view"><p class="empty">Pick a post on the left, or start one.</p></div>
+  </div>
+</div>
+
+<div class="modal" id="m-new"><div class="box">
+  <h2>New post</h2>
+  <label class="k" for="nt">Title</label><input type="text" id="nt" maxlength="120" placeholder="e.g. Practice this week?">
+  <label class="k" for="nb">Message</label><textarea id="nb" rows="5" maxlength="10000"></textarea>
+  <label class="k">Attachments (up to 5 MB each)</label><input type="file" id="nf" multiple><div class="chips" id="nfc"></div>
+  <label class="k"><input type="checkbox" id="np"> Add a poll</label>
+  <div id="pollbox" hidden>
+    <input type="text" id="pq" maxlength="200" placeholder="The question (leave empty to use the title)">
+    <label class="k">Choices</label><div class="opts" id="po"></div>
+    <button class="btn" id="pa" type="button">+ CHOICE</button>
+    <label class="k"><input type="checkbox" id="pm"> People can pick more than one</label>
+    <label class="k" for="pc">Closes (optional)</label><input type="text" id="pc" placeholder="YYYY-MM-DD">
+  </div>
+  <div class="acts"><button class="btn primary" id="n-send">POST</button><button class="btn" data-close>CANCEL</button><span class="msg" id="nmsg"></span></div>
+</div></div>
+
+<div class="modal" id="m-phone"><div class="box">
+  <h2>Alerts on your phone</h2>
+  <p class="lead" style="margin-top:6px">New posts and replies can pop up on your phone through <b>ntfy</b>, a free notification app - no account needed.</p>
+  <ol class="steps">
+    <li>Install <b>ntfy</b>: <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank" rel="noopener">Android</a> ·
+      <a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank" rel="noopener">iPhone</a></li>
+    <li>In the app, tap <b>+</b> (Subscribe to topic) and type this topic exactly:<br><span class="topic" id="topic"></span>
+      <button class="btn" id="copytopic" style="margin-left:6px;padding:4px 9px">COPY</button></li>
+    <li>That's it - you'll get "<span id="gname2"></span>: Ana posted" when someone posts.</li>
+  </ol>
+  <p class="lead" style="margin-top:10px;font-size:12.5px">The topic works like a password: anyone who knows it gets the alerts, so only share it with the group.
+    Alerts show who posted and the title - read the rest here.</p>
+  <div class="acts"><button class="btn" data-close>CLOSE</button></div>
+</div></div>
+
+<div class="modal" id="m-invite"><div class="box">
+  <h2>Invite someone</h2>
+  <p class="lead" style="margin-top:6px">They add <b>Group Board</b> from Philibert's App Store, choose <b>Join a group</b> and type this code:</p>
+  <p style="margin:12px 0"><span class="topic" id="invcode" style="font-size:22px;letter-spacing:.15em"></span>
+    <button class="btn" id="copyinv" style="margin-left:6px">COPY</button></p>
+  <label class="k">In the group</label><div class="chips" id="members"></div>
+  <div class="acts"><button class="btn" data-close>CLOSE</button><button class="btn danger" id="leave" style="margin-left:auto">LEAVE ON THIS DRIVE</button></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+<script src="/live/board.js"></script>
+</body>
+</html>

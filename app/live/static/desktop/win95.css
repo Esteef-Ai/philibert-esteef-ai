@@ -198,6 +198,14 @@ body.dragging .wbody iframe { pointer-events: none; }
 .st-upd .msg { flex: 1; }
 .st-code { font: bold 15px Consolas, monospace; background: #ffffc0; padding: 0 6px; letter-spacing: .08em; }
 
+/* ---------- Group Board: the news badge and pop-up ---------- */
+.dicon .img .badge { position: absolute; right: -8px; top: -6px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+  background: #e0245e; color: #fff; font: bold 10px/16px Arial, sans-serif; text-align: center; box-shadow: 0 0 0 1px #fff; z-index: 2; }
+.notify { position: fixed; right: 12px; bottom: 44px; z-index: 900; width: 300px; padding: 10px 12px; cursor: pointer;
+  display: flex; flex-direction: column; gap: 3px; animation: notifyin .25s ease-out; }
+.notify b { font-size: 12px; } .notify span { line-height: 1.35; }
+@keyframes notifyin { from { transform: translateY(20px); opacity: 0; } }
+
 /* ---------- parked windows: by the clock after a theme change ---------- */
 #parked { display: flex; gap: 3px; align-items: center; }
 #parked:empty { display: none; }
