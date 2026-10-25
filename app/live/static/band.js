@@ -23,7 +23,9 @@
   }
   function api(op, data) {
     return fetch("/api/band", { method: "POST", headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify(Object.assign({ op: op }, data || {})) }).then(function (r) { return r.json(); });
+                                body: JSON.stringify(Object.assign({ op: op }, data || {})) }).then(function (r) { return r.json(); })
+      // a server error used to fail silently - and look like "nothing saved"
+      .catch(function (e) { var m = "Philibert could not do that (" + e.message + ")."; toast(m); return { ok: false, msg: m }; });
   }
   function toast(m) { var t = $("toast"); t.textContent = m; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(function () { t.classList.remove("on"); }, 2600); }
   function money(v) {
@@ -73,11 +75,22 @@
             ["category", "Category (van, print, gear...)", "text"], ["tour_id", "Tour", "ref:tours"], ["gig_id", "Gig", "ref:gigs"],
             ["paid", "Paid (books it in Money)", "check"], ["paid_on", "Paid on", "date"], ["note", "Note", "text"]],
   };
+  // Every address shows with a Google Maps link for directions (opens in the browser).
+  function mapsUrl(addr) { return "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(addr); }
+  function where(addr) {
+    return addr ? esc(addr) + ' <a class="maps" href="' + mapsUrl(addr) + '" target="_blank" rel="noopener" title="Directions in Google Maps">Directions</a>' : "";
+  }
+  function venueAddr(v) { return v ? [v.address, v.city].filter(Boolean).join(", ") : ""; }
+  function gigAddr(g) {
+    var v = byId("venues", g.venue_id);
+    return venueAddr(v) ? [v.name, venueAddr(v)].filter(Boolean).join(", ") : "";
+  }
   var COLS = {
     gigs: [["date", "Date", function (r) { return nice(r.date); }], ["title", "Gig", function (r) { return esc(label("gigs", r)); }],
            ["status", "Status", function (r) { return '<span class="pill ' + esc(r.status) + '">' + esc(r.status) + "</span>"; }],
+           ["venue_id", "Where", function (r) { return where(gigAddr(r)); }],
            ["set_time", "Set", function (r) { return esc(r.set_time || ""); }], ["fee", "Fee", function (r) { return money(r.fee); }, "num"]],
-    venues: [["name", "Venue"], ["city", "City"], ["capacity", "Capacity", null, "num"], ["contact_id", "Contact", function (r) { return esc(label("contacts", byId("contacts", r.contact_id))); }]],
+    venues: [["name", "Venue"], ["address", "Address", function (r) { return where(venueAddr(r)); }], ["capacity", "Capacity", null, "num"], ["contact_id", "Contact", function (r) { return esc(label("contacts", byId("contacts", r.contact_id))); }]],
     contacts: [["name", "Name"], ["role", "Role"], ["phone", "Phone"], ["email", "Email"]],
     songs: [["title", "Song"], ["key", "Key"], ["bpm", "BPM", null, "num"], ["length_sec", "Length", function (r) { return r.length_sec ? mmss(r.length_sec) : ""; }, "num"]],
     merch: [["name", "Item"], ["variant", "Variant"], ["price", "Price", function (r) { return money(r.price); }, "num"],
@@ -253,7 +266,9 @@
     var fields = FIELDS[t].map(function (f) {
       return '<div class="field' + (f[2] === "check" ? " check" : "") + '">' + (f[2] === "check" ? "" : "<label>" + f[1] + "</label>") + input(f, vals[f[0]]) + "</div>";
     });
-    $("d-body").innerHTML = fields.join("") + (!isNew && t === "gigs" ? '<div class="extras">' +
+    var addr = !isNew && t === "gigs" ? gigAddr(r) : !isNew && t === "venues" ? venueAddr(r) : "";
+    $("d-body").innerHTML = (addr ? '<div class="field"><label>Where</label><div class="where">' + where(addr) + "</div></div>" : "") +
+      fields.join("") + (!isNew && t === "gigs" ? '<div class="extras">' +
       '<button class="btn small" data-x="ics">ADD TO CALENDAR</button><button class="btn small" data-x="sheet">MAKE A GIG SHEET NOTE</button>' +
       '<button class="btn small" data-x="paid">LOG PAYMENT</button><button class="btn small" data-x="remind">ADD REMINDER</button></div>' : "") +
       (!isNew && t === "merch" ? '<div class="extras"><button class="btn small" data-x="sell">SELL ONE</button></div>' : "") +
@@ -311,7 +326,8 @@
         };
         var contact = byId("contacts", g.contact_id || venue.contact_id) || {};
         var fill = {
-          "Venue / address": [venue.name, venue.address, venue.city].filter(Boolean).join(", "),
+          "Venue / address": [venue.name, venue.address, venue.city].filter(Boolean).join(", ") +
+                             (venueAddr(venue) ? " · [Directions](" + mapsUrl(gigAddr(g)) + ")" : ""),
           "Contact": [contact.name, contact.phone, contact.email].filter(Boolean).join(" · "),
           "Load-in": g.load_in || "", "Set time": g.set_time || "",
           "Set length": g.set_length ? g.set_length + " min" : "", "Pay": g.fee ? money(g.fee) : "",

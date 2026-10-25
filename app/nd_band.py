@@ -22,6 +22,8 @@ import io
 import json
 import re
 import sqlite3
+import sys
+import urllib.parse
 import threading
 import time
 import zipfile
@@ -67,9 +69,18 @@ class BandError(Exception):
     pass
 
 
+def _open(path, timeout=10):
+    """sqlite3.connect, but on a Mac with dot-file locking: SQLite's usual byte-range
+    locks fail on an exFAT drive there, so reads worked and every save failed
+    (2026-10-25). The lock is then a folder beside the file, which any drive holds."""
+    if sys.platform == "darwin":
+        return sqlite3.connect(Path(path).resolve().as_uri() + "?vfs=unix-dotfile", uri=True, timeout=timeout)
+    return sqlite3.connect(str(path), timeout=timeout)
+
+
 def connect(db_path):
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(str(db_path), timeout=10)
+    con = _open(db_path)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
     con.execute("PRAGMA journal_mode = DELETE")     # one file on the drive, no -wal sidecar on exFAT
@@ -316,12 +327,15 @@ def gig_ics(con, gid):
         nxt = (datetime.strptime(day, "%Y%m%d") + timedelta(days=1)).strftime("%Y%m%d")
         times = f"DTSTART;VALUE=DATE:{day}\r\nDTEND;VALUE=DATE:{nxt}"
     where = ", ".join(x for x in (g.get("venue"), g.get("address"), g.get("city")) if x)
+    maps = ("https://www.google.com/maps/dir/?api=1&destination=" + urllib.parse.quote(where)
+            if g.get("address") or g.get("city") else "")
     desc = "\n".join(x for x in (f"Load-in {g['load_in']}" if g.get("load_in") else "",
-                                  f"Set {g['set_time']}" if g.get("set_time") else "", g.get("notes") or "") if x)
+                                  f"Set {g['set_time']}" if g.get("set_time") else "", g.get("notes") or "",
+                                  f"Directions: {maps}" if maps else "") if x)
     return ("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Esteef.Ai//Philibert Band Manager//EN\r\nBEGIN:VEVENT\r\n"
             f"UID:philibert-gig-{gid}@esteef.ai\r\nDTSTAMP:{datetime.utcnow():%Y%m%dT%H%M%SZ}\r\n{times}\r\n"
             f"SUMMARY:{esc(g.get('title') or ('Gig at ' + (g.get('venue') or 'TBA')))}\r\n"
-            + (f"LOCATION:{esc(where)}\r\n" if where else "") + (f"DESCRIPTION:{esc(desc)}\r\n" if desc else "")
+            + (f"LOCATION:{esc(where)}\r\n" if where else "") + (f"URL:{maps}\r\n" if maps else "") + (f"DESCRIPTION:{esc(desc)}\r\n" if desc else "")
             + "END:VEVENT\r\nEND:VCALENDAR\r\n")
 
 
@@ -339,7 +353,7 @@ def backup(con, db_path, auto=False):
     while dst.exists():
         dst = dst.with_name(dst.stem.split(" (")[0] + f" ({n}).db")
         n += 1
-    out = sqlite3.connect(str(dst))
+    out = _open(dst)
     try:
         con.backup(out)
     finally:
@@ -370,7 +384,7 @@ def daily_backup(con, db_path):
 def restore_backup(con, db_path, name):
     if not any(b["name"] == name for b in backups(db_path)):    # only a file the list showed: no paths
         raise BandError("no such backup")
-    src = sqlite3.connect(str(_backup_dir(db_path) / name))
+    src = _open(_backup_dir(db_path) / name)
     try:
         if src.execute("SELECT name FROM sqlite_master WHERE name = 'gigs'").fetchone() is None:
             raise BandError("that file is not a band backup")
@@ -465,7 +479,10 @@ def handle(body, db_path):
     body = body or {}
     op = body.get("op", "")
     with _lock:
-        con = connect(db_path)
+        try:
+            con = connect(db_path)
+        except sqlite3.Error as e:                   # opening it is where a drive's locking fails
+            return {"ok": False, "msg": f"Could not open the band file: {e}"}
         try:
             if op in ("save", "delete", "restore", "setlist_songs", "settings_save"):
                 daily_backup(con, db_path)

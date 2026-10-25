@@ -54,10 +54,29 @@
   }
   function selected() { return cur.items.filter(function (it) { return sel.has(it.path); }); }
 
+  // Selection changes the items' classes in place. Redrawing the grid on every click
+  // (as before) replaced the item under the mouse, so WebKit (the Mac window) never saw
+  // a double-click and folders could not be opened there (2026-10-25).
+  function paintSel() {
+    [].forEach.call($("grid").querySelectorAll(".it"), function (el) {
+      el.classList.toggle("sel", sel.has(cur.items[+el.dataset.i].path));
+    });
+    status();
+  }
+  function openItem(it) {
+    if (it.dir) go(it.path);
+    else if (it.image) viewer(it);
+    else location.href = src(it.path) + "&download=1";
+  }
+  var lastClick = { i: -1, t: 0 };
   $("grid").addEventListener("click", function (ev) {
     var el = ev.target.closest(".it");
-    if (!el) { sel.clear(); last = -1; draw(); return; }
+    if (!el) { sel.clear(); last = -1; paintSel(); return; }
     var i = +el.dataset.i, it = cur.items[i];
+    // our own double-click: two clicks on the same item, whatever the engine does with dblclick
+    var now = Date.now(), twice = lastClick.i === i && now - lastClick.t < 450 && !ev.shiftKey && !ev.ctrlKey && !ev.metaKey;
+    lastClick = twice ? { i: -1, t: 0 } : { i: i, t: now };
+    if (twice) { openItem(it); return; }
     if (ev.shiftKey && last >= 0) {
       var a = Math.min(last, i), b = Math.max(last, i);
       if (!ev.ctrlKey) sel.clear();
@@ -66,14 +85,10 @@
       if (sel.has(it.path)) sel.delete(it.path); else sel.add(it.path);
       last = i;
     } else { sel.clear(); sel.add(it.path); last = i; }
-    draw();
+    paintSel();
   });
-  $("grid").addEventListener("dblclick", function (ev) {
-    var el = ev.target.closest(".it"); if (!el) return;
-    var it = cur.items[+el.dataset.i];
-    if (it.dir) go(it.path);
-    else if (it.image) viewer(it);
-    else location.href = src(it.path) + "&download=1";
+  $("grid").addEventListener("keydown", function (ev) {        // Enter opens what is selected
+    if (ev.key === "Enter" && sel.size === 1) { var it = selected()[0]; if (it) openItem(it); }
   });
   document.addEventListener("click", function (ev) { var g = ev.target.closest("[data-go]"); if (g) go(g.dataset.go); });
 
