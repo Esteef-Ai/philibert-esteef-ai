@@ -65,7 +65,7 @@ class Api:
         src = source()
         if not src.get("repo"):
             return {"needed": False}
-        needed = github_auth.repo_needs_signin(src["repo"])
+        needed = github_auth.repo_needs_signin(src["repo"], src.get("branch", "main"))
         if needed is None:
             return {"needed": True, "offline": True, "device": bool(_client_id()), "signed_in": False}
         return {"needed": bool(needed), "device": bool(_client_id()),
@@ -191,7 +191,7 @@ class Api:
         if plan["source"].get("repo") and self._token:
             plan["source"]["token"] = self._token
         elif plan["source"].get("repo") and not plan["source"].get("local") \
-                and github_auth.repo_needs_signin(plan["source"]["repo"]):
+                and github_auth.repo_needs_signin(plan["source"]["repo"], plan["source"].get("branch", "main")):
             self._state = {"steps": [{"title": "Copying Philibert onto the drive"}], "step": 0, "step_pct": 0,
                            "overall": 0, "detail": "", "done": False, "warnings": [],
                            "error": "This copy of Philibert is private: sign in to GitHub on Setup's first page "
