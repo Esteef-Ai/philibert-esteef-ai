@@ -35,30 +35,38 @@ def _get(url, token=None, timeout=20):
         return e.code, {}
 
 
+last_error = ""                           # why the last check could not reach GitHub (shown in Setup)
+
+
 def _public_zip(repo, branch):
     """The download itself, asked for without signing in: True = public, False = private, None = unsure."""
+    global last_error
     req = urllib.request.Request(f"https://codeload.github.com/{repo}/zip/refs/heads/{branch}",
                                  headers={"User-Agent": "Philibert-Setup"}, method="HEAD")
-    try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            return r.status == 200
-    except urllib.error.HTTPError as e:
-        return False if e.code == 404 else None
-    except OSError:
-        return None
+    for _ in range(2):                    # a slow first answer (waking network, security scan) gets a second go
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return r.status == 200
+        except urllib.error.HTTPError as e:
+            return False if e.code == 404 else None
+        except OSError as e:
+            last_error = str(getattr(e, "reason", "") or e)
+    return None
 
 
 def repo_needs_signin(repo, branch="main"):
     """True only when the repository is private. GitHub's API also refuses strangers past
     its 60-an-hour limit (403/429) - that is not "private" - so the public download is
-    checked first, and only a 404 from the API counts."""
+    checked first, and only a 404 from the API counts. None = could not tell (see last_error)."""
+    global last_error
     pub = _public_zip(repo, branch)
     if pub is not None:
         return not pub
     try:
-        code, _ = _get(f"{API}/repos/{repo}")
-    except OSError:
-        return None                       # offline: Setup says so elsewhere
+        code, _ = _get(f"{API}/repos/{repo}", timeout=30)
+    except OSError as e:
+        last_error = str(getattr(e, "reason", "") or e)
+        return None
     return code == 404
 
 

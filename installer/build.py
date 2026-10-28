@@ -22,7 +22,7 @@ ENV = HERE / ".buildenv"
 IS_WIN = sys.platform == "win32"
 PY = ENV / ("Scripts/python.exe" if IS_WIN else "bin/python")
 # backports.tarfile: setuptools' pkg_resources needs it inside a frozen app
-NEEDS = (["pyinstaller==6.16.0", "pywebview==6.2.1", "psutil==7.2.2", "backports.tarfile==1.2.0"]
+NEEDS = (["pyinstaller==6.16.0", "pywebview==6.2.1", "psutil==7.2.2", "backports.tarfile==1.2.0", "certifi==2026.7.22"]
          + (["pythonnet==3.1.0"] if IS_WIN else []))
 
 
@@ -50,7 +50,7 @@ def main():
             "--distpath", str(HERE / "dist"), "--workpath", str(HERE / "build" / "work"),
             "--specpath", str(HERE / "build"),
             "--add-data", f"{HERE / 'ui'}{sep}ui", "--add-data", f"{bundle}{sep}bundle",
-            "--hidden-import", "core", "--hidden-import", "engine", "--hidden-import", "github_auth",
+            "--hidden-import", "core", "--hidden-import", "engine", "--hidden-import", "github_auth", "--hidden-import", "certifi",
             "--hidden-import", "nd_imagegen",           # this computer's Image Generation rating
             "--paths", str(HERE), "--paths", str(REPO / "app"), str(HERE / "app.py")]
     subprocess.run(args, check=True, cwd=str(HERE))

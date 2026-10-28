@@ -145,13 +145,17 @@
   }
   function ghCheck() { api("github_status").then(function (s) {
     gh.needed = !!(s && s.needed);
+    if (s && s.offline) {                 // a note, not a stop: the install's downloads retry and say what's wrong
+      $("netnote").innerHTML = '<span class="warn">Setup could not reach GitHub just now' + (s.why ? " (" + esc(s.why) + ")" : "") +
+        ". You can still go on - the download tries again. If it keeps failing: check the Internet, then any antivirus or firewall that blocks Philibert Setup.</span>";
+      $("netnote").classList.remove("hide");
+    }
     if (!gh.needed) return;
     $("signin").classList.remove("hide");
     if (!s.device) {                      // no OAuth app set up yet: the token box is the way in
       $("gh-device").classList.add("hide");
       $("gh-tokenbox").open = true;
     }
-    if (s.offline) $("gh-msg").innerHTML = '<span class="warn">Setup cannot reach GitHub. Check the Internet connection.</span>';
     if (s.signed_in) ghDone(s.user);
     validate();
   }); }

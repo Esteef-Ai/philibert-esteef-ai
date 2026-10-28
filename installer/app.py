@@ -21,6 +21,24 @@ import core      # noqa: E402
 import engine    # noqa: E402
 import github_auth  # noqa: E402
 
+
+def _trust_more_roots():
+    """Secure downloads trust Windows' own certificates AND Mozilla's list (certifi). A PC whose
+    certificate store is out of date, or that is missing a root, otherwise looks "offline" -
+    every download fails before it starts. (Proxies set in Windows are still used.)"""
+    import ssl
+    import urllib.request
+    ctx = ssl.create_default_context()
+    try:
+        import certifi
+        ctx.load_verify_locations(certifi.where())
+    except Exception:
+        pass
+    urllib.request.install_opener(urllib.request.build_opener(urllib.request.HTTPSHandler(context=ctx)))
+
+
+_trust_more_roots()
+
 REPO = Path(__file__).resolve().parent.parent          # when run from source
 BUNDLED = HERE / "bundle"                               # models.json + philibert.json in a build
 
@@ -67,7 +85,8 @@ class Api:
             return {"needed": False}
         needed = github_auth.repo_needs_signin(src["repo"], src.get("branch", "main"))
         if needed is None:
-            return {"needed": True, "offline": True, "device": bool(_client_id()), "signed_in": False}
+            # unsure is not a reason to stop: the install's own downloads retry and say what's wrong
+            return {"needed": False, "offline": True, "why": github_auth.last_error}
         return {"needed": bool(needed), "device": bool(_client_id()),
                 "signed_in": bool(self._token and self._user), "user": self._user}
 
