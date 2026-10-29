@@ -6,7 +6,10 @@
 (function () {
   "use strict";
   const NINPUT = 24;
-  const ICE = [{ urls: ["stun:stun.cloudflare.com:3478", "stun:stun.l.google.com:19302"] }];
+  // STUN finds a direct route; the server also gives a 12-hour password for the home TURN
+  // relay, which carries the stream when two networks can't connect directly
+  const STUN = [{ urls: ["stun:stun.cloudflare.com:3478", "stun:stun.l.google.com:19302"] }];
+  const iceServers = () => (window.RVNet && RVNet.me && RVNet.me.ice) || STUN;
   const DEAD = 0.18;
 
   // ── controller -> RetroPad indexes (EmulatorJS simulateInput) ──────────────────
@@ -69,7 +72,7 @@
       RVNet.emit("streamstats", { role: "host", viewers: guests.length });
     },
     async _hostPeer(player, port) {
-      const pc = new RTCPeerConnection({ iceServers: ICE });
+      const pc = new RTCPeerConnection({ iceServers: iceServers(), iceTransportPolicy: RVStream.relayOnly ? "relay" : "all" });
       const peer = { pc, port, uid: player.uid, name: player.name, last: new Array(NINPUT).fill(0), inputs: 0 };
       this.peers.set(player.uid, peer);
       this.media.getTracks().forEach(t => pc.addTrack(t, this.media));
@@ -120,7 +123,7 @@
       ov.querySelector("#rv-stream-full").onclick = () => (ov.requestFullscreen ? ov.requestFullscreen() : null);
     },
     async _onOffer(from, data) {
-      const pc = new RTCPeerConnection({ iceServers: ICE });
+      const pc = new RTCPeerConnection({ iceServers: iceServers(), iceTransportPolicy: RVStream.relayOnly ? "relay" : "all" });
       const peer = { pc, port: data.port, uid: from, dc: null };
       this.peers.set(from, peer);
       const video = document.getElementById("rv-stream-video"), bar = document.getElementById("rv-stream-bar");
