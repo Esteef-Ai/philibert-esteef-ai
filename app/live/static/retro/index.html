@@ -1448,10 +1448,11 @@ async function launchGame(idx){
       const blob=await getRomBlob(g);
       romBytes=await blob.arrayBuffer();
     } else if(isMame) {
-      // MAME: skip fetch entirely — use direct server URL so core reads filename
-      romBlobUrl = (g.romPath
-        ? (g.romPath.startsWith("http") ? g.romPath : window.location.origin+g.romPath)
-        : window.location.origin+"/retro/roms/MAME/"+encodeURIComponent(g.filename));
+      // MAME: skip fetch entirely — the core reads the set name from the URL's file name.
+      // /retro/arcade/<set>.zip gives it the lower-case name MAME 2003-Plus needs, with the
+      // parent's and BIOS's chips added for clones (see Vault.arcade_zip)
+      const setName=(g.filename||"").replace(/\.zip$/i,"").toLowerCase();
+      romBlobUrl = window.location.origin+"/retro/arcade/"+encodeURIComponent(setName)+".zip";
     } else {
       const url=g.romPath
         ? (g.romPath.startsWith("http") ? g.romPath : window.location.origin+g.romPath)

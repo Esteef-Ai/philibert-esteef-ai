@@ -22,6 +22,7 @@ import os
 import re
 import threading
 import time
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 import urllib.parse
 import urllib.request
@@ -165,6 +166,61 @@ class Vault:
             if e.is_file() and os.path.splitext(e.name)[0].lower() == base:
                 return e
         return None
+
+    # --- arcade: what MAME 2003-Plus needs to start a set ---------------------------
+    # The core only recognises a set by its lower-case name (1942.zip, not 1942.ZIP),
+    # and a clone or BIOS game also needs the chips of its parent / BIOS - but the
+    # emulator only gets one file. So arcade games are served as one zip named
+    # <set>.zip holding the set's own files plus its parent's and BIOS's.
+    # Built once into Entertainment/.cache/arcade, rebuilt when a source zip changes.
+    _romof = None
+
+    def arcade_chain(self, set_name):
+        if Vault._romof is None:
+            try:
+                p = Path(__file__).parent / "live" / "static" / "retro" / "mame2003_romof.json"
+                Vault._romof = json.loads(p.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                Vault._romof = {}
+        chain, cur = [], Vault._romof.get(set_name)
+        while cur and cur not in chain and len(chain) < 4:
+            chain.append(cur)
+            cur = Vault._romof.get(cur)
+        return chain
+
+    def arcade_zip(self, set_name):
+        set_name = (set_name or "").lower()
+        if set_name.endswith(".zip"):
+            set_name = set_name[:-4]
+        if not re.fullmatch(r"[a-z0-9_]{1,32}", set_name):
+            return None
+        own = self.rom_file("MAME", set_name + ".zip")
+        if not own:
+            return None
+        parts = [own] + [p for p in (self.rom_file("MAME", c + ".zip") for c in self.arcade_chain(set_name)) if p]
+        if len(parts) == 1:
+            return own                                   # nothing to add; the URL already gives the lower-case name
+        out = self.root / ".cache" / "arcade" / (set_name + ".zip")
+        newest = max(p.stat().st_mtime for p in parts)
+        if out.is_file() and out.stat().st_mtime >= newest:
+            return out
+        out.parent.mkdir(parents=True, exist_ok=True)
+        tmp = out.with_name(out.name + ".building")
+        seen = set()
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as z:
+            for p in parts:                              # the set's own chips first, then parent, then BIOS
+                try:
+                    with zipfile.ZipFile(p) as src:
+                        for i in src.infolist():
+                            name = i.filename.rsplit("/", 1)[-1].lower()
+                            if i.is_dir() or not name or name in seen:
+                                continue
+                            seen.add(name)
+                            z.writestr(name, src.read(i))
+                except zipfile.BadZipFile:
+                    self.log(f"Retro Vault: {p.name} is not a readable zip")
+        os.replace(tmp, out)
+        return out
 
     # --- the emulator ------------------------------------------------------------
     def emulator_ready(self):
@@ -460,6 +516,10 @@ def handle_get(v, path, query):
         f = v.rom_file(parts[0], parts[1] if len(parts) > 1 else "")
         return (200, TYPES.get(f.suffix.lower(), "application/octet-stream"), f) if f else \
                (404, "text/plain", b"That game is not in Entertainment/Cartridges.")
+    if rel.startswith("arcade/"):                        # arcade/<set>.zip - see Vault.arcade_zip
+        f = v.arcade_zip(urllib.parse.unquote(rel[7:]))
+        return (200, "application/zip", f) if f else \
+               (404, "text/plain", b"That arcade game is not in Entertainment/Cartridges.")
     if rel == "api/art-job":
         return 200, "application/json", json.dumps(dict(v.job, online=v.online())).encode()
     if rel.startswith("art/"):                          # art/<system>/<box|snap>/<rom file>
