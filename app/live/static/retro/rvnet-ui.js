@@ -3,7 +3,7 @@
 // openModal/closeModal, toast, esc, cleanName.
 (function () {
   "use strict";
-  const LOCKSTEP_SYSTEMS = ["NES", "SNES", "Genesis", "SMS", "GB", "GBA", "MAME"];   // proven deterministic
+  const LOCKSTEP_SYSTEMS = ["NES", "SNES", "Genesis", "SMS", "GB", "GBA", "MAME", "NEOGEO"];   // proven deterministic (FBNeo: byte-identical, 2026-10-29)
   const STREAM_ONLY = ["N64"];          // not deterministic in EmulatorJS: the host streams it
   const $ = id => document.getElementById(id);
 
@@ -50,7 +50,14 @@
                           : location.origin + "/retro/roms/" + g.system + "/" + encodeURIComponent(g.filename);
     const r = await fetch(url);
     if (!r.ok) throw new Error("couldn't read " + g.filename);
-    return r.arrayBuffer();
+    if (g.system !== "NEOGEO") return r.arrayBuffer();
+    // Neo Geo: the game only runs the same everywhere with the same parent + BIOS, so they count too
+    const parts = [await r.arrayBuffer()];
+    for (const f of [g.parent ? g.parent + ".zip" : null, "neogeo.zip"].filter(Boolean)) {
+      const x = await fetch("/retro/neogeo/" + f);
+      if (x.ok) parts.push(await x.arrayBuffer());
+    }
+    return await new Blob(parts).arrayBuffer();
   }
 
   // ── rendering ───────────────────────────────────────────────────────────────

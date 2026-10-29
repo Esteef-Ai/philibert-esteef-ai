@@ -974,7 +974,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
 const APP_VERSION = "1.3.0";
 // Box shape (width / height) per system, measured from the libretro scans: NES and Master
 // System 0.70, GBA 1.00, SNES 1.41, N64 1.43 (US boxes).
-const BOX_RATIO={NES:0.70,SNES:1.41,Genesis:0.70,SMS:0.70,GBA:1.0,N64:1.43,GB:1.0,MAME:0.70};
+const BOX_RATIO={NES:0.70,SNES:1.41,Genesis:0.70,SMS:0.70,GBA:1.0,N64:1.43,GB:1.0,MAME:0.70,NEOGEO:0.70};
 const SYSTEMS=[
   {id:"NES",label:"NES",color:"var(--nes)",exts:[".nes"],core:"nes",emoji:"🎮"},
   {id:"SNES",label:"SNES",color:"var(--snes)",exts:[".sfc",".smc"],core:"snes",emoji:"🕹️"},
@@ -984,6 +984,7 @@ const SYSTEMS=[
   {id:"N64",label:"N64",color:"var(--n64)",exts:[".z64",".n64",".v64"],core:"n64",emoji:"🌟"},
   {id:"GB",label:"GB/GBC",color:"var(--gb)",exts:[".gb",".gbc"],core:"gb",emoji:"🎲"},
   {id:"MAME",label:"MAME/Arcade",color:"var(--mame,#c62828)",exts:[".zip"],core:"mame2003_plus",emoji:"🕹️",isMame:true},
+  {id:"NEOGEO",label:"Neo Geo",color:"#d4a017",exts:[".zip"],core:"fbneo",emoji:"🕹️",isNeo:true},
 ];
 const SYS_MAP=Object.fromEntries(SYSTEMS.map(s=>[s.id,s]));
 
@@ -1029,7 +1030,7 @@ function saveLib(){
       filename:g.filename, title:g.title, system:g.system,
       genre:g.genre||"", year:g.year||null, emoji:g.emoji||"",
       publisher:g.publisher||"", developer:g.developer||"",
-      isZip:g.isZip||false, romPath:g.romPath||"",
+      isZip:g.isZip||false, romPath:g.romPath||"", parent:g.parent||"",
       coverBox:g.coverBox||null, coverCart:g.coverCart||null,
       // Exclude: fileHandle, cover, _svgPlaceholder, description, metaDone
     };
@@ -1451,12 +1452,33 @@ async function launchGame(idx){
   let romBlobUrl;
   // isMame: MAME ZIPs are passed as-is (not extracted) — declared here for full scope
   const isMame = g.system === "MAME";
+  // Neo Geo (FinalBurn Neo): the game zip, its parent zip (clones) and neogeo.zip (BIOS) go to
+  // the core as zips side by side - short names + <base href="/retro/neogeo/"> + dontExtractBIOS
+  const isNeo = g.system === "NEOGEO";
+  if(isNeo){
+    let st={};
+    try{ st=await (await fetch("/retro/api/neogeo")).json(); }catch(e){}
+    if(st.bios!=="ok"){
+      spinner.style.display="none";
+      showEmuError(st.bios==="old"
+        ? "Neo Geo needs the CURRENT neogeo.zip (BIOS).\n\nThe neogeo.zip in Cartridges\\NeoGeo is an old (2003-era) set: its sm1.sm1, sfix.sfix and 000-lo.lo are older dumps that FinalBurn Neo can't use.\nReplace it with an up-to-date neogeo.zip (FinalBurn Neo / current MAME) and try again."
+        : "Neo Geo needs neogeo.zip (the BIOS) in Entertainment\\Cartridges\\NeoGeo, next to the games.");
+      return;
+    }
+    if(!st.core && !st.online){
+      spinner.style.display="none";
+      showEmuError("The Neo Geo emulator (FinalBurn Neo) isn't on this drive yet.\nGo online once (Internet switch) and start the game again - it downloads by itself (about 8 MB).");
+      return;
+    }
+  }
   try{
     let romBytes;
     if(g.fileHandle){
       spinnerTxt.textContent="Reading local file...";
       const blob=await getRomBlob(g);
       romBytes=await blob.arrayBuffer();
+    } else if(isNeo) {
+      romBlobUrl=(g.filename||"").toLowerCase();       // relative: /retro/neogeo/<set>.zip via <base>
     } else if(isMame) {
       // MAME: skip fetch entirely — the core reads the set name from the URL's file name.
       // /retro/arcade/<set>.zip gives it the lower-case name MAME 2003-Plus needs, with the
@@ -1494,7 +1516,7 @@ async function launchGame(idx){
       } else { romBytes=raw; }
     }
     spinnerTxt.textContent="Starting emulator...";
-    if(!isMame){
+    if(!isMame && !isNeo){
       // Non-MAME: create blob URL from extracted ROM bytes
       if(window._romBlobUrl) URL.revokeObjectURL(window._romBlobUrl);
       window._romBlobUrl=URL.createObjectURL(new Blob([romBytes],{type:"application/octet-stream"}));
@@ -1515,13 +1537,14 @@ async function launchGame(idx){
   // This gives EmulatorJS its own document context so the canvas sizes correctly
   // MAME: gameName must be the ROM set ID (filename without .zip, lowercase)
   // Other systems: cleaned title works fine
-  const safeName = isMame
+  const safeName = (isMame || isNeo)
     ? (g.filename||g.title||"game").replace(/\.zip$/i,"").replace(/[^a-zA-Z0-9_-]/g,"").toLowerCase().trim()||"game"
     : (g.title||g.filename||"game").replace(/[^a-zA-Z0-9 _-]/g,"").trim()||"game";
   var stateKey = "rvstate_" + g.system + "_" + safeName;
   var _t = "scr"+"ipt";
   var _dl = [];
   _dl.push("<!DOCTYPE html><html><head><meta charset='UTF-8'>");
+  if(isNeo) _dl.push("<base href='/retro/neogeo/'>");
   _dl.push("<style>*{margin:0;padding:0;box-sizing:border-box;}html,body{width:100%;height:100%;background:#000;overflow:hidden;}#game{width:100%;height:100%;display:flex;align-items:center;justify-content:center;}#game canvas,#game video{max-width:100%;max-height:100%;image-rendering:pixelated;}</style></head><body>");
   // Online match: the virtual clock (lockstep.js) must be in place before EmulatorJS loads
   if(window._rvNetplay) _dl.push("<"+_t+" src='/retro/lib/lockstep.js'></"+_t+"><"+_t+">window._netplay=true;</"+_t+">");
@@ -1529,6 +1552,7 @@ async function launchGame(idx){
   if(window._rvStreamHost) _dl.push("<"+_t+" src='/retro/lib/audiotap.js'></"+_t+">");
   _dl.push("<div id='game'></div><"+_t+">");
   _dl.push("EJS_player='#game';EJS_core='"+( sys.core||"nes" )+"';EJS_gameUrl='"+romBlobUrl+"';");
+  if(isNeo) _dl.push("EJS_biosUrl='neogeo.zip';EJS_dontExtractBIOS=true;"+(g.parent?"EJS_gameParentUrl='"+g.parent+".zip';":""));
   _dl.push("EJS_gameName='"+safeName+"';EJS_pathtodata='"+ejsBase+"/';EJS_startOnLoaded=true;");
   _dl.push("EJS_color='#7c5cbf';EJS_backgroundColor='#000000';EJS_disableAutoLang=false;EJS_threads=false;")
 ;
@@ -1635,7 +1659,7 @@ async function launchGame(idx){
     spinner.style.display="none";
     var _ifr=document.getElementById("emu-iframe");
     if(_ifr) _ifr.style.filter=buildFilter();
-  },isMame?12000:8000); // MAME cores take longer to initialize
+  },(isMame||isNeo)?12000:8000); // arcade cores take longer to initialize
 }
 
 function showEmuError(msg){
@@ -3458,7 +3482,8 @@ async function serverAutoLoad(){
         if(!exists){
           LIBRARY.push({
             filename: f.name,
-            title:    cleanName(f.name),
+            title:    f.title||cleanName(f.name),       // Neo Geo: the real title for a set name like mslug.zip
+            parent:   f.parent||"",
             system:   sysId,
             genre:    f.genre||"Unknown",
             year:     f.year||null,

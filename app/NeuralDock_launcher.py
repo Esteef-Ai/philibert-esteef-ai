@@ -18213,6 +18213,16 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers","Content-Type")
         self.end_headers()
 
+    def do_HEAD(self):
+        # EmulatorJS asks for a file's size with HEAD before downloading it (game, parent,
+        # BIOS). Without this the server answered 501 and a BIOS download never finished
+        # (Neo Geo). Retro Vault's GET code already leaves the body out for HEAD.
+        if urllib.parse.urlparse(self.path).path.startswith("/retro/"):
+            return self.do_GET()
+        self.send_response(405)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_GET(self):
         # Route on the path WITHOUT the query string. authed() accepts a
         # ?token= parameter, but this comparison used the raw self.path, so

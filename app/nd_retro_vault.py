@@ -32,17 +32,23 @@ from pathlib import Path
 EJS_VERSION = "4.2.3"
 EJS_BASE = f"https://cdn.emulatorjs.org/{EJS_VERSION}/data/"
 CORES = ["fceumm", "snes9x", "genesis_plus_gx", "mgba", "mupen64plus_next", "gambatte", "mame2003_plus"]
+# Cores added after drives were already set up: Setup fetches them with the rest, a drive
+# without them gets them the first time a game needs them (while online) - see handle_get
+ON_DEMAND_CORES = ["fbneo"]            # Neo Geo (FinalBurn Neo)
+ON_DEMAND_FILES = [f for c in ON_DEMAND_CORES for f in
+                   (f"cores/{c}-wasm.data", f"cores/{c}-legacy-wasm.data", f"cores/reports/{c}.json")]
 EJS_FILES = (["loader.js", "emulator.min.js", "emulator.min.css",
               "compression/extractzip.js", "compression/extract7z.js"]
              + [f"cores/{c}-wasm.data" for c in CORES]
              + [f"cores/{c}-legacy-wasm.data" for c in CORES]
-             + [f"cores/reports/{c}.json" for c in CORES])
+             + [f"cores/reports/{c}.json" for c in CORES]
+             + ON_DEMAND_FILES)
 
 # extensions and folder names per system (from Retro Vault, plus the Master System)
 SYS_EXTS = {
     "NES": [".nes", ".zip"], "SNES": [".sfc", ".smc", ".zip"], "Genesis": [".bin", ".md", ".gen", ".zip"],
     "SMS": [".sms", ".bin", ".zip"], "GBA": [".gba", ".zip"], "N64": [".z64", ".n64", ".v64", ".zip"],
-    "GB": [".gb", ".gbc", ".zip"], "MAME": [".zip"],
+    "GB": [".gb", ".gbc", ".zip"], "MAME": [".zip"], "NEOGEO": [".zip"],
 }
 SYS_FOLDERS = {
     "NES": ["nes", "Nintendo Entertainment System", "Nintendo Entertainment System (NES)",
@@ -58,6 +64,7 @@ SYS_FOLDERS = {
     "GB": ["gb", "gbc", "gameboy", "Game Boy", "Nintendo Game Boy", "Nintendo - Game Boy", "Nintendo - Game Boy Color",
            "Game Boy Color", "GameBoy Color", "GB & GBC"],
     "MAME": ["mame", "arcade", "mame2003", "mame2003_plus", "Arcade - MAME", "MAME - Arcade", "FinalBurn", "FBNeo"],
+    "NEOGEO": ["neogeo", "Neo Geo", "Neo-Geo", "SNK Neo Geo", "SNK - Neo Geo", "Neo Geo MVS", "Neo Geo AES", "NeoGeo MVS"],
 }
 KEYWORDS = {
     "NES": [r"nintendo entertainment", r"\bnes\b", r"famicom"],
@@ -68,11 +75,13 @@ KEYWORDS = {
     "N64": [r"nintendo 64", r"\bn64\b"],
     "GB": [r"game ?boy colou?r", r"\bgbc\b", r"game ?boy$", r"\bgb\b"],
     "MAME": [r"\bmame\b", r"arcade", r"finalburn", r"fbneo"],
+    "NEOGEO": [r"neo ?-?geo"],
 }
 LIBRETRO = {
     "NES": "Nintendo - Nintendo Entertainment System", "SNES": "Nintendo - Super Nintendo Entertainment System",
     "Genesis": "Sega - Mega Drive - Genesis", "SMS": "Sega - Master System - Mark III",
     "GBA": "Nintendo - Game Boy Advance", "N64": "Nintendo - Nintendo 64", "GB": "Nintendo - Game Boy", "MAME": "MAME",
+    "NEOGEO": "SNK - Neo Geo",
 }
 _art_lock = threading.Lock()
 # libretro-thumbnails: one GitHub repo per system, named with underscores
@@ -149,9 +158,17 @@ class Vault:
         roms = sorted(f for f in files if any(f.lower().endswith(e) for e in exts))
         chosen = zips if zips else roms                      # never both: no duplicates
         hidden = set(self.hidden().get(sys_id, []))
-        return [{"name": f, "path": "/retro/roms/" + sys_id + "/" + urllib.parse.quote(f),
-                 "isZip": f.lower().endswith(".zip"), "hidden": f in hidden}
-                for f in chosen if include_hidden or f not in hidden]
+        out = [{"name": f, "path": "/retro/roms/" + sys_id + "/" + urllib.parse.quote(f),
+                "isZip": f.lower().endswith(".zip"), "hidden": f in hidden}
+               for f in chosen if include_hidden or f not in hidden]
+        if sys_id == "NEOGEO":                               # real titles; the BIOS isn't a game
+            sets = self.neo_sets()
+            out = [g for g in out if os.path.splitext(g["name"])[0].lower() not in ("neogeo", "gg-bios")]
+            for g in out:
+                s = sets.get(os.path.splitext(g["name"])[0].lower())
+                if s:
+                    g.update(title=s[0], parent=s[1], year=s[2], publisher=s[3])
+        return out
 
     # --- hide / throw away games ---------------------------------------------------
     # Hidden = a list on the drive (Entertainment/hidden.json); the file stays.
@@ -308,7 +325,60 @@ class Vault:
 
     # --- the emulator ------------------------------------------------------------
     def emulator_ready(self):
-        return all((self.emu / f).is_file() for f in EJS_FILES if "-legacy-" not in f)
+        return all((self.emu / f).is_file() for f in EJS_FILES if "-legacy-" not in f and f not in ON_DEMAND_FILES)
+
+    def fetch_on_demand(self, rel):
+        """A core added after this drive was set up: download it now (while online)."""
+        if rel not in ON_DEMAND_FILES or not self.online():
+            return None
+        core = rel.split("/")[-1].split("-")[0].replace(".json", "")
+        files = [f for f in ON_DEMAND_FILES if f.split("/")[-1].startswith(core)]
+        try:
+            fetch_emulator(self.root, log=lambda m: self.log("Retro Vault " + m), files=files)
+        except Exception as e:
+            self.log(f"Retro Vault: could not download the {core} core ({e})")
+            return None
+        return self.emulator_file(rel)
+
+    # --- Neo Geo (FinalBurn Neo) -----------------------------------------------------
+    # Sets are named like MAME (mslug.zip); FBNeo needs the game zip, its parent zip (clones)
+    # and neogeo.zip (BIOS) side by side as zips - the page serves all three from
+    # /retro/neogeo/<file> with <base href> so EmulatorJS keeps the names (dontExtractBIOS).
+    # neogeo_fbneo.json (from the FBNeo Neo Geo DAT): set -> [title, parent, year, maker].
+    NEO_BIOS_NEED = {0x94416D67: "sm1.sm1", 0xC2EA0CFD: "sfix.sfix", 0x5A86CFF2: "000-lo.lo"}
+    NEO_BIOS_ANY = {0x9036D879, 0xC7F2FA45, 0x2723A5B5, 0xACEDE59C, 0x91B64BE3, 0xE72943DE, 0x16D0C132}
+    _neo = None
+
+    @classmethod
+    def neo_sets(cls):
+        if cls._neo is None:
+            try:
+                cls._neo = json.loads((Path(__file__).parent / "live" / "static" / "retro" / "neogeo_fbneo.json")
+                                      .read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                cls._neo = {}
+        return cls._neo
+
+    def neo_art_title(self, rom, kind="box"):
+        """The title libretro's Neo Geo covers use for a set: FBNeo's "A / B" is "A _ B" there
+        ("Art of Fighting 2 _ Ryuuko no Ken 2 (NGH-056)"); else just the first title."""
+        s = self.neo_sets().get(os.path.splitext(os.path.basename(rom))[0].lower())
+        if not s:
+            return rom
+        full = s[0].replace(" / ", " _ ")
+        return full if " _ " not in full or self.match_art("NEOGEO", full, kind) else s[0].split(" / ")[0]
+
+    def neo_bios(self):
+        """missing | old | ok - FBNeo needs the CURRENT neogeo.zip (2003-era BIOS sets don't boot)."""
+        f = self.rom_file("NEOGEO", "neogeo.zip")
+        if not f:
+            return "missing"
+        try:
+            with zipfile.ZipFile(f) as z:
+                crcs = {i.CRC for i in z.infolist()}
+        except (OSError, zipfile.BadZipFile):
+            return "missing"
+        return "ok" if all(c in crcs for c in self.NEO_BIOS_NEED) and crcs & self.NEO_BIOS_ANY else "old"
 
     def emulator_file(self, rel):
         try:
@@ -470,7 +540,10 @@ class Vault:
         def one(w):
             sys_id, rom, kind, tag = w
             self.job["system"] = sys_id
-            p, why = self.fetch_art(sys_id, rom, kind, rom=rom)
+            title = rom
+            if sys_id == "NEOGEO":                           # mslug.zip -> "Metal Slug - Super Vehicle-001"
+                title = self.neo_art_title(rom, kind)
+            p, why = self.fetch_art(sys_id, title, kind, rom=rom)
             with _art_lock:
                 self.job["done"] += 1
                 if p:
@@ -604,6 +677,13 @@ def handle_get(v, path, query):
         f = v.rom_file(parts[0], parts[1] if len(parts) > 1 else "")
         return (200, TYPES.get(f.suffix.lower(), "application/octet-stream"), f) if f else \
                (404, "text/plain", b"That game is not in Entertainment/Cartridges.")
+    if rel.startswith("neogeo/"):                        # neogeo/<file>.zip - game, parent or BIOS, see neo_bios
+        name = urllib.parse.unquote(rel[7:])
+        f = v.rom_file("NEOGEO", name) if name.lower().endswith(".zip") else None
+        return (200, "application/zip", f) if f else (404, "text/plain", b"That Neo Geo file is not in Entertainment/Cartridges.")
+    if rel == "api/neogeo":
+        return 200, "application/json", json.dumps({"bios": v.neo_bios(), "online": v.online(),
+                                                    "core": all(v.emulator_file(f) for f in ON_DEMAND_FILES if "fbneo" in f and "-legacy-" not in f)}).encode()
     if rel.startswith("arcade/"):                        # arcade/<set>.zip - see Vault.arcade_zip
         f = v.arcade_zip(urllib.parse.unquote(rel[7:]))
         return (200, "application/zip", f) if f else \
@@ -619,7 +699,7 @@ def handle_get(v, path, query):
         p = v.art_path(parts[0], parts[1] if len(parts) > 1 else "", parts[2] if len(parts) > 2 else "box")
         return (200, "image/png", p) if p and p.is_file() else (204, "text/plain", b"")
     if rel.startswith("emulator/"):
-        f = v.emulator_file(urllib.parse.unquote(rel[9:]))
+        f = v.emulator_file(urllib.parse.unquote(rel[9:])) or v.fetch_on_demand(urllib.parse.unquote(rel[9:]))
         return (200, TYPES.get(f.suffix.lower(), "application/octet-stream"), f) if f else \
                (404, "text/plain", b"Retro Vault's emulator is not on this drive yet.")
     if rel.startswith("state/"):
