@@ -980,11 +980,17 @@
         return '<div class="st-app"><div class="st-ico">' + I.svg(a.id, 32) + '</div><div><b>' + esc(a.name) + "</b>" +
           (a.installed ? ' <span class="on">&#10003; on your desktop</span>' : "") + '<div class="about">' + esc(a.about) +
           (needs ? " <i>Needs the Retro Vault option from Philibert Setup.</i>" : "") + "</div></div>" +
-          (a.installed ? '<button class="btn" data-st-rm="' + esc(a.id) + '">Remove</button>'
+          (a.setup ? '<button class="btn" data-st-how="' + esc(a.id) + '">How to add</button>'    // Chat on a no-AI drive
+           : a.installed ? '<button class="btn" data-st-rm="' + esc(a.id) + '">Remove</button>'
                        : '<button class="btn" data-st-add="' + esc(a.id) + '"' + (needs ? " disabled" : "") + ">Add</button>") + "</div>";
       }).join("");
       el.onclick = function (ev) {
-        var add = ev.target.closest("[data-st-add]"), rm = ev.target.closest("[data-st-rm]");
+        var add = ev.target.closest("[data-st-add]"), rm = ev.target.closest("[data-st-rm]"), how = ev.target.closest("[data-st-how]");
+        if (how) {
+          var app = (d.apps || []).filter(function (x) { return x.id === how.dataset.stHow; })[0];
+          msgbox(app ? app.name : "App Store", app ? app.about : "", "info");
+          return;
+        }
         if (!add && !rm) return;
         var id = (add || rm).dataset[add ? "stAdd" : "stRm"];
         if (rm) close(id);
