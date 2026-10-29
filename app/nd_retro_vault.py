@@ -3,7 +3,10 @@
 Ported from the Retro Vault app (retro-vault/server.py) for Philibert's Full
 edition. What changed for a drive that travels between computers:
 
-  - games come from <drive>/Entertainment/Cartridges/<system folder> only
+  - games come from <drive>/Entertainment/Cartridges/<system folder>, plus the
+    user's own ROM folders (Settings -> ROM Folders, kept in Entertainment/rom_folders.json):
+    one "My ROMs" folder with a folder per system like Cartridges, and/or one folder
+    per system. A folder that isn't on this computer (the drive moved) is skipped.
   - EmulatorJS and its cores are on the drive (Entertainment/emulator/<ver>),
     fetched once at install - nothing loads from a CDN while playing
   - box art is cached in Entertainment/art; new art is only downloaded while
@@ -21,6 +24,8 @@ import json
 import os
 import re
 import shutil
+import subprocess
+import sys
 import threading
 import time
 import zipfile
@@ -134,11 +139,65 @@ class Vault:
         self._keys = {}                                     # (system, kind) -> {art_key: [names]}
         self.job = {"state": "idle"}                        # the background art download
 
+    # --- the user's own ROM folders --------------------------------------------------
+    def folders(self):
+        """{"root": "<My ROMs folder>" | "", "systems": {sys_id: "<folder>"}}"""
+        try:
+            d = json.loads((self.root / "rom_folders.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            d = {}
+        if not isinstance(d, dict):
+            d = {}
+        root = d.get("root") if isinstance(d.get("root"), str) else ""
+        systems = {k: v for k, v in (d.get("systems") or {}).items()
+                   if k in SYS_EXTS and isinstance(v, str) and v} if isinstance(d.get("systems"), dict) else {}
+        return {"root": root, "systems": systems}
+
+    @staticmethod
+    def _clean_folder(path):
+        """A folder the user typed or picked -> (absolute path, None) or (None, why)."""
+        path = (path or "").strip().strip('"').strip()
+        if not path:
+            return "", None
+        if len(path) > 400 or "\0" in path:
+            return None, "That doesn't look like a folder."
+        p = Path(os.path.expanduser(path))
+        if not p.is_absolute():
+            return None, "Use the whole path, like D:\\Games\\ROMs (or press Browse)."
+        if not p.is_dir():
+            return None, f"There's no folder {path} on this computer."
+        return str(p), None
+
+    def set_folder(self, sys_id, path):
+        """sys_id "" = the My ROMs folder. An empty path removes it. -> (ok, message)"""
+        if sys_id and sys_id not in SYS_EXTS:
+            return False, "Unknown system."
+        clean, why = self._clean_folder(path)
+        if why:
+            return False, why
+        f = self.folders()
+        if not sys_id:
+            f["root"] = clean
+        elif clean:
+            f["systems"][sys_id] = clean
+        else:
+            f["systems"].pop(sys_id, None)
+        self.root.mkdir(parents=True, exist_ok=True)
+        p = self.root / "rom_folders.json"
+        tmp = p.with_name(p.name + ".saving")
+        tmp.write_text(json.dumps(f, indent=1), encoding="utf-8")
+        os.replace(tmp, p)
+        self.log(f"Retro Vault: ROM folder {sys_id or '(My ROMs)'} -> {clean or 'removed'}")
+        return True, clean
+
     # --- the library -------------------------------------------------------------
-    def sys_dir(self, sys_id):
-        if not self.carts.is_dir():
+    @staticmethod
+    def _match(parent, sys_id):
+        """The folder for sys_id inside parent (Cartridges or My ROMs), by name."""
+        try:
+            dirs = [d for d in Path(parent).iterdir() if d.is_dir() and not d.name.startswith(".")]
+        except OSError:
             return None
-        dirs = [d for d in self.carts.iterdir() if d.is_dir() and not d.name.startswith(".")]
         cands = [c.lower() for c in SYS_FOLDERS.get(sys_id, [sys_id])]
         for d in dirs:
             if d.name.lower() in cands:
@@ -148,12 +207,52 @@ class Vault:
                 return d
         return None
 
+    def sys_dirs(self, sys_id):
+        """Every folder this system's games come from; the first one wins a name clash:
+        the system's own folder, the My ROMs folder's match, then Cartridges."""
+        f, out = self.folders(), []
+        own = f["systems"].get(sys_id)
+        if own and Path(own).is_dir():
+            out.append(Path(own))
+        if f["root"] and Path(f["root"]).is_dir():
+            m = self._match(f["root"], sys_id)
+            if m:
+                out.append(m)
+        if self.carts.is_dir():
+            m = self._match(self.carts, sys_id)
+            if m:
+                out.append(m)
+        seen, uniq = set(), []
+        for d in out:
+            k = os.path.normcase(str(d.resolve()))
+            if k not in seen:
+                seen.add(k)
+                uniq.append(d)
+        return uniq
+
+    def sys_dir(self, sys_id):
+        """The drive's own folder for the system (where Restore puts a game back by default)."""
+        return self._match(self.carts, sys_id) if self.carts.is_dir() else None
+
+    def _is_custom(self, d):
+        try:
+            Path(d).resolve().relative_to(self.carts.resolve())
+            return False
+        except (ValueError, OSError):
+            return True
+
     def list_system(self, sys_id, include_hidden=False):
-        d = self.sys_dir(sys_id)
-        if not d:
-            return []
         exts = [e for e in SYS_EXTS.get(sys_id, []) if e != ".zip"]
-        files = [f.name for f in d.iterdir() if f.is_file() and not f.name.startswith(".")]
+        files, have = [], set()
+        for d in self.sys_dirs(sys_id):
+            try:
+                names = [f.name for f in d.iterdir() if f.is_file() and not f.name.startswith(".")]
+            except OSError:
+                continue
+            for n in names:
+                if n.lower() not in have:
+                    have.add(n.lower())
+                    files.append(n)
         zips = sorted(f for f in files if f.lower().endswith(".zip"))
         roms = sorted(f for f in files if any(f.lower().endswith(e) for e in exts))
         chosen = zips if zips else roms                      # never both: no duplicates
@@ -207,6 +306,7 @@ class Vault:
         while dest.exists():                                 # never overwrite an earlier one
             dest = dest_dir / f"{f.stem} ({n}){f.suffix}"; n += 1
         shutil.move(str(f), str(dest))
+        self._origin(sys_id, dest.name, str(f.parent))     # Restore puts it back where it was
         self.set_hidden_quiet(sys_id, f.name)
         self.log(f"Retro Vault: {sys_id}/{f.name} moved to the Trash")
         return True, dest.name
@@ -224,7 +324,7 @@ class Vault:
         for s in SYS_EXTS:
             d = self._trash_dir(s)
             if t.is_dir() and d.is_dir():
-                out[s] = sorted(f.name for f in d.iterdir() if f.is_file())
+                out[s] = sorted(f.name for f in d.iterdir() if f.is_file() and not f.name.startswith("."))
         return out
 
     def _trash_file(self, sys_id, filename):
@@ -233,8 +333,23 @@ class Vault:
         p = self._trash_dir(sys_id) / filename
         return p if p.is_file() else None
 
+    def _origin(self, sys_id, name, folder=None):
+        """Trash/<system>/.origins.json: {file in the Trash: the folder it came from}"""
+        j = self._trash_dir(sys_id) / ".origins.json"
+        try:
+            o = json.loads(j.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            o = {}
+        if folder is None:
+            return o.get(name)
+        o[name] = folder
+        j.write_text(json.dumps(o, indent=1), encoding="utf-8")
+        return folder
+
     def restore(self, sys_id, filename):
-        p, d = self._trash_file(sys_id, filename), self.sys_dir(sys_id)
+        p = self._trash_file(sys_id, filename)
+        came = self._origin(sys_id, filename) if p else None
+        d = Path(came) if came and Path(came).is_dir() else self.sys_dir(sys_id)
         if not p or not d:
             return False, "Not in the Trash."
         dest = d / p.name
@@ -252,19 +367,31 @@ class Vault:
         return True, filename
 
     def rom_file(self, sys_id, filename):
-        d = self.sys_dir(sys_id)
-        if not d or not filename or "/" in filename or "\\" in filename or filename.startswith("."):
+        if not filename or "/" in filename or "\\" in filename or filename.startswith("."):
             return None
+        for d in self.sys_dirs(sys_id):
+            f = self._rom_in(d, filename)
+            # from the user's own folders only game files are served, nothing else in them
+            if f and (not self._is_custom(d) or f.suffix.lower() in SYS_EXTS.get(sys_id, [])):
+                return f
+        return None
+
+    @staticmethod
+    def _rom_in(d, filename):
         p = d / filename
         if p.is_file():
             return p
         low = filename.lower()
-        for e in d.iterdir():
-            if e.is_file() and e.name.lower() == low:
+        try:
+            entries = [e for e in d.iterdir() if e.is_file()]
+        except OSError:
+            return None
+        for e in entries:
+            if e.name.lower() == low:
                 return e
         base = os.path.splitext(low)[0]
-        for e in d.iterdir():
-            if e.is_file() and os.path.splitext(e.name)[0].lower() == base:
+        for e in entries:
+            if os.path.splitext(e.name)[0].lower() == base:
                 return e
         return None
 
@@ -647,6 +774,32 @@ def _art_url(sys_id, kind, rom):
     return "/retro/art/" + "/".join(urllib.parse.quote(x, safe="") for x in (sys_id, kind, rom))
 
 
+def pick_folder(title, start=""):
+    """This computer's own folder picker (Philibert runs on the same computer as its
+    window). -> the folder, or "" when cancelled or not possible."""
+    title = re.sub(r"[^\w .,:()\-]", "", title)[:80]
+    start = start if start and Path(start).is_dir() else ""
+    try:
+        if sys.platform == "win32":
+            ps = ("Add-Type -AssemblyName System.Windows.Forms;"
+                  "$o=New-Object System.Windows.Forms.Form -Property @{TopMost=$true;ShowInTaskbar=$false};"
+                  "$d=New-Object System.Windows.Forms.FolderBrowserDialog;$d.Description=$env:RV_TITLE;"
+                  "$d.ShowNewFolderButton=$false;if($env:RV_START){$d.SelectedPath=$env:RV_START};"
+                  "if($d.ShowDialog($o) -eq 'OK'){[Console]::Out.Write($d.SelectedPath)}")
+            r = subprocess.run(["powershell", "-NoProfile", "-STA", "-Command", ps], capture_output=True, text=True,
+                               timeout=600, env={**os.environ, "RV_TITLE": title, "RV_START": start},
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        elif sys.platform == "darwin":
+            r = subprocess.run(["osascript", "-e", f'POSIX path of (choose folder with prompt "{title}")'],
+                               capture_output=True, text=True, timeout=600)
+        else:
+            return ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    out = (r.stdout or "").strip()
+    return out if out and Path(out).is_dir() else ""
+
+
 def handle_get(v, path, query):
     """-> (status, content_type, bytes_or_Path). path is under /retro/."""
     rel = path[len("/retro/"):] if path.startswith("/retro/") else ""
@@ -664,8 +817,12 @@ def handle_get(v, path, query):
     if rel == "api/trash":
         return 200, "application/json", json.dumps(v.trash_list()).encode()
     if rel == "api/get-sys-paths":
-        data = {s: {"override": None, "resolved": str(v.sys_dir(s)) if v.sys_dir(s) else None,
-                    "count": len(v.list_system(s))} for s in SYS_EXTS}
+        f = v.folders()
+        data = {s: {"override": f["systems"].get(s) or "",
+                    "missing": bool(f["systems"].get(s)) and not Path(f["systems"][s]).is_dir(),
+                    "resolved": [str(d) for d in v.sys_dirs(s)], "count": len(v.list_system(s))} for s in SYS_EXTS}
+        data["_root"] = {"path": f["root"], "missing": bool(f["root"]) and not Path(f["root"]).is_dir(),
+                         "cartridges": str(v.carts)}
         return 200, "application/json", json.dumps(data).encode()
     if rel == "api/meta":
         return 200, "application/json", json.dumps({"publisher": "", "developer": "", "year": None, "genre": ""}).encode()
@@ -748,6 +905,26 @@ def handle_post(v, path, raw):
         return (200 if ok else 404), "application/json", json.dumps({"ok": ok, "message": msg}).encode()
     if rel == "api/art-job":
         return 200, "application/json", json.dumps(v.art_job_start()).encode()
+    if rel in ("api/set-sys-path", "api/set-roms-root"):
+        try:
+            d = json.loads(raw or b"{}")
+        except ValueError:
+            d = {}
+        sys_id = "" if rel == "api/set-roms-root" else str(d.get("system", ""))
+        if rel == "api/set-sys-path" and not sys_id:
+            return 400, "application/json", b'{"ok":false,"error":"Which system?"}'
+        ok, msg = v.set_folder(sys_id, str(d.get("path", "")))
+        body = {"ok": ok, "path": msg} if ok else {"ok": False, "error": msg}
+        if ok:
+            body["count"] = len(v.list_system(sys_id)) if sys_id else sum(len(v.list_system(x)) for x in SYS_EXTS)
+        return 200, "application/json", json.dumps(body).encode()
+    if rel == "api/pick-folder":
+        try:
+            d = json.loads(raw or b"{}")
+        except ValueError:
+            d = {}
+        path = pick_folder(str(d.get("title") or "Pick your ROMs folder"), str(d.get("start") or ""))
+        return 200, "application/json", json.dumps({"ok": bool(path), "path": path}).encode()
     if rel == "api/art-cached":
         # which games already have art on the drive: one request for the whole library,
         # so art shows offline at once (new art is only downloaded while online)

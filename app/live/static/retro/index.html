@@ -154,6 +154,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
 .syi-NES{background:var(--nes);}.syi-SNES{background:var(--snes);}.syi-Genesis{background:var(--genesis);}.syi-GBA{background:var(--gba);}.syi-N64{background:var(--n64);}.syi-GB{background:var(--gb);}
 .sys-row-info{flex:1;min-width:0;}
 .sys-row-name{font-size:.8rem;font-weight:600;}
+.rf-note{font-size:.7rem;color:var(--muted);line-height:1.6;margin-bottom:.75rem;}
+.rf-head{font-size:.68rem;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin:.9rem 0 .5rem;}
+.rf-line{display:flex;gap:.4rem;margin-top:.35rem;align-items:center;}
+.rf-input{flex:1;min-width:0;background:var(--surface3);border:1px solid var(--border);border-radius:5px;padding:.3rem .55rem;color:var(--text);font-size:.67rem;font-family:monospace;}
+.rf-btn{font-size:.65rem;padding:.28rem .6rem;white-space:nowrap;}
+.rf-root{border-color:var(--accent);}
 .sys-row-path{font-size:.68rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
 .sys-row-count{font-size:.65rem;color:var(--accent2);margin-top:1px;}
 .folder-pick-btn{background:var(--surface);border:1px solid var(--border2);border-radius:6px;color:var(--text);cursor:pointer;padding:.38rem .8rem;font-size:.7rem;font-family:inherit;white-space:nowrap;transition:all .15s;display:flex;align-items:center;gap:.4rem;}
@@ -333,7 +339,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
 #ptt-indicator .ptt-dot{width:8px;height:8px;border-radius:50%;background:#2ea86e;animation:pttblink .5s steps(1) infinite;}
 @keyframes pttblink{50%{opacity:0;}}
 /* Philibert: not on a drive */
-#mn-netplay,#tb-netplay,#emu-np-btn,#emu-lobby,#mn-upload,#tb-upload,#tb-restart,#ptt-indicator,#mn-open-folder,#tb-add-folder,#sidebar-add-folder,#empty-add-btn,.form-row:has(#opt-ejsurl),.form-row:has(#netplay-port-input),.np-online-badge{display:none!important}
+#mn-netplay,#tb-netplay,#emu-np-btn,#emu-lobby,#mn-upload,#tb-upload,#tb-restart,#ptt-indicator,.form-row:has(#opt-ejsurl),.form-row:has(#netplay-port-input),.np-online-badge{display:none!important}
 </style>
 </head>
 <body>
@@ -450,7 +456,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
         <button class="vt-btn" id="vt-list" title="List"><svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button>
       </div>
     </div>
-    <div id="empty-state" class="empty show"><div class="empty-px">NO ROMS LOADED<br><br>PUT YOUR GAMES IN<br>ENTERTAINMENT/CARTRIDGES<br>ONE FOLDER PER SYSTEM</div><button class="empty-btn" id="empty-add-btn">+ Add ROM Folder</button></div>
+    <div id="empty-state" class="empty show"><div class="empty-px">NO ROMS LOADED<br><br>PUT YOUR GAMES IN<br>ENTERTAINMENT/CARTRIDGES<br>ONE FOLDER PER SYSTEM<br><br>OR ADD YOUR OWN ROMS FOLDER</div><button class="empty-btn" id="empty-add-btn">+ Add ROM Folder</button></div>
     <div id="game-grid" class="game-grid" style="display:none"></div>
     <div id="game-list" class="game-list" style="display:none"></div>
     <div id="no-results" class="empty" style="display:none"><div class="empty-px">NO RESULTS FOUND</div></div>
@@ -464,11 +470,27 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
     <div class="modal-hdr"><h2>SETTINGS</h2><button class="modal-close" data-close="settings-modal">x</button></div>
     <div class="modal-body">
       <div class="stabs">
-        <button class="stab" data-tab="tab-folders" hidden>ROM Folders</button>
+        <button class="stab" data-tab="tab-folders">ROM Folders</button>
         <button class="stab" data-tab="tab-port" hidden>Network</button>
         <button class="stab active" data-tab="tab-general">General</button>
       </div>
       <div class="stab-panel" id="tab-folders">
+        <div class="rf-note">Games always come from <b>Entertainment\Cartridges</b> on the drive. Add your own folders too -
+          they're read where they are, nothing is copied. A folder on this computer only shows up when the drive is plugged into it.</div>
+        <div class="sys-row rf-root">
+          <div class="sys-icon" style="background:var(--accent)">ALL</div>
+          <div class="sys-row-info" style="flex:1;min-width:0;">
+            <div class="sys-row-name">My ROMs folder</div>
+            <div class="sys-row-path" id="rf-root-state">One folder with a folder per system inside (NES, SNES, N64, MAME...), like Cartridges.</div>
+            <div class="rf-line">
+              <input type="text" id="rf-root-input" class="rf-input" placeholder="e.g. D:\Games\ROMs" spellcheck="false">
+              <button class="btn-ghost rf-btn" id="rf-root-browse">Browse...</button>
+              <button class="btn-ghost rf-btn" id="rf-root-save">&#x2713; Save</button>
+              <button class="btn-ghost rf-btn" id="rf-root-clear" title="Stop using this folder (the files stay)">Remove</button>
+            </div>
+          </div>
+        </div>
+        <div class="rf-head">Or one folder for a system</div>
         <div id="sys-folder-rows"></div>
         <div class="scan-bar" id="scan-bar"><div class="spin"></div><span id="scan-msg">Scanning...</span></div>
       </div>
@@ -1939,130 +1961,105 @@ document.getElementById("mn-ctrl-map").onclick=openCtrlModal;
 
 // SETTINGS
 // ═══════════════════════════════════════════════════════════
-// PER-SYSTEM ROM PATH MANAGEMENT
-// Paths saved server-side to T:\RetroVaultMedia\sys_paths.json
+// ROM FOLDERS: Cartridges on the drive, plus the user's own folders
+// (a "My ROMs" folder with a folder per system, and/or one folder per system).
+// Kept on the drive in Entertainment/rom_folders.json by the server.
 // ═══════════════════════════════════════════════════════════
-var SYS_PATH_CACHE = {}; // {sysId: {override, resolved, count}}
+var SYS_PATH_CACHE = {}; // {sysId: {override, missing, resolved:[...], count}, _root: {path, missing, cartridges}}
 
 function loadSysPathsFromServer(){
-  if(window.location.protocol==="file:") return;
-  fetch("/retro/api/get-sys-paths")
+  if(window.location.protocol==="file:") return Promise.resolve();
+  return fetch("/retro/api/get-sys-paths")
     .then(function(r){ return r.json(); })
-    .then(function(data){
-      SYS_PATH_CACHE = data;
-      buildSysFolderRows();
-    })
+    .then(function(data){ SYS_PATH_CACHE = data || {}; buildSysFolderRows(); })
     .catch(function(){});
 }
 
+// Save a folder: sysId "" = the My ROMs folder; path "" = stop using it.
 function setSysPath(sysId, path){
   if(window.location.protocol==="file:"){ toast("Requires server",true); return; }
-  if(!path){ toast("Enter a path first",true); return; }
-  return fetch("/retro/api/set-sys-path",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({system:sysId, path:path})
-  })
-  .then(function(r){ return r.json(); })
-  .then(function(data){
-    if(data.ok){
-      toast(sysId+" path saved ✓ Scanning ROMs...");
-      SYS_PATH_CACHE[sysId]={override:path,resolved:path,count:0};
-      buildSysFolderRows();
-      // Immediately scan this system
-      return fetch("/retro/api/roms?system="+sysId)
-        .then(function(r){ return r.json(); })
-        .then(function(resp){
-          var files=Array.isArray(resp)?resp:(resp[sysId]||[]);
-          var sys=SYS_MAP[sysId]||{};
-          // Remove existing entries for this system (re-scan replaces them)
-          LIBRARY=LIBRARY.filter(function(g){ return g.system!==sysId; });
-          files.forEach(function(f){
-            LIBRARY.push({
-              filename:f.name, title:cleanName(f.name), system:sysId,
-              genre:"Unknown", year:null, description:"", emoji:sys.emoji||"🎮",
-              cover:null, isZip:f.isZip||false, metaDone:false, romPath:f.path
-            });
-          });
-          LIBRARY.sort(function(a,b){
-            if(a.system!==b.system) return a.system.localeCompare(b.system);
-            return a.title.localeCompare(b.title);
-          });
-          SYS_PATH_CACHE[sysId].count=files.length;
-          saveLib(); buildSidebar(); renderGames(); buildSysFolderRows();
-          toast(sysId+": "+files.length+" ROM"+(files.length!==1?"s":"")+" loaded ✓");
-        });
-    } else {
-      toast("Path error: "+(data.error||"unknown"),true);
-    }
-  })
-  .catch(function(e){ toast("Failed: "+e.message,true); });
+  var url = sysId ? "/retro/api/set-sys-path" : "/retro/api/set-roms-root";
+  return fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({system:sysId, path:path})})
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if(!data.ok){ toast(data.error||"That folder didn't work.",true); return; }
+      var who = sysId ? ((SYS_MAP[sysId]||{}).label||sysId) : "My ROMs folder";
+      toast(path ? who+": saved ✓ - "+data.count+" game"+(data.count!==1?"s":"")+" found" : who+": removed (the files stay where they are)");
+      return reloadLibraryFromServer();
+    })
+    .catch(function(e){ toast("Failed: "+e.message,true); });
+}
+
+// Games from folders that were removed leave the library; new ones come in.
+function reloadLibraryFromServer(){
+  return Promise.resolve(serverAutoLoad()).then(loadSysPathsFromServer).then(function(){ buildSidebar(); renderGames(); });
 }
 
 function buildSysFolderRows(){
-  const counts={};LIBRARY.forEach(g=>{counts[g.system]=(counts[g.system]||0)+1;});
-  document.getElementById("sys-folder-rows").innerHTML=SYSTEMS.map(s=>{
-    var cache=SYS_PATH_CACHE[s.id]||{};
-    var resolvedPath=cache.resolved||"";
-    var overridePath=cache.override||"";
-    var srvCount=cache.count||0;
-    var localCount=counts[s.id]||0;
-    var displayCount=Math.max(srvCount,localCount);
-    var shortPath=resolvedPath.length>40?"..."+resolvedPath.slice(-37):resolvedPath;
-    var label=s.id==="Genesis"?"GEN":s.id==="MAME"?"MAME":s.id;
-    return `<div class="sys-row">
-      <div class="sys-icon syi-${s.id}" style="background:${s.color||"var(--accent)"}">${label}</div>
-      <div class="sys-row-info" style="flex:1;min-width:0;">
-        <div class="sys-row-name">${s.label}</div>
-        <div class="sys-row-path" id="spath-${s.id}" style="font-size:.63rem;color:${resolvedPath?"var(--accent2)":"var(--dim)"};">
-          ${shortPath||"No path set — enter path below or use folder picker"}
-        </div>
-        <div style="display:flex;gap:.4rem;margin-top:.35rem;align-items:center;">
-          <input type="text" id="syspath-input-${s.id}" placeholder="e.g. G:\\Roms\\${s.id.toLowerCase()}" value="${overridePath}"
-            style="flex:1;background:var(--surface3);border:1px solid var(--border);border-radius:5px;
-            padding:.3rem .55rem;color:var(--text);font-size:.67rem;font-family:monospace;">
-          <button class="btn-ghost sys-path-save-btn" data-sys="${s.id}"
-            style="font-size:.65rem;padding:.28rem .65rem;white-space:nowrap;">&#x2713; Save Path</button>
-        </div>
-        <div class="sys-row-count" id="scount-${s.id}" style="margin-top:.25rem;">${displayCount?displayCount+" game"+(displayCount!==1?"s":""):""}</div>
-      </div>
-      <button class="folder-pick-btn" data-sys="${s.id}" title="Browse for folder"
-        style="flex-shrink:0;margin-left:.5rem;">
-        <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-        Browse
-      </button>
-    </div>`;
+  var root = SYS_PATH_CACHE._root || {};
+  var ri = document.getElementById("rf-root-input");
+  if(ri && document.activeElement!==ri) ri.value = root.path || "";
+  var rs = document.getElementById("rf-root-state");
+  if(rs){
+    rs.style.color = root.missing ? "#ff9a5c" : (root.path ? "var(--accent2)" : "");
+    rs.textContent = root.missing ? "Not on this computer right now: "+root.path
+      : root.path ? "Using "+root.path+" - with a folder per system inside (NES, SNES, N64, MAME...)."
+      : "One folder with a folder per system inside (NES, SNES, N64, MAME...), like Cartridges.";
+  }
+  var rows = document.getElementById("sys-folder-rows");
+  if(!rows) return;
+  rows.innerHTML = SYSTEMS.map(function(s){
+    var c = SYS_PATH_CACHE[s.id] || {};
+    var from = (c.resolved||[]);
+    var label = s.id==="Genesis"?"GEN":s.id==="MAME"?"MAME":s.id;
+    var state = c.missing ? "<span style='color:#ff9a5c'>Not on this computer right now: "+esc(c.override)+"</span>"
+      : from.length ? esc(from.join("  +  ")) : "No folder yet";
+    return '<div class="sys-row">'
+      +'<div class="sys-icon syi-'+s.id+'" style="background:'+(s.color||"var(--accent)")+'">'+label+'</div>'
+      +'<div class="sys-row-info" style="flex:1;min-width:0;">'
+      +'<div class="sys-row-name">'+esc(s.label)+(c.count?' <span style="color:var(--dim);font-weight:400">· '+c.count+' game'+(c.count!==1?'s':'')+'</span>':'')+'</div>'
+      +'<div class="sys-row-path" title="'+esc(from.join("\n"))+'">'+state+'</div>'
+      +'<div class="rf-line">'
+      +'<input type="text" class="rf-input" id="syspath-input-'+s.id+'" placeholder="its own folder, e.g. D:\\Games\\'+esc(s.id)+'" value="'+esc(c.override||"")+'" spellcheck="false">'
+      +'<button class="btn-ghost rf-btn" data-rf="browse" data-sys="'+s.id+'">Browse...</button>'
+      +'<button class="btn-ghost rf-btn" data-rf="save" data-sys="'+s.id+'">&#x2713; Save</button>'
+      +(c.override?'<button class="btn-ghost rf-btn" data-rf="clear" data-sys="'+s.id+'" title="Stop using this folder (the files stay)">Remove</button>':'')
+      +'</div></div></div>';
   }).join("");
-  document.querySelectorAll(".folder-pick-btn").forEach(btn=>btn.addEventListener("click",()=>pickFolder(btn.dataset.sys)));
-  document.querySelectorAll(".sys-path-save-btn").forEach(btn=>btn.addEventListener("click",function(){
-    var sysId=btn.dataset.sys;
-    var pathVal=document.getElementById("syspath-input-"+sysId).value.trim();
-    setSysPath(sysId, pathVal);
-  }));
 }
 
-async function pickFolder(sysId){
-  if(!window.showDirectoryPicker){toast("Requires Chrome or Edge",true);return;}
-  try{
-    const dh=await window.showDirectoryPicker({mode:"read"});
-    folderHandles[sysId]=dh;
-    const btn=document.querySelector(`.folder-pick-btn[data-sys="${sysId}"]`);
-    if(btn){btn.classList.add("busy");btn.textContent="Scanning...";}
-    setScan(true,"Scanning "+dh.name+"...");
-    const count=await scanFolder(sysId,dh);
-    document.getElementById("spath-"+sysId).textContent=dh.name;
-    document.getElementById("scount-"+sysId).textContent=count+" game"+(count!==1?"s":"");
-    if(btn){btn.classList.remove("busy");btn.textContent="Change";}
-    toast(`Found ${count} ROM${count!==1?"s":""} in ${dh.name}`);
-    buildSidebar();renderGames();
-    if(CFG.autoMeta){
-      const need=LIBRARY.map((g,i)=>({g,i})).filter(({g})=>g.system===sysId&&!g.metaDone).map(({i})=>i);
-      if(need.length){ await enrichBatch(need,msg=>setScan(true,msg)); }
-      // Box art not auto-downloaded on folder add; use View > Download Box Art
-    }
-    setScan(false);buildSidebar();renderGames();buildSysFolderRows();
-  }catch(e){if(e.name!=="AbortError"){toast("Error: "+e.message,true);console.error(e);}setScan(false);}
+// This computer's folder picker (the server opens it: Philibert runs on this computer)
+function pickFolder(sysId){
+  var input = sysId ? document.getElementById("syspath-input-"+sysId) : document.getElementById("rf-root-input");
+  var title = sysId ? "Pick the folder with your "+((SYS_MAP[sysId]||{}).label||sysId)+" games"
+                    : "Pick your ROMs folder (with a folder per system inside)";
+  toast("Opening the folder picker...");
+  return fetch("/retro/api/pick-folder",{method:"POST",headers:{"Content-Type":"application/json"},
+               body:JSON.stringify({title:title, start:(input&&input.value)||""})})
+    .then(function(r){ return r.json(); })
+    .then(function(d){ if(d.ok && d.path){ if(input) input.value=d.path; return setSysPath(sysId, d.path); } })
+    .catch(function(e){ toast("Failed: "+e.message,true); });
 }
+
+(function(){
+  var tab = document.getElementById("tab-folders");
+  if(!tab) return;
+  tab.addEventListener("click", function(ev){
+    var b = ev.target.closest("button"); if(!b) return;
+    if(b.id==="rf-root-browse") return pickFolder("");
+    if(b.id==="rf-root-save") return setSysPath("", document.getElementById("rf-root-input").value.trim());
+    if(b.id==="rf-root-clear"){ document.getElementById("rf-root-input").value=""; return setSysPath("", ""); }
+    var sysId = b.dataset.sys, act = b.dataset.rf; if(!sysId || !act) return;
+    if(act==="browse") return pickFolder(sysId);
+    if(act==="save") return setSysPath(sysId, document.getElementById("syspath-input-"+sysId).value.trim());
+    if(act==="clear") return setSysPath(sysId, "");
+  });
+  tab.addEventListener("keydown", function(ev){
+    if(ev.key!=="Enter" || !ev.target.classList.contains("rf-input")) return;
+    var sysId = ev.target.id==="rf-root-input" ? "" : ev.target.id.replace("syspath-input-","");
+    setSysPath(sysId, ev.target.value.trim());
+  });
+})();
 
 function setScan(show,msg){
   document.getElementById("scan-bar").classList.toggle("show",show);
@@ -2070,7 +2067,7 @@ function setScan(show,msg){
 }
 
 function openSettingsModal(tab){
-  buildSysFolderRows();
+  buildSysFolderRows(); loadSysPathsFromServer();
   document.getElementById("port-input").value=CFG.port;
   document.getElementById("host-input").value=CFG.hostOverride;
   document.getElementById("rom-base-url").value=CFG.romBaseUrl;
