@@ -188,6 +188,16 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
 .emu-action-btn{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--muted);cursor:pointer;padding:.28rem .6rem;font-size:.68rem;font-family:inherit;transition:all .12s;display:flex;align-items:center;gap:.3rem;}
 .emu-action-btn:hover{background:var(--surface3);color:var(--text);}
 .emu-action-btn svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+/* the EMUlator loading splash: big, loud, a little unhinged */
+.emu-splash-img{width:min(300px,42%);max-height:48%;object-fit:contain;animation:emuBob 1.1s ease-in-out infinite;}
+.emu-splash-title{font-family:'Press Start 2P',monospace;font-size:clamp(1.3rem,4.6vw,3rem);line-height:1.35;text-align:center;
+  color:#ffd23f;letter-spacing:.04em;text-shadow:4px 4px 0 #ff2e88,8px 8px 0 #0f172a,0 0 24px rgba(255,120,0,.55);
+  transform:rotate(-3deg);animation:emuShake .9s steps(2) infinite;}
+.emu-splash-title span{color:#00e5ff;text-shadow:4px 4px 0 #ff2e88,8px 8px 0 #0f172a,0 0 24px rgba(0,229,255,.6);}
+@keyframes emuShake{0%{transform:rotate(-3deg) translate(0,0)}25%{transform:rotate(-2deg) translate(2px,-1px)}
+  50%{transform:rotate(-4deg) translate(-2px,1px)}75%{transform:rotate(-3deg) translate(1px,2px)}100%{transform:rotate(-3deg) translate(0,0)}}
+@keyframes emuBob{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-8px) rotate(1.5deg)}}
+@media (prefers-reduced-motion:reduce){.emu-splash-img,.emu-splash-title{animation:none}}
 .emu-spinner{position:absolute;inset:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;font-family:'Press Start 2P',monospace;font-size:.5rem;color:var(--dim);letter-spacing:.1em;}
 .emu-bar{background:var(--surface);display:flex;gap:1rem;padding:.42rem 1rem;font-size:.68rem;color:var(--dim);flex-wrap:wrap;justify-content:center;}
 .emu-bar kbd{background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:1px 5px;font-family:inherit;font-size:.66rem;color:var(--text);}
@@ -741,8 +751,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
   </div>
 </div>
 <div id="emu-spinner" style="position:absolute;inset:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;font-family:'Press Start 2P',monospace;font-size:.5rem;color:var(--dim);letter-spacing:.1em;z-index:10;">
+        <img src="/retro/lib/emulator.png" alt="The EMUlator" class="emu-splash-img">
+        <div class="emu-splash-title">LOADING<br>THE <span>EMU</span>lator</div>
         <div class="spin" style="width:18px;height:18px;"></div>
-        <img src="/retro/lib/emulator.png" alt="The EMUlator" style="width:min(300px,45%);max-height:55%;object-fit:contain;order:-1">
         <div id="emu-spinner-txt">LOADING ROM...</div>
       </div>
       <iframe id="emu-iframe"
@@ -1442,6 +1453,8 @@ async function launchGame(idx){
   const spinnerTxt=document.getElementById("emu-spinner-txt");
   spinner.style.display="flex";
   spinnerTxt.textContent="Loading ROM...";
+  window._emuSplashAt=Date.now();     // the EMUlator gets his moment: see hideSplash
+  clearTimeout(window._emuSplashHide);
   openModal("emu-modal");
 
   // Block if opened as file://
@@ -1641,7 +1654,7 @@ async function launchGame(idx){
     var t=e.data.type;
     var sl=e.data.slot||activeSlot();
     if(t==="ejs_started"){
-      spinner.style.display="none";
+      hideSplash();
       var ifr=document.getElementById("emu-iframe");
       if((window._rvNetplay || window._rvStreamHost) && window.RVNet && ifr) RVNet.emulatorReady(ifr.contentWindow);
       if(ifr) ifr.style.filter=buildFilter();
@@ -1659,13 +1672,25 @@ async function launchGame(idx){
   // Fallback: hide spinner after 15s
   clearTimeout(window._emuSpinnerTimer);
   window._emuSpinnerTimer=setTimeout(function(){
-    spinner.style.display="none";
+    hideSplash();
     var _ifr=document.getElementById("emu-iframe");
     if(_ifr) _ifr.style.filter=buildFilter();
   },(isMame||isNeo)?12000:8000); // arcade cores take longer to initialize
 }
 
+// The loading splash stays up at least EMU_SPLASH_MS, even when the game is ready
+// sooner (it plays on behind it). Errors still take it down at once.
+var EMU_SPLASH_MS=4500;
+function hideSplash(){
+  var left=EMU_SPLASH_MS-(Date.now()-(window._emuSplashAt||0));
+  clearTimeout(window._emuSplashHide);
+  window._emuSplashHide=setTimeout(function(){
+    document.getElementById("emu-spinner").style.display="none";
+  },Math.max(0,left));
+}
+
 function showEmuError(msg){
+  clearTimeout(window._emuSplashHide);
   const container=document.getElementById("emu-container");
   document.getElementById("emu-spinner").style.display="none";
   // Remove old error panel
