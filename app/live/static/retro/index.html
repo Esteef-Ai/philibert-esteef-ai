@@ -411,6 +411,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
   <div class="tb-sep"></div>
   <button class="tb-btn" id="tb-video"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="12" y1="17" x2="12" y2="21"/></svg>Video</button>
   <button class="tb-btn" id="tb-netplay"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><line x1="2" y1="12" x2="22" y2="12"/></svg>Netplay</button>
+  <button class="tb-btn" id="tb-hidden" title="Games you hid or deleted - show them again, restore or delete forever"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>Hidden &amp; Trash</button>
   <button class="tb-btn" id="tb-controller"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><line x1="12" y1="7" x2="12" y2="4"/><circle cx="8" cy="12" r="1"/><circle cx="16" cy="12" r="1"/><circle cx="12" cy="12" r="1"/></svg>Controller</button>
   <div class="tb-sep" style="margin-left:auto;"></div>
   <button class="tb-btn" id="tb-restart" title="Restart Retro Vault — closes all windows, waits 3s, reloads" style="color:#ff7070;border-color:rgba(255,80,80,.25);background:rgba(255,50,50,.08);"><svg viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Restart</button>
@@ -670,9 +671,18 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
       <div class="detail-desc" id="detail-desc" style="display:none"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn-ghost" data-close="detail-modal">Close</button>
+      <button class="btn-ghost" id="detail-hide-btn" title="Take it out of the library. Toolbar → Hidden &amp; Trash shows it again.">Hide</button>
+      <button class="btn-ghost" id="detail-trash-btn" style="color:#ff7070;border-color:rgba(255,80,80,.35)" title="Move the ROM file to the Trash (restore it later from Hidden &amp; Trash)">Delete</button>
+      <button class="btn-ghost" data-close="detail-modal" style="margin-left:auto">Close</button>
       <button class="btn-primary" id="detail-play-btn">Play Now</button>
     </div>
+  </div>
+</div>
+<div class="modal-overlay" id="hidden-modal">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-hdr"><h2>HIDDEN &amp; TRASH</h2><button class="modal-close" data-close="hidden-modal">x</button></div>
+    <div class="modal-body" id="hidden-body" style="max-height:60vh;overflow:auto"></div>
+    <div class="modal-footer"><button class="btn-ghost" data-close="hidden-modal">Close</button></div>
   </div>
 </div>
 
@@ -1766,6 +1776,68 @@ document.getElementById("mn-load-state").onclick=()=>{if(!document.getElementByI
 document.getElementById("tb-save-state").onclick=()=>{if(!document.getElementById("emu-modal").classList.contains("open")){toast("No game running");return;}sendEmuCmd("save");toast("Saving state...");};
 document.getElementById("tb-load-state").onclick=()=>{if(!document.getElementById("emu-modal").classList.contains("open")){toast("No game running");return;}sendEmuCmd("load");toast("Loading state...");};
 document.getElementById("detail-play-btn").onclick=()=>launchGame(detailIdx);
+
+// ── Hide / Delete games (files in Entertainment/Cartridges) ─────────────────
+async function romApi(api, body){
+  try{
+    const r=await fetch("/retro/api/"+api,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    return await r.json();
+  }catch(e){ return {ok:false,message:"Retro Vault's server isn't answering"}; }
+}
+function dropFromLibrary(g){
+  const i=LIBRARY.indexOf(g); if(i>=0) LIBRARY.splice(i,1);
+  saveLib(); buildSidebar(); renderGames();
+}
+function driveGame(g){ return g && g.romPath && g.romPath.indexOf("/retro/roms/")===0; }
+document.getElementById("detail-hide-btn").onclick=async()=>{
+  const g=LIBRARY[detailIdx];
+  if(!driveGame(g)){ toast("Only games in the drive's library can be hidden",true); return; }
+  const r=await romApi("rom-hide",{system:g.system,file:g.filename,hidden:true});
+  if(!r.ok){ toast("Couldn't hide it: "+(r.message||"error"),true); return; }
+  closeModal("detail-modal"); dropFromLibrary(g);
+  toast("Hidden: "+g.title+" - Hidden & Trash shows it again");
+};
+document.getElementById("detail-trash-btn").onclick=async()=>{
+  const g=LIBRARY[detailIdx];
+  if(!driveGame(g)){ toast("Only games in the drive's library can be deleted here",true); return; }
+  if(!confirm("Delete "+g.title+"?\n\nThe file moves to the Trash (Entertainment\\Trash). You can restore it from Hidden & Trash, or delete it forever there.")) return;
+  const r=await romApi("rom-trash",{system:g.system,file:g.filename});
+  if(!r.ok){ toast("Couldn't delete it: "+(r.message||"error"),true); return; }
+  closeModal("detail-modal"); dropFromLibrary(g);
+  toast("Moved to the Trash: "+g.title);
+};
+async function openHiddenModal(){
+  const box=document.getElementById("hidden-body");
+  box.innerHTML="<div style='color:var(--dim)'>Loading...</div>";
+  openModal("hidden-modal");
+  let roms={}, trash={};
+  try{
+    roms=await (await fetch("/retro/api/roms?system=all&hidden=1")).json();
+    trash=await (await fetch("/retro/api/trash")).json();
+  }catch(e){ box.textContent="Retro Vault's server isn't answering."; return; }
+  const row=(sys,file,btns)=>"<div style='display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)'>"
+    +"<span class='list-sys' style='background:"+((SYS_MAP[sys]||{}).color||"#7c5cbf")+"'>"+esc(sys)+"</span>"
+    +"<span style='flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' title='"+esc(file)+"'>"+esc(cleanName(file))+"</span>"+btns+"</div>";
+  const b=(act,sys,file,label,red)=>"<button class='btn-ghost' data-act='"+act+"' data-sys='"+esc(sys)+"' data-file='"+esc(file)+"'"
+    +(red?" style='color:#ff7070;border-color:rgba(255,80,80,.35)'":"")+">"+label+"</button>";
+  let h="<h3 style='margin:4px 0 6px'>Hidden</h3>", n=0;
+  Object.keys(roms).forEach(s=>(roms[s]||[]).filter(f=>f.hidden).forEach(f=>{ n++; h+=row(s,f.name,b("show",s,f.name,"Show again")); }));
+  if(!n) h+="<div style='color:var(--dim)'>No hidden games.</div>";
+  h+="<h3 style='margin:16px 0 6px'>Trash</h3>"; n=0;
+  Object.keys(trash).forEach(s=>(trash[s]||[]).forEach(f=>{ n++; h+=row(s,f,b("restore",s,f,"Restore")+b("purge",s,f,"Delete forever",true)); }));
+  if(!n) h+="<div style='color:var(--dim)'>The Trash is empty.</div>";
+  box.innerHTML=h;
+  box.querySelectorAll("button[data-act]").forEach(btn=>btn.onclick=async()=>{
+    const a=btn.dataset.act, s=btn.dataset.sys, f=btn.dataset.file;
+    if(a==="purge" && !confirm("Delete "+cleanName(f)+" forever?\n\nThis removes the file from the drive. It can't be undone.")) return;
+    const r=await romApi(a==="show"?"rom-hide":a==="restore"?"rom-restore":"rom-purge",{system:s,file:f,hidden:false});
+    if(!r.ok){ toast(r.message||"That didn't work",true); return; }
+    toast(a==="show"?"Back in the library: "+cleanName(f):a==="restore"?"Restored: "+cleanName(f):"Deleted forever: "+cleanName(f));
+    if(a!=="purge") await serverAutoLoad();
+    openHiddenModal();
+  });
+}
+document.getElementById("tb-hidden").onclick=openHiddenModal;
 
 // VIDEO
 const VF=[{id:"none",name:"None",desc:"Original"},{id:"crt",name:"CRT",desc:"Monitor glow"},{id:"scanline",name:"Scanlines",desc:"TV lines"},{id:"sharp",name:"Sharpen",desc:"Crisp edges"},{id:"warm",name:"Warm",desc:"Sepia tone"},{id:"cool",name:"Cool",desc:"Blue shift"},{id:"grayscale",name:"Greyscale",desc:"B&W"}];
@@ -3345,7 +3417,7 @@ if(window.location.protocol === "file:") {
 
 // If running on a server (not file://), auto-fetch ROM list from /api/roms
 // This lets remote users see the library without selecting folders manually
-(async function serverAutoLoad(){
+async function serverAutoLoad(){
   if(window.location.protocol==="file:") return;
   try{
     const ping = await fetch("/retro/ping", {signal:AbortSignal.timeout(2000)});
@@ -3358,7 +3430,17 @@ if(window.location.protocol === "file:") {
     if(!resp.ok) return;
     const data = await resp.json();
 
+    // Games that came from the drive but are no longer listed (hidden, deleted, removed
+    // in Explorer) leave the saved library too
+    const onDrive = new Set();
+    Object.keys(data).forEach(function(s){ (data[s]||[]).forEach(function(f){ onDrive.add(s+"/"+f.name); }); });
+    const before = LIBRARY.length;
+    for(let i=LIBRARY.length-1;i>=0;i--){
+      const g=LIBRARY[i];
+      if(g.romPath && g.romPath.indexOf("/retro/roms/")===0 && !onDrive.has(g.system+"/"+g.filename)) LIBRARY.splice(i,1);
+    }
     let added = 0;
+    const pruned = before - LIBRARY.length;
     Object.keys(data).forEach(function(sysId){
       var sys = SYS_MAP[sysId];
       var files = Array.isArray(data[sysId]) ? data[sysId] : [];
@@ -3387,7 +3469,7 @@ if(window.location.protocol === "file:") {
       });
     });
 
-    if(added > 0){
+    if(added > 0 || pruned > 0){
       // Sort each system alphabetically
       LIBRARY.sort(function(a,b){
         if(a.system!==b.system) return a.system.localeCompare(b.system);
@@ -3401,7 +3483,8 @@ if(window.location.protocol === "file:") {
   }catch(e){
     console.warn("[RV] serverAutoLoad error:",e.message);
   }
-})();
+}
+serverAutoLoad();
 
 // Box art: what is on the drive shows at once (one request, works offline); while the
 // INTERNET switch is on, what is missing downloads in the background once a session.

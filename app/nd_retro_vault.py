@@ -20,6 +20,7 @@ import difflib
 import json
 import os
 import re
+import shutil
 import threading
 import time
 import zipfile
@@ -138,7 +139,7 @@ class Vault:
                 return d
         return None
 
-    def list_system(self, sys_id):
+    def list_system(self, sys_id, include_hidden=False):
         d = self.sys_dir(sys_id)
         if not d:
             return []
@@ -147,8 +148,91 @@ class Vault:
         zips = sorted(f for f in files if f.lower().endswith(".zip"))
         roms = sorted(f for f in files if any(f.lower().endswith(e) for e in exts))
         chosen = zips if zips else roms                      # never both: no duplicates
+        hidden = set(self.hidden().get(sys_id, []))
         return [{"name": f, "path": "/retro/roms/" + sys_id + "/" + urllib.parse.quote(f),
-                 "isZip": f.lower().endswith(".zip")} for f in chosen]
+                 "isZip": f.lower().endswith(".zip"), "hidden": f in hidden}
+                for f in chosen if include_hidden or f not in hidden]
+
+    # --- hide / throw away games ---------------------------------------------------
+    # Hidden = a list on the drive (Entertainment/hidden.json); the file stays.
+    # Delete = the file moves to Entertainment/Trash/<system>/ - Restore puts it back,
+    # "Delete forever" removes it from the Trash.
+    def hidden(self):
+        try:
+            d = json.loads((self.root / "hidden.json").read_text(encoding="utf-8"))
+            return d if isinstance(d, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def set_hidden(self, sys_id, filename, hide):
+        if not self.rom_file(sys_id, filename):
+            return False
+        h = self.hidden()
+        names = set(h.get(sys_id, []))
+        (names.add if hide else names.discard)(filename)
+        h[sys_id] = sorted(names)
+        p = self.root / "hidden.json"
+        tmp = p.with_name(p.name + ".saving")
+        tmp.write_text(json.dumps(h, indent=1), encoding="utf-8")
+        os.replace(tmp, p)
+        return True
+
+    def _trash_dir(self, sys_id):
+        return self.root / "Trash" / re.sub(r"[^A-Za-z0-9_-]", "", sys_id)
+
+    def trash(self, sys_id, filename):
+        f = self.rom_file(sys_id, filename)
+        if not f:
+            return False, "That game isn't in the library."
+        dest_dir = self._trash_dir(sys_id)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest, n = dest_dir / f.name, 2
+        while dest.exists():                                 # never overwrite an earlier one
+            dest = dest_dir / f"{f.stem} ({n}){f.suffix}"; n += 1
+        shutil.move(str(f), str(dest))
+        self.set_hidden_quiet(sys_id, f.name)
+        self.log(f"Retro Vault: {sys_id}/{f.name} moved to the Trash")
+        return True, dest.name
+
+    def set_hidden_quiet(self, sys_id, filename):
+        """Drop a name from the hidden list without checking the file (it just moved)."""
+        h = self.hidden()
+        if filename in h.get(sys_id, []):
+            h[sys_id] = [x for x in h[sys_id] if x != filename]
+            (self.root / "hidden.json").write_text(json.dumps(h, indent=1), encoding="utf-8")
+
+    def trash_list(self):
+        out = {}
+        t = self.root / "Trash"
+        for s in SYS_EXTS:
+            d = self._trash_dir(s)
+            if t.is_dir() and d.is_dir():
+                out[s] = sorted(f.name for f in d.iterdir() if f.is_file())
+        return out
+
+    def _trash_file(self, sys_id, filename):
+        if not filename or "/" in filename or "\\" in filename or filename.startswith("."):
+            return None
+        p = self._trash_dir(sys_id) / filename
+        return p if p.is_file() else None
+
+    def restore(self, sys_id, filename):
+        p, d = self._trash_file(sys_id, filename), self.sys_dir(sys_id)
+        if not p or not d:
+            return False, "Not in the Trash."
+        dest = d / p.name
+        if dest.exists():
+            return False, f"A game called {p.name} is already in the library."
+        shutil.move(str(p), str(dest))
+        return True, p.name
+
+    def purge(self, sys_id, filename):
+        p = self._trash_file(sys_id, filename)
+        if not p:
+            return False, "Not in the Trash."
+        p.unlink()
+        self.log(f"Retro Vault: {sys_id}/{filename} deleted from the Trash")
+        return True, filename
 
     def rom_file(self, sys_id, filename):
         d = self.sys_dir(sys_id)
@@ -500,8 +584,12 @@ def handle_get(v, path, query):
             "cartridges": str(v.carts), "systems": systems}).encode()
     if rel == "api/roms":
         sys_q = (query.get("system") or ["all"])[0]
-        data = {s: v.list_system(s) for s in SYS_EXTS} if sys_q in ("all", "") else v.list_system(sys_q)
+        inc = (query.get("hidden") or ["0"])[0] == "1"        # ?hidden=1: hidden games too, flagged
+        data = ({s: v.list_system(s, inc) for s in SYS_EXTS} if sys_q in ("all", "")
+                else v.list_system(sys_q, inc))
         return 200, "application/json", json.dumps(data).encode()
+    if rel == "api/trash":
+        return 200, "application/json", json.dumps(v.trash_list()).encode()
     if rel == "api/get-sys-paths":
         data = {s: {"override": None, "resolved": str(v.sys_dir(s)) if v.sys_dir(s) else None,
                     "count": len(v.list_system(s))} for s in SYS_EXTS}
@@ -563,6 +651,21 @@ def handle_post(v, path, raw):
                    + urllib.parse.quote(str(d.get("title")), safe="") + "/" + kind)
             return 200, "application/json", json.dumps({"ok": True, "url": url}).encode()
         return 200, "application/json", json.dumps({"ok": False, "why": why}).encode()
+    if rel in ("api/rom-hide", "api/rom-trash", "api/rom-restore", "api/rom-purge"):
+        try:
+            d = json.loads(raw or b"{}")
+        except ValueError:
+            d = {}
+        sys_id, name = str(d.get("system", "")), str(d.get("file", ""))
+        if rel == "api/rom-hide":
+            ok, msg = v.set_hidden(sys_id, name, bool(d.get("hidden", True))), name
+        elif rel == "api/rom-trash":
+            ok, msg = v.trash(sys_id, name)
+        elif rel == "api/rom-restore":
+            ok, msg = v.restore(sys_id, name)
+        else:
+            ok, msg = v.purge(sys_id, name)
+        return (200 if ok else 404), "application/json", json.dumps({"ok": ok, "message": msg}).encode()
     if rel == "api/art-job":
         return 200, "application/json", json.dumps(v.art_job_start()).encode()
     if rel == "api/art-cached":
