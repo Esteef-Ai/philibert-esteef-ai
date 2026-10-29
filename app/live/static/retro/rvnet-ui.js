@@ -4,6 +4,7 @@
 (function () {
   "use strict";
   const LOCKSTEP_SYSTEMS = ["NES", "SNES", "Genesis", "SMS", "GB", "GBA", "MAME"];   // proven deterministic
+  const STREAM_ONLY = ["N64"];          // not deterministic in EmulatorJS: the host streams it
   const $ = id => document.getElementById(id);
 
   // ── markup ──────────────────────────────────────────────────────────────────
@@ -91,12 +92,14 @@
       return;
     }
     const lead = RVNet.isLeader(), playing = R.status !== "lobby";
-    const allOk = R.game && R.players.filter(p => p.connected).every(p => p.rom === true);
+    const stream = R.mode === "stream";
+    const allOk = R.game && (stream ? R.players.find(p => p.uid === R.leader).rom === true
+                                    : R.players.filter(p => p.connected).every(p => p.rom === true));
     let h = `<div class="ol-row"><span class="ol-dim">Room code</span><span class="ol-code" id="ol-copy" title="Click to copy">${esc(R.code)}</span>
       <span class="ol-dim">${playing ? "Playing" : "Share the code with your friends"}</span>
       <button class="btn-ghost" id="ol-leave" style="margin-left:auto">Leave</button></div><h3>Players</h3>`;
     R.players.forEach(p => {
-      const rom = !R.game ? "" : p.rom === true ? '<span class="ol-ok" title="Same game file">✓ game</span>'
+      const rom = !R.game ? "" : stream && p.uid !== R.leader ? '<span class="ol-dim" title="Watches the stream from the host - no game file needed">watches</span>' : p.rom === true ? '<span class="ol-ok" title="Same game file">✓ game</span>'
         : p.rom === false ? '<span class="ol-bad" title="Different or missing game file">✗ game</span>' : '<span class="ol-dim">checking…</span>';
       const slotSel = lead && !playing
         ? `<select data-uid="${esc(p.uid)}" class="ol-slot">${[0, 1, 2, 3].map(s => `<option value="${s}"${s === p.slot ? " selected" : ""}>P${s + 1}</option>`).join("")}</select>`
@@ -104,13 +107,18 @@
       h += `<div class="ol-pl">${slotSel}<span class="nm">${esc(p.name)}${p.uid === R.leader ? " 👑" : ""}${p.connected ? "" : " (left)"}</span>${rom}
         ${lead && !playing && p.uid !== RVNet.me.uid ? `<button class="btn-ghost ol-kick" data-uid="${esc(p.uid)}" title="Remove">✕</button>` : ""}</div>`;
     });
-    h += `<h3>Game</h3><div class="ol-row">${R.game ? `<b>${esc(R.game.title)}</b> <span class="ol-dim">${esc(R.game.system)}</span>` : '<span class="ol-dim">Not chosen yet</span>'}</div>`;
+    h += `<h3>Game</h3><div class="ol-row">${R.game ? `<b>${esc(R.game.title)}</b> <span class="ol-dim">${esc(R.game.system)}</span>` : '<span class="ol-dim">Not chosen yet</span>'}</div>
+      <div class="ol-dim">${stream ? "Stream mode: the host runs the game and the others watch a live video and play with their own controller. Only the host needs the game file."
+                                   : "Everyone runs the game in sync on their own PC - everyone needs the same game file."}</div>`;
     if (lead && !playing) {
-      const games = LIBRARY.filter(g => LOCKSTEP_SYSTEMS.includes(g.system) && g.romPath &&
+      const games = LIBRARY.filter(g => (LOCKSTEP_SYSTEMS.includes(g.system) || STREAM_ONLY.includes(g.system)) && g.romPath &&
         (!gameFilter || (g.title + " " + g.system).toLowerCase().includes(gameFilter)));
       h += `<input id="ol-gf" placeholder="Search your games…" value="${esc(gameFilter)}" style="width:100%">
         <div class="ol-games">${games.slice(0, 200).map(g => `<div class="ol-g" data-i="${LIBRARY.indexOf(g)}"><span class="ol-dim" style="width:58px">${esc(g.system)}</span><span>${esc(g.title)}</span></div>`).join("") || '<div class="ol-g ol-dim">No matching games</div>'}</div>
-        <div class="ol-dim">N64 online play is coming (it needs a different method). Systems now: ${LOCKSTEP_SYSTEMS.join(", ")}.</div>
+        <div class="ol-row"><span class="ol-dim">Mode</span><select id="ol-mode"${R.game && STREAM_ONLY.includes(R.game.system) ? " disabled" : ""}>
+          <option value="lockstep"${stream ? "" : " selected"}>Everyone runs it (in sync)</option>
+          <option value="stream"${stream ? " selected" : ""}>Host streams it</option></select>
+          <span class="ol-dim">${R.game && STREAM_ONLY.includes(R.game.system) ? "N64 is always streamed" : ""}</span></div>
         <div class="ol-row" style="margin-top:10px"><span class="ol-dim">Input delay</span>
           <select id="ol-delay">${[2, 3, 4, 5, 6, 8].map(n => `<option value="${n}"${n === R.delay ? " selected" : ""}>${n} frames (${Math.round(n * 16.7)} ms)</option>`).join("")}</select>
           <button class="btn-primary" id="ol-start" style="margin-left:auto"${allOk ? "" : " disabled"}>Start match</button></div>`;
@@ -130,12 +138,14 @@
       busy = true; status("Reading " + g.title + "…");
       try {
         const sys = SYS_MAP[g.system] || {};
+        RVNet.setMode(STREAM_ONLY.includes(g.system) ? "stream" : "lockstep");
         await RVNet.pickGame({ system: g.system, title: g.title, file: g.filename, core: sys.core || "" }, await romBytes(g));
         status("");
       } catch (e) { status(e.message); }
       busy = false;
     });
     if ($("ol-delay")) $("ol-delay").onchange = e => RVNet.setDelay(+e.target.value);
+    if ($("ol-mode")) $("ol-mode").onchange = e => RVNet.setMode(e.target.value);
     if ($("ol-start")) $("ol-start").onclick = () => RVNet.start();
     if ($("ol-end")) $("ol-end").onclick = () => RVNet.end();
   }
@@ -155,7 +165,7 @@
   RVNet.on("room", async R => {
     render();
     // a new game was chosen: check MY copy (the leader's own check is done by pickGame)
-    if (R.game && !RVNet.isLeader() && checkedFor !== R.game.sha1 + R.code) {
+    if (R.game && !RVNet.isLeader() && R.mode !== "stream" && checkedFor !== R.game.sha1 + R.code) {
       checkedFor = R.game.sha1 + R.code;
       const i = libIndex(R.game);
       const g = i >= 0 ? LIBRARY[i] : LIBRARY.find(x => x.system === R.game.system && x.title === R.game.title);
@@ -166,28 +176,43 @@
   });
   RVNet.on("error", d => { status(d.msg); toast(d.msg, true); });
   RVNet.on("me", () => render());
-  RVNet.on("closed", () => { window._rvNetplay = false; hud.style.display = "none"; render(); });
+  RVNet.on("closed", () => { window._rvNetplay = window._rvStreamHost = false; hud.style.display = "none"; render(); });
   RVNet.on("kicked", () => toast("The leader removed you from the room", true));
   RVNet.on("starting", d => {
     const g = d.game;
+    if (d.mode === "stream" && !RVNet.isLeader()) {          // watch the host's stream
+      closeModal("online-modal");
+      RVStream.view(d.host);
+      return;
+    }
+    window._rvStreamHost = d.mode === "stream";
     let i = libIndex(g);
     if (i < 0) i = LIBRARY.findIndex(x => x.system === g.system && x.title === g.title);
     if (i < 0) { toast("You don't have that game", true); RVNet.leave(); return; }
     closeModal("online-modal");
-    window._rvNetplay = true;
+    window._rvNetplay = d.mode !== "stream";
     launchGame(i);
     hud.style.display = "block"; hud.textContent = "Online: starting…";
   });
-  RVNet.on("playing", () => { hud.textContent = "Online: P" + (RVNet.mySlot() + 1); });
+  RVNet.on("playing", d => { hud.textContent = d && d.mode === "stream" ? "Streaming: waiting for viewers…" : "Online: P" + (RVNet.mySlot() + 1); });
+  RVNet.on("streampeer", p => {
+    if (!RVStream.hosting) return;
+    const live = [...RVStream.peers.values()].filter(x => x.pc.connectionState === "connected").length;
+    hud.style.display = "block";
+    hud.textContent = `Streaming to ${live} of ${RVStream.peers.size}`;
+    if (p.state === "connected") toast((p.name || "A friend") + " is watching as P" + (p.port + 1));
+    if (p.state === "failed") toast("Couldn't connect to " + (p.name || "a friend") + " - their network blocks a direct link", true);
+  });
   RVNet.on("stats", s => {
     hud.textContent = `Online P${RVNet.mySlot() + 1} · ${s.fps} fps · waits ${s.stalls}` + (s.resyncs ? ` · resyncs ${s.resyncs}` : "");
   });
   RVNet.on("resync", () => toast("Re-syncing players…"));
-  RVNet.on("ended", () => { window._rvNetplay = false; hud.style.display = "none"; toast("Match ended - back in the room"); });
+  RVNet.on("ended", d => { window._rvNetplay = window._rvStreamHost = false; hud.style.display = "none"; toast((d && d.why ? d.why + " - " : "") + "Match ended - back in the room"); });
   RVNet.on("chat", d => toast(d.name + ": " + d.text));
   // closing the game window during a match leaves the match
   setInterval(() => {
     const open = $("emu-modal") && $("emu-modal").classList.contains("open");
     if (RVNet.match && !open) { RVNet.leave(); toast("You left the online match"); }
+    if (RVStream.hosting && !open) { RVStream.stop(); RVNet.end(); toast("Stream ended"); }
   }, 1000);
 })();

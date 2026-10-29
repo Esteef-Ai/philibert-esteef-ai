@@ -171,6 +171,7 @@
     leave() { this.send({ t: "leave" }); this.disconnect(); },
     setSlot(uid, slot) { this.send({ t: "slot", uid, slot }); },
     setDelay(n) { this.send({ t: "delay", n }); },
+    setMode(mode) { this.send({ t: "mode", mode }); },
     kick(uid) { this.send({ t: "kick", uid }); },
     start() { this.send({ t: "start" }); },
     end() { this.send({ t: "end" }); },
@@ -184,6 +185,14 @@
     // the page calls this once the emulator (booted with lockstep.js) has started
     async emulatorReady(win) {
       this.emuWin = win;
+      if (this.mode === "stream") {                    // stream mode: only the host runs the game
+        if (this.isLeader() && window.RVStream) {
+          while (!win.EJS_emulator.gameManager.getFrameNum || win.EJS_emulator.gameManager.getFrameNum() < 2) await sleep(50);
+          window.RVStream.host(win);
+          this.emit("playing", { mode: "stream" });
+        }
+        return;
+      }
       if (this.isLeader() && this.starting) {        // ("starting" arrives before the room update)
         this.starting = false;
         const gm = win.EJS_emulator.gameManager;
@@ -205,7 +214,7 @@
     _handle(d) {
       switch (d.t) {
         case "room": this.room = d; break;
-        case "starting": this.go = null; this.early = null; this.starting = true; break;
+        case "starting": this.go = null; this.early = null; this.mode = d.mode || "lockstep"; this.starting = this.mode === "lockstep"; break;
         case "go": this.go = d; this._maybeStart(); break;
         case "f":            // bundles can arrive before this PC's emulator has finished booting
           if (this.match) this.match.onBundle(d.f, d.i); else (this.early = this.early || new Map()).set(d.f, d.i);

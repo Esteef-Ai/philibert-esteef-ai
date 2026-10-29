@@ -1525,6 +1525,8 @@ async function launchGame(idx){
   _dl.push("<style>*{margin:0;padding:0;box-sizing:border-box;}html,body{width:100%;height:100%;background:#000;overflow:hidden;}#game{width:100%;height:100%;display:flex;align-items:center;justify-content:center;}#game canvas,#game video{max-width:100%;max-height:100%;image-rendering:pixelated;}</style></head><body>");
   // Online match: the virtual clock (lockstep.js) must be in place before EmulatorJS loads
   if(window._rvNetplay) _dl.push("<"+_t+" src='/retro/lib/lockstep.js'></"+_t+"><"+_t+">window._netplay=true;</"+_t+">");
+  // Stream host: copy the game's sound into a stream the friends can hear (before EmulatorJS)
+  if(window._rvStreamHost) _dl.push("<"+_t+" src='/retro/lib/audiotap.js'></"+_t+">");
   _dl.push("<div id='game'></div><"+_t+">");
   _dl.push("EJS_player='#game';EJS_core='"+( sys.core||"nes" )+"';EJS_gameUrl='"+romBlobUrl+"';");
   _dl.push("EJS_gameName='"+safeName+"';EJS_pathtodata='"+ejsBase+"/';EJS_startOnLoaded=true;");
@@ -1614,7 +1616,7 @@ async function launchGame(idx){
     if(t==="ejs_started"){
       spinner.style.display="none";
       var ifr=document.getElementById("emu-iframe");
-      if(window._rvNetplay && window.RVNet && ifr) RVNet.emulatorReady(ifr.contentWindow);
+      if((window._rvNetplay || window._rvStreamHost) && window.RVNet && ifr) RVNet.emulatorReady(ifr.contentWindow);
       if(ifr) ifr.style.filter=buildFilter();
     } else if(t==="ejs_saved"){   toast("Saved ✓ Slot "+sl);
     } else if(t==="ejs_loaded"){  toast("Loaded ✓ Slot "+sl);
@@ -3555,6 +3557,7 @@ async function artPoll(){
 }
 </script>
 <script src="/retro/lib/rvnet.js"></script>
+<script src="/retro/lib/rvstream.js"></script>
 <script src="/retro/lib/rvnet-ui.js"></script>
 </body>
 </html>
