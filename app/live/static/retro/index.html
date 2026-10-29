@@ -1523,6 +1523,8 @@ async function launchGame(idx){
   var _dl = [];
   _dl.push("<!DOCTYPE html><html><head><meta charset='UTF-8'>");
   _dl.push("<style>*{margin:0;padding:0;box-sizing:border-box;}html,body{width:100%;height:100%;background:#000;overflow:hidden;}#game{width:100%;height:100%;display:flex;align-items:center;justify-content:center;}#game canvas,#game video{max-width:100%;max-height:100%;image-rendering:pixelated;}</style></head><body>");
+  // Online match: the virtual clock (lockstep.js) must be in place before EmulatorJS loads
+  if(window._rvNetplay) _dl.push("<"+_t+" src='/retro/lib/lockstep.js'></"+_t+"><"+_t+">window._netplay=true;</"+_t+">");
   _dl.push("<div id='game'></div><"+_t+">");
   _dl.push("EJS_player='#game';EJS_core='"+( sys.core||"nes" )+"';EJS_gameUrl='"+romBlobUrl+"';");
   _dl.push("EJS_gameName='"+safeName+"';EJS_pathtodata='"+ejsBase+"/';EJS_startOnLoaded=true;");
@@ -1545,7 +1547,7 @@ async function launchGame(idx){
   // (checked every 15 s), when the window hides, and when the game is closed.
   _dl.push("window._sramKey='"+("rvsram_"+g.system+"_"+safeName)+"'; window._sramLast='';");
   _dl.push("window._sramSig=function(d){var h=0;for(var i=0;i<d.length;i+=7)h=(h*31+d[i])|0;return d.length+':'+h;};");
-  _dl.push("window._sramLoad=function(){");
+  _dl.push("window._sramLoad=function(){ if(window._netplay)return;   /* online: the start state carries the save, never each player's own */");
   _dl.push("  var gm=window.EJS_emulator&&window.EJS_emulator.gameManager; if(!gm)return;");
   _dl.push("  fetch('/retro/sram/'+encodeURIComponent(window._sramKey)).then(function(r){return r.ok?r.arrayBuffer():null;}).then(function(buf){");
   _dl.push("    if(!buf||!buf.byteLength){window._sramTimer=setInterval(window._sramFlush,15000);return;}");
@@ -1558,6 +1560,7 @@ async function launchGame(idx){
   _dl.push("  }).catch(function(){window._sramTimer=setInterval(window._sramFlush,15000);});");
   _dl.push("};");
   _dl.push("window._sramGrab=function(){");
+  _dl.push("  if(window._netplay)return null;   /* online: never write a match into a player's own save */");
   _dl.push("  try{var gm=window.EJS_emulator&&window.EJS_emulator.gameManager; if(!window._ejsReady||!gm)return null;");
   _dl.push("    var d=gm.getSaveFile(); if(!d||!d.length)return null; var sig=window._sramSig(d); if(sig===window._sramLast)return null;");
   _dl.push("    window._sramLast=sig; return {url:'/retro/sram/'+encodeURIComponent(window._sramKey),data:d.slice()};");
@@ -1578,7 +1581,7 @@ async function launchGame(idx){
   _dl.push("    }).catch(function(err){window.parent.postMessage({type:'ejs_save_err',msg:String(err)},'*');});");
   _dl.push("  }catch(err){window.parent.postMessage({type:'ejs_save_err',msg:String(err)},'*');}");
   _dl.push("};");
-  _dl.push("window._doLoad=function(){");
+  _dl.push("window._doLoad=function(){ if(window._netplay){window.parent.postMessage({type:'ejs_load_err',msg:'not during an online match'},'*');return;}");
   _dl.push("  if(!window._ejsReady||!window.EJS_emulator||!window.EJS_emulator.gameManager)return;");
   _dl.push("  var k=window._stateKey+'_'+window._slot;");
   _dl.push("  fetch('/retro/state/'+encodeURIComponent(k)).then(function(r){return r.ok?r.arrayBuffer():null;}).then(function(buf){");
@@ -1611,6 +1614,7 @@ async function launchGame(idx){
     if(t==="ejs_started"){
       spinner.style.display="none";
       var ifr=document.getElementById("emu-iframe");
+      if(window._rvNetplay && window.RVNet && ifr) RVNet.emulatorReady(ifr.contentWindow);
       if(ifr) ifr.style.filter=buildFilter();
     } else if(t==="ejs_saved"){   toast("Saved ✓ Slot "+sl);
     } else if(t==="ejs_loaded"){  toast("Loaded ✓ Slot "+sl);
@@ -3550,5 +3554,7 @@ async function artPoll(){
   } finally { artFromDrive.polling=false; }
 }
 </script>
+<script src="/retro/lib/rvnet.js"></script>
+<script src="/retro/lib/rvnet-ui.js"></script>
 </body>
 </html>
