@@ -3,7 +3,7 @@
 install(plan, report) puts Philibert into plan["dest"] and calls report(state)
 as it goes. The plan comes from the wizard:
 
-    {"dest": "K:\\Philibert", "pcs": ["windows", "mac"], "edition": "slim" | "full",
+    {"dest": "K:\\Philibert", "pcs": ["windows", "mac"], "edition": "slim" | "full" | "retro",
      "full": {"themes": {...}, "retro_vault": true}, "models": ["qwen3:8b", ...],
      "shortcut": false, "source": {"local": "<repo folder>"} |
                                    {"repo": "owner/name", "branch": "main", "token": "..."}}
@@ -73,7 +73,13 @@ def free_port(start, count=20):
 
 class Installer:
     def __init__(self, plan, report, log_path=None):
+        if plan.get("edition") == "retro":
+            # "Retro Vault only": the Full desktop with Retro Vault and no AI - no Ollama,
+            # no models, no Chat. Run Setup again and pick Slim or Full to add the AI.
+            plan = dict(plan, edition="full", retro_only=True, models=[],
+                        full=dict(plan.get("full") or {}, retro_vault=True, image_gen=False))
         self.plan = plan
+        self.retro_only = bool(plan.get("retro_only"))
         self.report_cb = report
         self.dest = Path(plan["dest"])
         self.pcs = plan.get("pcs") or ["windows", "mac"]
@@ -292,7 +298,7 @@ class Installer:
     def step_ollama_window(self, plat, rt, dl):
         pins = self.pins
         ol = rt / "ollama" / ("ollama.exe" if IS_WIN else "ollama")
-        if not self._stamp_is(rt / "ollama" / ".philibert-version", pins["ollama"]["version"]):
+        if not self.retro_only and not self._stamp_is(rt / "ollama" / ".philibert-version", pins["ollama"]["version"]):
             name = "ollama.zip" if IS_WIN else "ollama.tgz"
             a = self.download(pins["ollama"][plat], dl / name, "Ollama")
             self.unpack(a, rt / "ollama", ol, "Ollama")
@@ -318,6 +324,8 @@ class Installer:
             win = plat == "win-x64"
             for key, name in (("python", "python.tar.gz"), ("ollama", "ollama.zip" if win else "ollama.tgz"),
                               ("chromium", "chromium.zip")):
+                if key == "ollama" and self.retro_only:
+                    continue
                 f = dl / name
                 if f.exists() and (dl / (name + ".ok")).exists():
                     continue
@@ -356,6 +364,8 @@ class Installer:
         info = {"version": 1, "installed": datetime.now().isoformat(timespec="seconds"),
                 "edition": self.plan.get("edition", "slim"), "pcs": self.pcs,
                 "full": self.plan.get("full") or {}, "models": self.plan.get("models") or []}
+        if self.retro_only:
+            info["retro_only"] = True          # the start scripts skip Ollama; the desktop hides Chat
         (data / "install.json").write_text(json.dumps(info, indent=2), encoding="utf-8")
         self.emit(1.0, "Your notes and settings live in data on this drive")
 
@@ -475,14 +485,23 @@ class Installer:
     def step_shortcut(self):
         if not self.plan.get("shortcut") or not IS_WIN:
             return
-        desktop = Path(os.environ.get("USERPROFILE", "")) / "Desktop"
-        lnk = desktop / "Philibert.lnk"
+        # The REAL desktop: %USERPROFILE%\Desktop is wrong when OneDrive (or a policy) moved
+        # it - the shortcut then went into a folder nobody sees and nothing said so.
         target = self.dest / "Start-Windows.bat"
         icon = self.dest / "setup" / "assets" / "philibert.ico"
-        ps = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{0}');$s.TargetPath='{1}';"
-              "$s.WorkingDirectory='{2}';{3}$s.Save()").format(
-            lnk, target, self.dest, f"$s.IconLocation='{icon}';" if icon.exists() else "")
-        subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, creationflags=_NO_WINDOW)
+        q = lambda p: "'" + str(p).replace("'", "''") + "'"        # PowerShell single-quoted literal
+        ps = ("$d=[Environment]::GetFolderPath('Desktop');$l=Join-Path $d 'Philibert.lnk';"
+              "$s=(New-Object -ComObject WScript.Shell).CreateShortcut($l);$s.TargetPath=" + q(target) + ";"
+              "$s.WorkingDirectory=" + q(self.dest) + ";$s.WindowStyle=7;$s.Description='Philibert';"
+              + ("$s.IconLocation=" + q(str(icon) + ",0") + ";" if icon.exists() else "")
+              + "$s.Save();if(Test-Path $l){'OK '+$l}else{'MISSING '+$l}")
+        r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
+                           capture_output=True, text=True, creationflags=_NO_WINDOW)
+        out = (r.stdout or "").strip()
+        self.log(f"desktop shortcut: {out or (r.stderr or '').strip()[:300]}")
+        if not out.startswith("OK"):
+            self.state["warnings"].append("Couldn't put a Philibert shortcut on the desktop - start it with "
+                                          "Start-Windows.bat in the Philibert folder.")
 
     # -- the whole thing -------------------------------------------------------------
     def run(self):
@@ -492,8 +511,9 @@ class Installer:
             steps.append(("runtime", "Setting up Philibert for this computer", 45, self.step_runtime_here))
         if any(p != this_platform() for p in platforms_for(self.pcs)):
             steps.append(("others", "Getting what the other computers need", 25, self.step_other_pcs))
-        steps += [("data", "Making room for your notes", 1, self.step_data),
-                  ("models", "Getting the AI models and voices", 40, self.step_models)]
+        steps.append(("data", "Making room for your notes", 1, self.step_data))
+        if not self.retro_only:
+            steps.append(("models", "Getting the AI models and voices", 40, self.step_models))
         if self.plan.get("edition") == "full" and (self.plan.get("full") or {}).get("retro_vault", True) \
                 and here_pc in self.pcs:
             steps.append(("games", "Getting Retro Vault's game players", 3, self.step_games))

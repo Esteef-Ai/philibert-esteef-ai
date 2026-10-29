@@ -52,15 +52,16 @@
   // added from the App Store? (a drive set up before the Store has every app)
   function has(id) { return !st.installed || st.installed.indexOf(id) >= 0; }
   function builtins() {
-    var list = [
-      { id: "chat", name: "Philibert Chat", icon: "chat", url: "/live/", w: 1280, h: 800, max: true },
-      { id: "store", name: "App Store", icon: "store", internal: storeWin, w: 640, h: 560, title: "Esteef.Ai App Store" },
-    ];
+    var list = [];
+    // a Retro Vault only drive has no AI, so no Chat (the Store says how to add it)
+    if (has("chat")) list.push({ id: "chat", name: "Philibert Chat", icon: "chat", url: "/live/", w: 1280, h: 800, max: true });
+    list.push({ id: "store", name: "App Store", icon: "store", internal: storeWin, w: 640, h: 560, title: "Esteef.Ai App Store" });
     if (has("notes")) list.push({ id: "notes", name: "Notes", icon: "notes", url: "/notes?embed=1", w: 1100, h: 720, title: "Philibert Notes" });
     if (has("files")) list.push({ id: "files", name: "Files", icon: "files", url: "/files", w: 1080, h: 700, title: "Philibert Files" });
     if (has("models")) list.push({ id: "models", name: "Models", icon: "models", url: "/modelmgr", w: 940, h: 720, title: "Philibert Models" });
     if (has("images") && st.imagegen) list.push({ id: "images", name: "Image Generation", icon: "images", url: "/images", w: 1240, h: 800, title: "Philibert Image Generation" });
-    if (has("vault") && st.retro) list.push({ id: "vault", name: "Retro Vault", icon: "vault", url: "/retro/", w: 1240, h: 800, max: true });
+    if (has("vault") && st.retro) list.push({ id: "vault", name: "Retro Vault", icon: "vault", img: "/retro/lib/retrovault-icon.svg",
+                                              url: "/retro/", w: 1240, h: 800, max: true });
     if (has("band")) list.push({ id: "band", name: "Band Manager", icon: "band", url: "/band?embed=1", w: 1180, h: 760, title: "Philibert Band Manager" });
     if (has("board")) list.push({ id: "board", name: "Group Board", icon: "board", url: "/board", w: 1100, h: 760, title: "Group Board" });
     if (has("feedback")) list.push({ id: "feedback", name: "Feedback Shooter", icon: "feedback", url: "/feedback", w: 900, h: 720, title: "Feedback Shooter" });
@@ -83,8 +84,21 @@
 
   /* ================= desktop icons ================= */
   var GRID_X = 78, GRID_Y = 76;
+  // Control Panel > Themes > Icon size. Small is each theme's own look (32 px); bigger sizes
+  // scale the icon, its label width and the grid with it.
+  var ICON_PX = { small: 32, medium: 48, large: 64 };
+  function iconPx() { return ICON_PX[st.settings.icon_size] || 32; }
+  function applyIconSize() {
+    var px = iconPx(), css = document.getElementById("icon-size-css");
+    if (!css) { css = document.createElement("style"); css.id = "icon-size-css"; document.head.appendChild(css); }
+    css.textContent = px === 32 ? "" :
+      ".dicon{width:" + (px + 46) + "px}.dicon .lbl{max-width:" + (px + 46) + "px}" +
+      ".dicon .img,.dicon .img img,.dicon .img svg{width:" + px + "px;height:" + px + "px}";
+  }
+  function gridX() { return GRID_X + (iconPx() - 32) * 1.25; }
+  function gridY() { return GRID_Y + (iconPx() - 32) * 1.1; }
   function iconPos(i) {
-    var sh = T().shell;
+    var sh = T().shell, GRID_X = gridX(), GRID_Y = gridY();
     if (sh === "progman") {                    // rows inside the Program Manager group
       var cols = Math.max(1, Math.floor((iconsEl.clientWidth - 8) / 84));
       return [8 + (i % cols) * 84, 8 + Math.floor(i / cols) * 70];
@@ -102,10 +116,11 @@
   function renderIcons() {
     // positions are per shell: a Mac layout is not a Windows one
     var saved = (st.settings.icons || {})[T().shell] || {};
+    applyIconSize();
     iconsEl.innerHTML = allApps().map(function (a, i) {
       var p = saved[a.id] || iconPos(i);
       return '<div class="dicon" role="listitem" tabindex="0" data-id="' + esc(a.id) + '" style="left:' + p[0] + "px;top:" + p[1] + 'px">' +
-             '<div class="img tile t-' + esc(a.id.replace(/[^a-z0-9]/g, "")) + '">' + iconHtml(a, 32) + '</div><div class="lbl">' + esc(a.name) + "</div></div>";
+             '<div class="img tile t-' + esc(a.id.replace(/[^a-z0-9]/g, "")) + '">' + iconHtml(a, iconPx()) + '</div><div class="lbl">' + esc(a.name) + "</div></div>";
     }).join("");
   }
   function select(el) {
@@ -383,7 +398,7 @@
     if (st.settings.theme === "winxp") {
       // XP: the boombox as the user tile, pinned apps left, places right, Turn Off below
       $("sm-head").innerHTML = '<span class="tile">' + I.p1(42, "#fff", "#2b6fd6") + "</span><b>Philibert</b>";
-      $("sm-list").innerHTML = mi("chat", "<b>Philibert Chat</b>", "chat") + mi("notes", "<b>Notes</b>", "notes") +
+      $("sm-list").innerHTML = (has("chat") ? mi("chat", "<b>Philibert Chat</b>", "chat") : "") + mi("notes", "<b>Notes</b>", "notes") +
         '<li class="sep"></li>' + mi("programs", "All <u>P</u>rograms", "programs", true);
       var right = document.createElement("ul");
       right.className = "sm-right";
@@ -556,7 +571,7 @@
       });
     },
     File: function (cb) {
-      cb([{ label: "New Chat", key: "", run: function () { open("chat"); } },
+      cb([{ label: "New Chat", key: "", off: !has("chat"), run: function () { open("chat"); } },
           { label: "New Note", run: function () { open("notes"); } }, "-",
           { label: "Close Window", off: !st.active, run: closeActive }]);
     },
@@ -593,7 +608,7 @@
   });
   var PM_MENUS = {
     File: function () {
-      return [{ label: "Open Philibert Chat", run: function () { open("chat"); } },
+      return [{ label: "Open Philibert Chat", off: !has("chat"), run: function () { open("chat"); } },
               { label: "Open Notes", run: function () { open("notes"); } }, "-",
               { label: "Unload GPU", run: unloadGpu }, "-",
               { label: "Exit Philibert...", run: shutdownDialog }];
@@ -833,7 +848,11 @@
         panel.innerHTML = monitor(draft.wallpaper) + "<div>Theme:</div><div class=\"listbox well\">" + st.themes.map(function (t) {
           return '<div data-theme="' + t.id + '" class="' + (t.id === draft.theme ? "on" : "") + (t.ready ? "" : " off") + '">' +
                  esc(t.name) + (t.ready ? "" : " (coming soon)") + "</div>";
-        }).join("") + "</div>" + (draft.theme !== st.settings.theme ? "<div style=\"margin-top:6px\">Philibert restarts its desktop to change the theme.</div>" : "");
+        }).join("") + "</div>" + (draft.theme !== st.settings.theme ? "<div style=\"margin-top:6px\">Philibert restarts its desktop to change the theme.</div>" : "") +
+          '<div class="field" style="margin-top:8px"><label>Icon size: <select data-k="icon_size">' +
+          [["small", "Small"], ["medium", "Medium"], ["large", "Large"]].map(function (o) {
+            return '<option value="' + o[0] + '"' + ((draft.icon_size || "small") === o[0] ? " selected" : "") + ">" + o[1] + "</option>";
+          }).join("") + "</select></label></div>";
       } else if (cur === "wallpaper") {
         var allowed = wallpapersAllowed(draft.theme);
         panel.innerHTML = monitor(draft.wallpaper) + "<div>Wallpaper:</div><div class=\"listbox well\">" + themeWallpapers(draft.theme).map(function (w) {
@@ -914,7 +933,9 @@
     });
     function apply() {
       var ch = { theme: draft.theme, wallpaper: draft.wallpaper, screensaver: !!draft.screensaver,
-                 saver_minutes: +draft.saver_minutes || 10, sounds: !!draft.sounds, boot: !!draft.boot };
+                 saver_minutes: +draft.saver_minutes || 10, sounds: !!draft.sounds, boot: !!draft.boot,
+                 icon_size: draft.icon_size || "small" };
+      var sizeChanged = ch.icon_size !== (st.settings.icon_size || "small");
       var newTheme = ch.theme !== st.settings.theme;
       if (newTheme) ch.parked = (st.settings.parked || []).concat(Object.keys(st.wins)).filter(function (id, i, a) {
         return id !== "control" && a.indexOf(id) === i;
@@ -927,7 +948,7 @@
       }
       Promise.all(jobs).then(function () {
         if (newTheme) location.reload();       // a new theme boots like the real thing
-        else applySettings();
+        else { applySettings(); if (sizeChanged) renderIcons(); }
       });
     }
     draw();

@@ -15,6 +15,8 @@
   ];
   var SIZE = { theme: 6, sounds: 3, wallpapers: 18, retro: 150, imagegen: 13000 };     // MB, for the totals
   var PC_GB = { windows: 2.5, mac: 0.8 };
+  var PC_GB_NOAI = { windows: 0.6, mac: 0.3 };       // Retro Vault only: no Ollama
+  var MODELS_PAGE = 5;
 
   var state = {
     page: 0, info: null, places: [], catalog: [], pcs: "both", edition: "slim",
@@ -206,7 +208,9 @@
   }
 
   /* ---------- sizes ---------- */
+  function noAi() { return state.edition === "retro"; }
   function fullMB() {
+    if (noAi()) return SIZE.theme + SIZE.sounds + SIZE.wallpapers + SIZE.retro;     // Windows 95 + Retro Vault
     if (state.edition !== "full") return 0;
     var mb = 0;
     THEMES.forEach(function (t) {
@@ -216,10 +220,11 @@
     return mb + (state.retro ? SIZE.retro : 0) + (state.imagegen ? SIZE.imagegen : 0);
   }
   function modelsGB() {
+    if (noAi()) return 0;
     return state.catalog.reduce(function (a, m) { return a + (state.models[m.tag] ? m.size_gb : 0); }, 0);
   }
   function needGB() {
-    var pc = pcsList().reduce(function (a, p) { return a + PC_GB[p]; }, 0);
+    var pc = pcsList().reduce(function (a, p) { return a + (noAi() ? PC_GB_NOAI : PC_GB)[p]; }, 0);
     return pc + modelsGB() + fullMB() / 1024 + 0.5;
   }
 
@@ -387,6 +392,9 @@
   function plan() {
     var themes = {};
     THEMES.forEach(function (t) { if (state.themes[t.id].on) themes[t.id] = { sounds: state.themes[t.id].sounds, wallpapers: state.themes[t.id].wallpapers }; });
+    if (noAi()) return { dest: state.dest, pcs: pcsList(), edition: "retro", models: [], shortcut: !!state.checks.shortcut,
+                         full: { themes: { win95: { sounds: true, wallpapers: true } }, retro_vault: true, image_gen: false,
+                                 default_theme: "win95", themes_offered: THEMES.map(function (t) { return t.id; }) } };
     return { dest: state.dest, pcs: pcsList(), edition: state.edition,
              full: state.edition === "full" ? { themes: themes, retro_vault: state.retro, image_gen: state.imagegen, default_theme: "win95",
                                               themes_offered: THEMES.map(function (t) { return t.id; }) } : {},
@@ -398,8 +406,8 @@
     $("review").innerHTML =
       "<dt>Where</dt><dd>" + esc(p.dest) + "</dd>" +
       "<dt>For</dt><dd>" + (p.pcs.length === 2 ? "Windows and Mac" : p.pcs[0] === "mac" ? "Mac" : "Windows") + "</dd>" +
-      "<dt>Edition</dt><dd>" + (p.edition === "full" ? "Full - " + Object.keys(p.full.themes).length + " themes" + (p.full.retro_vault ? ", Retro Vault" : "") + (p.full.image_gen ? ", Image Generation" : "") : "Slim") + "</dd>" +
-      "<dt>Models</dt><dd>" + esc(names.join(", ")) + "</dd>" +
+      "<dt>Edition</dt><dd>" + (p.edition === "retro" ? "Retro Vault only - no AI" : p.edition === "full" ? "Full - " + Object.keys(p.full.themes).length + " themes" + (p.full.retro_vault ? ", Retro Vault" : "") + (p.full.image_gen ? ", Image Generation" : "") : "Slim") + "</dd>" +
+      "<dt>Models</dt><dd>" + (p.edition === "retro" ? "none" : esc(names.join(", "))) + "</dd>" +
       "<dt>Download</dt><dd>about " + gb(needGB()) + "</dd>" +
       "<dt>On this computer</dt><dd>" + (p.shortcut ? "a desktop shortcut" : "nothing") + "</dd>";
   }
@@ -443,8 +451,9 @@
     $("donefacts").innerHTML =
       (win ? "<dt>On Windows</dt><dd>Double-click <b>Start-Windows.bat</b> in that folder.</dd>" : "") +
       (mac ? "<dt>On a Mac</dt><dd>Double-click <b>Start-Mac.command</b>. The first start on a Mac finishes setting up there (with the Internet, once).</dd>" : "") +
+      (p.edition === "retro" ? "<dt>Retro Vault only</dt><dd>Philibert opens on the Windows 95 desktop with Retro Vault. More apps are in the App Store; for the assistant, run Setup again on this drive and pick Slim or Full - your games and settings stay.</dd>" : "") +
       (p.edition === "full" ? "<dt>Full edition</dt><dd>Philibert opens on the retro desktop (Windows 95 to start; the other themes and Retro Vault arrive with Philibert updates). Philibert Chat is an icon on it.</dd>" : "") +
-      "<dt>Your games</dt><dd>" + (p.edition === "full" && p.full.retro_vault ? "Put your own games in <b>Entertainment\\Cartridges</b>, one folder per system." : "-") + "</dd>";
+      "<dt>Your games</dt><dd>" + (p.edition !== "slim" && p.full.retro_vault ? "Put your own games in <b>Entertainment\\Cartridges</b>, one folder per system." : "-") + "</dd>";
     $("donewarn").textContent = (s.warnings || []).join(" ");
   }
 
@@ -456,7 +465,7 @@
       api("close");
       return;
     }
-    show(state.page + 1);
+    show(state.page + 1 === MODELS_PAGE && noAi() ? MODELS_PAGE + 1 : state.page + 1);
   });
   backBtn.addEventListener("click", function () {
     if (state.page === 8) {                      // installing: stop, keep what is downloaded
@@ -465,7 +474,7 @@
       }
       return;
     }
-    if (state.page > 0) show(state.page - 1);
+    if (state.page > 0) show(state.page - 1 === MODELS_PAGE && noAi() ? MODELS_PAGE - 1 : state.page - 1);
   });
 
   /* ---------- start ---------- */

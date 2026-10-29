@@ -107,9 +107,13 @@ if [ ! -f "$STAMP" ] || [ "$(cat "$STAMP")" != "$PKGS" ]; then
   printf '%s' "$PKGS" > "$STAMP"
 fi
 
+# "Retro Vault only" (Setup's no-AI choice): no Ollama and no models
+NOAI=0
+grep -q '"retro_only": *true' "$ROOT/data/install.json" 2>/dev/null && NOAI=1
+
 # -- first run: Ollama -------------------------------------------------------
 OLSTAMP="$RT/ollama/.philibert-version"
-if [ ! -f "$OLSTAMP" ] || [ "$(cat "$OLSTAMP")" != "$OL_VER" ]; then
+if [ "$NOAI" = 0 ] && { [ ! -f "$OLSTAMP" ] || [ "$(cat "$OLSTAMP")" != "$OL_VER" ]; }; then
   step "First start: getting Ollama, which runs the AI models (about 170 MB)"
   mkdir -p "$DL" "$RT/ollama"
   unpack "$OL_URL" "$DL/ollama.tgz" "$RT/ollama" "$OL"
@@ -176,6 +180,9 @@ if [ "$FULL" = 1 ]; then export ND_START_PATH=/full; else export ND_START_PATH="
 export ND_BROWSER_EXE="$CR"
 export ND_BROWSER_PROFILE="$DATA/browser/mac"
 
+if [ "$NOAI" = 1 ]; then
+  trap 'rm -rf "$LOCK"' EXIT
+else
 "$OL" serve >/dev/null 2>&1 &
 OLPID=$!
 # Take Ollama and its model runners down with us, however we exit, and free the
@@ -191,6 +198,7 @@ done
   echo "Some models or speech files could not be downloaded. Philibert will start anyway;"
   echo "connect to the Internet and pick a model in the list to download it."
 }
+fi
 
 export HF_HUB_OFFLINE=1      # from here on, speech uses only what is on the drive
 "$PY" "$APP"

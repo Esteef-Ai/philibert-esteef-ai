@@ -78,16 +78,19 @@ $cfg = @{
              "huggingface_hub==1.20.1", "piper-tts==1.6.0", "onnxruntime==1.28.0", "numpy==2.4.4")
 }
 function Stamp-Is($file, $value) { (Test-Path $file) -and ((Get-Content $file -Raw).Trim() -eq $value) }
+# "Retro Vault only" (Setup's no-AI choice): no Ollama and no models, just the desktop and the games
+$cfg.NoAI = $false
+try { $cfg.NoAI = [bool]((Get-Content (Join-Path $data "install.json") -Raw | ConvertFrom-Json).retro_only) } catch {}
 $steps = New-Object System.Collections.ArrayList
 if (-not (Test-Path (Join-Path $rt "python\.philibert-ready"))) {
     [void]$steps.Add(@{ Id = "python";   Title = "Getting Python for this drive";              Weight = 3 }) }
 if (-not (Stamp-Is (Join-Path $rt "python\.philibert-packages") ($cfg.Pkgs -join " "))) {
     [void]$steps.Add(@{ Id = "packages"; Title = "Installing the app's building blocks";       Weight = 14 }) }
-if (-not (Stamp-Is (Join-Path $rt "ollama\.philibert-version") $cfg.OlVer)) {
+if (-not $cfg.NoAI -and -not (Stamp-Is (Join-Path $rt "ollama\.philibert-version") $cfg.OlVer)) {
     [void]$steps.Add(@{ Id = "ollama";   Title = "Getting Ollama, which runs the AI models";   Weight = 30 }) }
 if (-not (Stamp-Is (Join-Path $rt "chromium\.philibert-version") $cfg.CrVer)) {
     [void]$steps.Add(@{ Id = "chromium"; Title = "Getting Philibert's window";                 Weight = 10 }) }
-[void]$steps.Add(@{ Id = "models"; Title = "Checking the AI models and voices";                Weight = 20 })
+[void]$steps.Add(@{ Id = "models"; Title = $(if ($cfg.NoAI) { "Checking your data" } else { "Checking the AI models and voices" }); Weight = 20 })
 [void]$steps.Add(@{ Id = "start";  Title = "Starting Philibert";                               Weight = 4 })
 $firstStart = $steps.Count -gt 2
 
@@ -265,6 +268,7 @@ $work = {
                         Log "welcome notes added to the empty vault"
                     }
 
+                    if ($cfg.NoAI) { Log "Retro Vault only: no Ollama, no models"; break }
                     $sync.OllamaPort = Free-Port 11435 20
                     $env:OLLAMA_MODELS          = Join-Path $cfg.Root "models"
                     $env:OLLAMA_HOST            = "127.0.0.1:$($sync.OllamaPort)"

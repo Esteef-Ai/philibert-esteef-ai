@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Philibert app icon: the P1 boombox face on a navy tile with a cyan glow.
+       Used for the desktop shortcut (philibert.ico) and the Setup app. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e3054"/><stop offset="1" stop-color="#0b1222"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.55" r="0.5">
+      <stop offset="0" stop-color="#00e5ff" stop-opacity="0.35"/><stop offset="1" stop-color="#00e5ff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#tile)"/>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="none" stroke="#00e5ff" stroke-opacity="0.35" stroke-width="3"/>
+  <circle cx="128" cy="138" r="104" fill="url(#halo)"/>
+  <g transform="translate(28 30)" filter="url(#glow)">
+    <path d="M62 62 V46 Q62 34 74 34 H126 Q138 34 138 46 V62" fill="none" stroke="#00e5ff" stroke-width="10" stroke-linecap="round"/>
+    <rect x="26" y="60" width="148" height="100" rx="16" fill="#00e5ff"/>
+    <circle cx="70" cy="104" r="25" fill="#0f172a"/><circle cx="70" cy="104" r="17" fill="#00e5ff"/><circle cx="70" cy="104" r="6" fill="#0f172a"/>
+    <circle cx="130" cy="104" r="25" fill="#0f172a"/><circle cx="130" cy="104" r="17" fill="#00e5ff"/><circle cx="130" cy="104" r="6" fill="#0f172a"/>
+    <path d="M48 143 H86 L93 134 L100 150 L107 138 L112 143 H152" fill="none" stroke="#0f172a" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M100 150 L107 138 L112 143" fill="none" stroke="#ff2e88" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="44" y="160" width="20" height="10" rx="3" fill="#00e5ff"/><rect x="136" y="160" width="20" height="10" rx="3" fill="#00e5ff"/>
+  </g>
+</svg>

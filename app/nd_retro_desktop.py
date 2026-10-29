@@ -29,6 +29,8 @@ READY = {t[0] for t in THEMES}
 ADDED_LATER = {"win11", "macos", "ios", "android", "c64", "redhat"}
 DEFAULTS = {"theme": "win95", "wallpaper": "teal", "sounds": True, "boot": True,
             "screensaver": True, "saver_minutes": 10, "icons": {},
+            # desktop icon size: small (32 px, the classic look), medium (48) or large (64)
+            "icon_size": "small",
             # The Esteef.Ai App Store: the apps added to this desktop. None = a drive set up
             # before the store, which keeps every app it had; Setup writes [] on a fresh one.
             "installed": None,
@@ -65,6 +67,17 @@ def install_info(data_dir):
 
 def edition(data_dir):
     return install_info(data_dir).get("edition", "slim")
+
+
+def has_ai(data_dir):
+    """False on a "Retro Vault only" install: no Ollama and no models, so no Chat."""
+    return not install_info(data_dir).get("retro_only")
+
+
+# what the Store says about Chat on a Retro Vault only drive: the AI is a Setup job
+CHAT_LATER = {"id": "chat", "name": "Philibert Chat", "setup": True,
+              "about": "The AI assistant. To add it, run Philibert Setup again on this drive and pick Slim or Full: "
+                       "it adds the AI models and keeps your games and settings."}
 
 
 def themes(data_dir):
@@ -111,6 +124,8 @@ def save_settings(data_dir, changes):
                 continue
             ok = STORE_IDS if k == "installed" else None
             v = [str(x) for x in v if isinstance(x, str) and (ok is None or x in ok)][:40]
+        if k == "icon_size" and v not in ("small", "medium", "large"):
+            continue
         if k == "saver_minutes":
             try:
                 v = max(1, min(60, int(v)))
@@ -262,15 +277,19 @@ def app_file(apps_dir, rel):
 def installed(data_dir):
     """The apps on this desktop: the core, plus what the App Store added."""
     have = settings(data_dir).get("installed")
-    return list(CORE) + ([a["id"] for a in STORE] if have is None else [x for x in have if x in STORE_IDS])
+    core = [c for c in CORE if c != "chat" or has_ai(data_dir)]
+    return core + ([a["id"] for a in STORE] if have is None else [x for x in have if x in STORE_IDS])
 
 
 def store(data_dir):
     have = set(installed(data_dir))
-    return [dict(a, installed=a["id"] in have) for a in STORE]
+    out = [dict(a, installed=a["id"] in have) for a in STORE]
+    return out if has_ai(data_dir) else [dict(CHAT_LATER, installed=False)] + out
 
 
 def store_set(data_dir, app_id, on):
+    if app_id == "chat" and not has_ai(data_dir):
+        return {"ok": False, "msg": CHAT_LATER["about"]}
     if app_id not in STORE_IDS:
         return {"ok": False, "msg": "That is not in the App Store."}
     cur = [x for x in installed(data_dir) if x in STORE_IDS]
@@ -287,6 +306,7 @@ def handle(body, data_dir, apps_dir, shutdown=None):
         return {"ok": True, "settings": settings(data_dir), "themes": themes(data_dir),
                 "apps": apps(apps_dir), "edition": info.get("edition", "slim"), "installed": installed(data_dir),
                 "retro_vault": bool((info.get("full") or {}).get("retro_vault", False)),
+                "ai": has_ai(data_dir),
                 # every Full desktop: the app sets itself up on each computer (drives set up
                 # before the Setup option existed had no icon at all)
                 "image_gen": True,

@@ -71,5 +71,28 @@ check("what ships matches the dev deploy list",
 check("mac.sh looks for pre-downloaded archives where the installer puts them",
       'DL="$ROOT/runtime/_download/$CRP"' in mac)
 
+# -- "Retro Vault only": no Ollama, no models, the games on the Full desktop -----------
+import tempfile  # noqa: E402
+with tempfile.TemporaryDirectory() as tmp:
+    ins = engine.Installer({"dest": tmp, "pcs": ["windows", "mac"], "edition": "retro", "models": ["qwen3:8b"],
+                            "shortcut": False}, lambda s: None)
+    ran = []
+    for name in dir(ins):
+        if name.startswith("step_"):
+            setattr(ins, name, (lambda n: lambda *a: ran.append(n))(name[5:]))
+    ins.run()
+    check("retro-only becomes the Full desktop with Retro Vault and no models",
+          ins.plan["edition"] == "full" and ins.retro_only and ins.plan["models"] == []
+          and ins.plan["full"]["retro_vault"] and not ins.plan["full"]["image_gen"], ins.plan)
+    check("retro-only skips the AI models but gets the game players",
+          "models" not in ran and "games" in ran and "data" in ran, ran)
+check("windows.ps1 skips Ollama on a retro-only drive",
+      "$cfg.NoAI = [bool]" in w and "-not $cfg.NoAI -and" in w and 'if ($cfg.NoAI) { Log "Retro Vault only' in w)
+check("mac.sh skips Ollama on a retro-only drive", 'NOAI=1' in mac and 'if [ "$NOAI" = 1 ]; then' in mac)
+ui = (REPO / "installer" / "ui" / "setup.js").read_text(encoding="utf-8")
+check("the wizard offers Retro Vault only and skips the models page for it",
+      'data-ed="retro"' in (REPO / "installer" / "ui" / "index.html").read_text(encoding="utf-8")
+      and "MODELS_PAGE && noAi()" in ui)
+
 print("PASS" if not fails else f"FAIL ({len(fails)})")
 sys.exit(1 if fails else 0)
