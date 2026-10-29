@@ -2575,6 +2575,9 @@ function btStart(){
 }
 function btPoll(){
   const gps=navigator.getGamepads?[...navigator.getGamepads()].filter(Boolean):[];
+  // "gamepadconnected" doesn't always reach a page inside the desktop's window frame,
+  // so notice new/removed pads from the poll as well
+  if(gps.length!==btPoll.n){ btPoll.n=gps.length; updCtrlStatus(); if(gps.length) buildCtrlGrids(); }
   gps.forEach(gp=>{
     const prev=btGamepads[gp.index]||{buttons:[],axes:[]};
     if(btListening){
@@ -2596,6 +2599,7 @@ function btPoll(){
   });
 }
 
+btStart();   // watch for controllers from the start, not only after a "connected" event
 window.addEventListener("gamepadconnected",e=>{
   btGamepads[e.gamepad.index]={buttons:[],axes:[]};
   btStart();
@@ -2719,6 +2723,15 @@ document.getElementById("ctrl-detect-btn").onclick=()=>{
   updCtrlStatus(); btStart();
   const gps=navigator.getGamepads?[...navigator.getGamepads()].filter(Boolean):[];
   toast(gps.length?gps.length+" controller"+(gps.length>1?"s":"")+" found":"No controllers found - connect and press a button");
+  if(!gps.length){
+    // Why not? Shown in the controller window so a remote user can read it out
+    let pol="?"; try{const p=document.permissionsPolicy||document.featurePolicy; pol=p?String(p.allowsFeature("gamepad")):"n/a";}catch(e){pol="err";}
+    let topPol="?"; try{const p=top.document.permissionsPolicy||top.document.featurePolicy; topPol=p?String(p.allowsFeature("gamepad")):"n/a";}catch(e){topPol="cross-origin";}
+    const el=document.getElementById("ctrl-status");
+    if(el) el.textContent="No gamepad. Check: api="+(!!navigator.getGamepads)+" secure="+window.isSecureContext
+      +" allowed="+pol+" top-allowed="+topPol+" in-frame="+(window!==top)+" focused="+document.hasFocus()
+      +" visible="+document.visibilityState+" host="+location.host;
+  }
 };
 document.getElementById("ctrl-save").onclick=function(){ saveCtrl(); pttSave(); closeModal("ctrl-modal"); toast("Controller mapping + PTT saved."); };
 document.getElementById("ctrl-reset").onclick=()=>{ Object.assign(CTRL,DEF_CTRL); buildCtrlGrids(); };

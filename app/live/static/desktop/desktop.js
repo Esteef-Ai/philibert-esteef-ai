@@ -207,6 +207,9 @@
     var body = el.querySelector(".wbody");
     if (app.url) {
       var f = document.createElement("iframe");
+      // Pass controllers (Retro Vault), fullscreen and sound down to the app and the frames it holds.
+      // allow must be set before src - it's read when the frame starts loading.
+      f.allow = "gamepad; fullscreen; autoplay; clipboard-write";
       f.src = app.url; f.title = app.name;
       body.appendChild(f);
       // C64: Esc is RUN/STOP - back to the BASIC screen even with the app focused. Keys
