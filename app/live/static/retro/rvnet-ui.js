@@ -66,7 +66,7 @@
     const R = RVNet.room;
     if (!RVNet.me) {
       body.innerHTML = `
-        <p>Play with up to 3 friends. Everyone needs the <b>same game file</b> in their own Retro Vault; the leader picks the game.</p>
+        <p>Up to 4 players: you and 3 friends. Everyone needs the <b>same game file</b> in their own Retro Vault; the leader picks the game.</p>
         <div class="ol-row">${RVNet.token
           ? `<span>Logged in as <b>${esc(RVNet.name || "")}</b></span><button class="btn-primary" id="ol-go">Go online</button><button class="btn-ghost" id="ol-logout">Log out</button>`
           : `<button class="btn-primary" id="ol-login">Log in with Discord</button>`}</div>
@@ -93,8 +93,9 @@
         <div class="ol-row">${RVNet.me.guest ? "" : '<button class="btn-primary" id="ol-create">Create a room</button>'}
           <input id="ol-code" placeholder="Room code" maxlength="6" style="width:110px;text-transform:uppercase"><button class="btn-ghost" id="ol-join">Join</button>
           <button class="btn-ghost" id="ol-off" style="margin-left:auto">Go offline</button></div>`;
-      if ($("ol-create")) $("ol-create").onclick = () => RVNet.create();
-      $("ol-join").onclick = () => RVNet.join($("ol-code").value.trim().toUpperCase());
+      const tryIt = p => p.catch(e => status(e.message));
+      if ($("ol-create")) $("ol-create").onclick = () => tryIt(RVNet.create());
+      $("ol-join").onclick = () => tryIt(RVNet.join($("ol-code").value.trim().toUpperCase()));
       $("ol-off").onclick = () => { RVNet.disconnect(); render(); };
       return;
     }
@@ -186,7 +187,14 @@
   });
   RVNet.on("error", d => { status(d.msg); toast(d.msg, true); });
   RVNet.on("me", () => render());
-  RVNet.on("closed", () => { window._rvNetplay = window._rvStreamHost = false; hud.style.display = "none"; render(); });
+  // out of the room: the game window (if any) closes and the Online window shows where you are
+  const backToLobby = () => {
+    if (window._rvNetplay || window._rvStreamHost) closeEmu();
+    window._rvNetplay = window._rvStreamHost = false; hud.style.display = "none";
+    openModal("online-modal"); render();
+  };
+  RVNet.on("closed", backToLobby);
+  RVNet.on("offline", () => render());
   RVNet.on("kicked", () => toast("The leader removed you from the room", true));
   RVNet.on("starting", d => {
     const g = d.game;
@@ -221,12 +229,16 @@
     hud.textContent = `Online P${RVNet.mySlot() + 1} · ${s.fps} fps · waits ${s.stalls}` + (s.resyncs ? ` · resyncs ${s.resyncs}` : "");
   });
   RVNet.on("resync", () => toast("Re-syncing players…"));
-  RVNet.on("ended", d => { window._rvNetplay = window._rvStreamHost = false; hud.style.display = "none"; toast((d && d.why ? d.why + " - " : "") + "Match ended - back in the room"); });
+  RVNet.on("ended", d => { backToLobby(); toast((d && d.why ? d.why + " - " : "") + "Match ended - back in the room"); });
   RVNet.on("chat", d => toast(d.name + ": " + d.text));
-  // closing the game window during a match leaves the match
+  // closing the game window during a match: the leader ends it (everybody back in the room,
+  // ready for the next game); anyone else leaves it and can create or join another room
   setInterval(() => {
     const open = $("emu-modal") && $("emu-modal").classList.contains("open");
-    if (RVNet.match && !open) { RVNet.leave(); toast("You left the online match"); }
+    if (RVNet.match && !open) {
+      if (RVNet.isLeader()) { RVNet.match.stop(); RVNet.match = null; RVNet.end(); }
+      else { RVNet.leave(); toast("You left the online match"); }
+    }
     if (RVStream.hosting && !open) { RVStream.stop(); RVNet.end(); toast("Stream ended"); }
   }, 1000);
 })();

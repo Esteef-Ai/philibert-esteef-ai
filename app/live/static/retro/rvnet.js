@@ -144,6 +144,7 @@
 
     connect(guest) {
       this.disconnect();
+      this.guestName = guest || null;          // ensure() reconnects the same way
       const q = this.token && !guest ? "token=" + encodeURIComponent(this.token) : "guest=" + encodeURIComponent(guest || "Player");
       const url = this.server.replace(/^http/, "ws") + "/ws?" + q;
       return new Promise((resolve, reject) => {
@@ -154,21 +155,37 @@
           if (d.t === "me") { ok = true; this.me = d; resolve(d); }
           this._handle(d);
         };
-        ws.onclose = () => { if (!ok) reject(new Error("Couldn't reach the netplay server")); this._closed(); };
+        ws.onclose = () => { if (!ok) reject(new Error("Couldn't reach the netplay server")); if (this.ws === ws) this._closed(); };
         ws.onerror = () => {};
       });
     },
-    disconnect() { if (this.ws) { try { this.ws.close(); } catch (e) { /* ignore */ } } this._closed(); },
+    disconnect() {
+      const ws = this.ws; this.ws = null;
+      if (ws) { ws.onclose = null; try { ws.close(); } catch (e) { /* ignore */ } }
+      this._closed();
+    },
+    // the connection is gone: out of any room, and not online until connect()/ensure()
     _closed() {
+      this.ws = null; this.me = null;
+      this._leftRoom();
+      this.emit("offline");
+    },
+    // out of the room (left, kicked, or offline) - still online if the connection is up
+    _leftRoom() {
       if (this.match) { this.match.stop(); this.match = null; }
       const was = !!this.room;
-      this.ws = null; this.room = null; this.go = null;
+      this.room = null; this.go = null; this.early = null; this.starting = false;
       if (was) this.emit("closed");
     },
+    // online again if the connection dropped (same login or guest name as before)
+    async ensure() {
+      if (this.ws && this.ws.readyState === 1) return;
+      await this.connect(this.guestName);
+    },
 
-    create() { this.send({ t: "create" }); },
-    join(code) { this.send({ t: "join", code }); },
-    leave() { this.send({ t: "leave" }); this.disconnect(); },
+    async create() { await this.ensure(); this.send({ t: "create" }); },
+    async join(code) { await this.ensure(); this.send({ t: "join", code }); },
+    leave() { this.send({ t: "leave" }); this._leftRoom(); },        // stays online: create or join another
     setSlot(uid, slot) { this.send({ t: "slot", uid, slot }); },
     setDelay(n) { this.send({ t: "delay", n }); },
     setMode(mode) { this.send({ t: "mode", mode }); },
@@ -223,7 +240,7 @@
         case "resync": if (this.match) this.match.onResync(d.at); break;
         case "rload": if (this.match) this.match.onRload(d.at, d.data); break;
         case "ended": if (this.match) { this.match.stop(); this.match = null; } this.go = null; break;
-        case "kicked": this.disconnect(); break;
+        case "kicked": this._leftRoom(); break;
       }
       this.emit(d.t, d);
     }
