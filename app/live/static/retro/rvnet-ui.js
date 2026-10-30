@@ -111,7 +111,8 @@
       const slotSel = lead && !playing
         ? `<select data-uid="${esc(p.uid)}" class="ol-slot">${[0, 1, 2, 3].map(s => `<option value="${s}"${s === p.slot ? " selected" : ""}>P${s + 1}</option>`).join("")}</select>`
         : `<b>P${p.slot + 1}</b>`;
-      h += `<div class="ol-pl">${slotSel}<span class="nm">${esc(p.name)}${p.uid === R.leader ? " 👑" : ""}${p.connected ? "" : " (left)"}</span>${rom}
+      const lag = p.lag == null ? "" : `<span class="${p.lag > 120 ? "ol-bad" : "ol-dim"}" title="Round trip to the server">${p.lag} ms</span>`;
+      h += `<div class="ol-pl">${slotSel}<span class="nm">${esc(p.name)}${p.uid === R.leader ? " 👑" : ""}${p.connected ? "" : " (left)"}</span>${lag}${rom}
         ${lead && !playing && p.uid !== RVNet.me.uid ? `<button class="btn-ghost ol-kick" data-uid="${esc(p.uid)}" title="Remove">✕</button>` : ""}</div>`;
     });
     h += `<h3>Game</h3><div class="ol-row">${R.game ? `<b>${esc(R.game.title)}</b> <span class="ol-dim">${esc(R.game.system)}</span>` : '<span class="ol-dim">Not chosen yet</span>'}</div>
@@ -127,7 +128,9 @@
           <option value="stream"${stream ? " selected" : ""}>Host streams it</option></select>
           <span class="ol-dim">${R.game && STREAM_ONLY.includes(R.game.system) ? "N64 is always streamed" : ""}</span></div>
         <div class="ol-row" style="margin-top:10px"><span class="ol-dim">Input delay</span>
-          <select id="ol-delay">${[2, 3, 4, 5, 6, 8].map(n => `<option value="${n}"${n === R.delay ? " selected" : ""}>${n} frames (${Math.round(n * 16.7)} ms)</option>`).join("")}</select>
+          <select id="ol-delay" title="How far ahead each press is played. Too small for the slowest player's lag and the game keeps pausing.">
+            <option value="auto"${R.auto ? " selected" : ""}>Auto - ${R.autoDelay || R.delay} frames (${Math.round((R.autoDelay || R.delay) * 16.7)} ms)</option>
+            ${[2, 3, 4, 5, 6, 8, 10, 12, 15].map(n => `<option value="${n}"${!R.auto && n === R.delay ? " selected" : ""}>${n} frames (${Math.round(n * 16.7)} ms)</option>`).join("")}</select>
           <button class="btn-primary" id="ol-start" style="margin-left:auto"${allOk ? "" : " disabled"}>Start match</button></div>`;
     } else if (lead && playing) {
       h += `<div class="ol-row"><button class="btn-ghost" id="ol-end">End match</button></div>`;
@@ -151,7 +154,7 @@
       } catch (e) { status(e.message); }
       busy = false;
     });
-    if ($("ol-delay")) $("ol-delay").onchange = e => RVNet.setDelay(+e.target.value);
+    if ($("ol-delay")) $("ol-delay").onchange = e => RVNet.setDelay(e.target.value === "auto" ? "auto" : +e.target.value);
     if ($("ol-mode")) $("ol-mode").onchange = e => RVNet.setMode(e.target.value);
     if ($("ol-start")) $("ol-start").onclick = () => RVNet.start();
     if ($("ol-end")) $("ol-end").onclick = () => RVNet.end();
@@ -210,7 +213,11 @@
     if (p.state === "connected") toast((p.name || "A friend") + " is watching as P" + (p.port + 1));
     if (p.state === "failed") toast("Couldn't connect to " + (p.name || "a friend") + " - their network blocks a direct link", true);
   });
+  let slowSeen = 0;
+  RVNet.on("playing", () => { slowSeen = 0; });
   RVNet.on("stats", s => {
+    if (RVNet.mode !== "stream" && s.frame > 300 && s.fps < 45 && ++slowSeen === 3)
+      toast("The match keeps pausing for a slow connection - end it and pick a bigger Input delay (or Host streams it)", true);
     hud.textContent = `Online P${RVNet.mySlot() + 1} · ${s.fps} fps · waits ${s.stalls}` + (s.resyncs ? ` · resyncs ${s.resyncs}` : "");
   });
   RVNet.on("resync", () => toast("Re-syncing players…"));

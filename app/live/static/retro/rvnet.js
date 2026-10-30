@@ -213,6 +213,7 @@
 
     _handle(d) {
       switch (d.t) {
+        case "ping": this.send({ t: "pong", n: d.n }); return;     // the server measures our lag
         case "room": this.room = d; break;
         case "starting": this.go = null; this.early = null; this.mode = d.mode || "lockstep"; this.starting = this.mode === "lockstep"; break;
         case "go": this.go = d; this._maybeStart(); break;
