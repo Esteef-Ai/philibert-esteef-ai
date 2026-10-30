@@ -172,6 +172,7 @@
     },
     async onSig(d) {
       const data = d.data || {};
+      if (data.np) return;                     // the players' direct links (rvnet.js), not the stream
       if (data.sdp && data.sdp.type === "offer") {
         if (this.viewing) { await this._onOffer(d.from, data); await this._flushIce(d.from); }
         return;

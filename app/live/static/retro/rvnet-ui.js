@@ -5,6 +5,10 @@
   "use strict";
   const LOCKSTEP_SYSTEMS = ["NES", "SNES", "Genesis", "SMS", "GB", "GBA", "MAME", "NEOGEO"];   // proven deterministic (FBNeo: byte-identical, 2026-10-29)
   const STREAM_ONLY = ["N64"];          // not deterministic in EmulatorJS: the host streams it
+  // Neo Geo (FBNeo): the game stays in step, but the sound chip's counters drift apart between
+  // PCs, so the sync check fires every 2 s (measured 2026-10-30). Streamed by default; the
+  // leader can still switch to "everyone runs it".
+  const STREAM_FIRST = ["NEOGEO"];
   const $ = id => document.getElementById(id);
 
   // ── markup ──────────────────────────────────────────────────────────────────
@@ -112,7 +116,11 @@
       const slotSel = lead && !playing
         ? `<select data-uid="${esc(p.uid)}" class="ol-slot">${[0, 1, 2, 3].map(s => `<option value="${s}"${s === p.slot ? " selected" : ""}>P${s + 1}</option>`).join("")}</select>`
         : `<b>P${p.slot + 1}</b>`;
-      const lag = p.lag == null ? "" : `<span class="${p.lag > 120 ? "ol-bad" : "ol-dim"}" title="Round trip to the server">${p.lag} ms</span>`;
+      // others: the direct link when there is one, else the way through the server
+      const link = p.uid !== RVNet.me.uid && RVNet.mesh.peers.get(p.uid);
+      const lag = link && link.open
+        ? `<span class="${link.rtt > 120 ? "ol-bad" : "ol-ok"}" title="Direct link to this player (round trip)">⇄ ${link.rtt == null ? "…" : link.rtt + " ms"} direct</span>`
+        : p.lag == null ? "" : `<span class="${p.lag > 120 ? "ol-bad" : "ol-dim"}" title="Round trip to the server">${p.lag} ms${p.uid === RVNet.me.uid ? "" : " via server"}</span>`;
       h += `<div class="ol-pl">${slotSel}<span class="nm">${esc(p.name)}${p.uid === R.leader ? " 👑" : ""}${p.connected ? "" : " (left)"}</span>${lag}${rom}
         ${lead && !playing && p.uid !== RVNet.me.uid ? `<button class="btn-ghost ol-kick" data-uid="${esc(p.uid)}" title="Remove">✕</button>` : ""}</div>`;
     });
@@ -127,7 +135,8 @@
         <div class="ol-row"><span class="ol-dim">Mode</span><select id="ol-mode"${R.game && STREAM_ONLY.includes(R.game.system) ? " disabled" : ""}>
           <option value="lockstep"${stream ? "" : " selected"}>Everyone runs it (in sync)</option>
           <option value="stream"${stream ? " selected" : ""}>Host streams it</option></select>
-          <span class="ol-dim">${R.game && STREAM_ONLY.includes(R.game.system) ? "N64 is always streamed" : ""}</span></div>
+          <span class="ol-dim">${R.game && STREAM_ONLY.includes(R.game.system) ? "N64 is always streamed"
+            : R.game && STREAM_FIRST.includes(R.game.system) && !stream ? "Neo Geo stutters in sync mode (re-syncs every 2 s)" : ""}</span></div>
         <div class="ol-row" style="margin-top:10px"><span class="ol-dim">Input delay</span>
           <select id="ol-delay" title="How far ahead each press is played. Too small for the slowest player's lag and the game keeps pausing.">
             <option value="auto"${R.auto ? " selected" : ""}>Auto - ${R.autoDelay || R.delay} frames (${Math.round((R.autoDelay || R.delay) * 16.7)} ms)</option>
@@ -149,7 +158,7 @@
       busy = true; status("Reading " + g.title + "…");
       try {
         const sys = SYS_MAP[g.system] || {};
-        RVNet.setMode(STREAM_ONLY.includes(g.system) ? "stream" : "lockstep");
+        RVNet.setMode(STREAM_ONLY.includes(g.system) || STREAM_FIRST.includes(g.system) ? "stream" : "lockstep");
         await RVNet.pickGame({ system: g.system, title: g.title, file: g.filename, core: sys.core || "" }, await romBytes(g));
         status("");
       } catch (e) { status(e.message); }
@@ -195,6 +204,7 @@
   };
   RVNet.on("closed", backToLobby);
   RVNet.on("offline", () => render());
+  RVNet.on("mesh", () => { if (!RVNet.match) render(); });
   RVNet.on("kicked", () => toast("The leader removed you from the room", true));
   RVNet.on("starting", d => {
     const g = d.game;
@@ -226,7 +236,7 @@
   RVNet.on("stats", s => {
     if (RVNet.mode !== "stream" && s.frame > 300 && s.fps < 45 && ++slowSeen === 3)
       toast("The match keeps pausing for a slow connection - end it and pick a bigger Input delay (or Host streams it)", true);
-    hud.textContent = `Online P${RVNet.mySlot() + 1} · ${s.fps} fps · waits ${s.stalls}` + (s.resyncs ? ` · resyncs ${s.resyncs}` : "");
+    hud.textContent = `Online P${RVNet.mySlot() + 1} · ${s.fps} fps · ${s.directPct >= 50 ? "direct" : "via server"} · waits ${s.stalls}` + (s.resyncs ? ` · resyncs ${s.resyncs}` : "");
   });
   RVNet.on("resync", () => toast("Re-syncing players…"));
   RVNet.on("ended", d => { backToLobby(); toast((d && d.why ? d.why + " - " : "") + "Match ended - back in the room"); });
