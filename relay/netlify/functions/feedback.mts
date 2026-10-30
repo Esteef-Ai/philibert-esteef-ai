@@ -9,7 +9,7 @@
 // (default below). Nothing is stored here; the issue is the only record.
 import type { Config, Context } from "@netlify/functions"
 
-const DEFAULT_REPO = "sskrobe/philibert-esteef-ai"
+const DEFAULT_REPO = "Esteef-Ai/philibert-esteef-ai"
 const KINDS: Record<string, string> = { idea: "Idea", bug: "Something's wrong", change: "Change request", praise: "Praise" }
 const PARTS = ["Chat", "Desktop", "App Store", "Notes", "Files", "Models", "Image Generation", "Retro Vault",
   "Band Manager", "Setup / Update", "Something else"]

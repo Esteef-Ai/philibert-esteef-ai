@@ -23,7 +23,7 @@ This repository is private. You need a GitHub account that has been invited to i
 2. Put this repository in it - either:
    - **with git** (makes updating quickest): open a terminal in that folder and run
      ```
-     git clone https://github.com/sskrobe/philibert-esteef-ai.git .
+     git clone https://github.com/Esteef-Ai/philibert-esteef-ai.git .
      ```
      (the `.` at the end means "into this folder"; the folder must be empty).
      You never need git again after this - the **UPDATE** button does it. If you do

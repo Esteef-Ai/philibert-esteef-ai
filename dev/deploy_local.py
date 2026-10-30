@@ -20,7 +20,7 @@ SHIP = ["app", "setup", "brand/final", "Start-Windows.bat", "Start-Full-Windows.
 TEXT = {".py", ".ps1", ".sh", ".bat", ".command", ".json", ".md", ".html", ".js", ".svg", ".txt"}
 # The repo's address, which Update needs. It names the developer's GitHub account
 # until the repo moves to an Esteef.Ai organization - then delete this allowance.
-REPO_ADDRESS = "sskrobe/philibert-esteef-ai"
+REPO_ADDRESS = "Esteef-Ai/philibert-esteef-ai"
 
 
 def main():
