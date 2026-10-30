@@ -750,6 +750,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
         </div>
         <div style="width:1px;height:16px;background:rgba(255,255,255,.15);margin:0 .2rem;"></div>
         <button class="emu-action-btn" id="emu-np-btn" title="Netplay lobby"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Netplay</button>
+        <button class="emu-action-btn" id="emu-coin-btn" title="Insert a coin (arcade games) - also the 5 key, or Select / Shift" style="display:none">&#x1FA99; Insert Coin</button>
         <button class="emu-action-btn" id="emu-ctrl-btn" title="Controller mapping"><svg viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="10" rx="3"/><path d="M6 13h4M8 11v4"/><circle cx="16" cy="12" r=".7" fill="currentColor"/><circle cx="18" cy="14" r=".7" fill="currentColor"/></svg>Controls</button>
         <div style="width:1px;height:16px;background:rgba(255,255,255,.15);margin:0 .2rem;"></div>
         <button class="emu-action-btn" id="emu-close-btn" title="Close game">&#x2715; Close</button>
@@ -799,6 +800,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
         <span><kbd>Z</kbd> A &nbsp;<kbd>X</kbd> B &nbsp;<kbd>A</kbd> Y &nbsp;<kbd>S</kbd> X</span>
         <span><kbd>Arrows</kbd> D-pad</span>
         <span><kbd>Enter</kbd> Start &nbsp;<kbd>Shift</kbd> Select</span>
+        <span id="emu-coin-hint" style="display:none"><kbd>5</kbd> or <kbd>Select</kbd> Insert Coin</span>
         <span><kbd>F2</kbd> Save &nbsp;<kbd>F4</kbd> Load</span>
         <span><kbd>Esc</kbd> Close</span>
       </div>
@@ -1493,6 +1495,10 @@ async function launchGame(idx){
   // Neo Geo (FinalBurn Neo): the game zip, its parent zip (clones) and neogeo.zip (BIOS) go to
   // the core as zips side by side - short names + <base href="/retro/neogeo/"> + dontExtractBIOS
   const isNeo = g.system === "NEOGEO";
+  const isArcade = isMame || isNeo;
+  document.getElementById("emu-coin-btn").style.display = isArcade ? "" : "none";
+  document.getElementById("emu-coin-hint").style.display = isArcade ? "" : "none";
+  if(isArcade) toast("Arcade game: press \u{1FA99} Insert Coin (or 5 / Select) for a credit, then Start");
   if(isNeo){
     let st={};
     try{ st=await (await fetch("/retro/api/neogeo")).json(); }catch(e){}
@@ -1645,6 +1651,8 @@ async function launchGame(idx){
   _dl.push("    }).catch(function(err){window.parent.postMessage({type:'ejs_save_err',msg:String(err)},'*');});");
   _dl.push("  }catch(err){window.parent.postMessage({type:'ejs_save_err',msg:String(err)},'*');}");
   _dl.push("};");
+  // arcade: the 5 key inserts a coin (the usual arcade key), on top of Select
+  if(isArcade) _dl.push("document.addEventListener('keydown',function(e){ if(e.key==='5'&&!e.repeat&&parent.insertCoin) parent.insertCoin(); });");
   _dl.push("window._doLoad=function(){ if(window._netplay){window.parent.postMessage({type:'ejs_load_err',msg:'not during an online match'},'*');return;}");
   _dl.push("  if(!window._ejsReady||!window.EJS_emulator||!window.EJS_emulator.gameManager)return;");
   _dl.push("  var k=window._stateKey+'_'+window._slot;");
@@ -1823,6 +1831,19 @@ document.getElementById("emu-load-btn").onclick=()=>{
 };
 document.getElementById("emu-video-btn").onclick=()=>openVideoModal();
 document.getElementById("emu-close-btn").onclick=closeEmu;
+// Insert Coin = a short press of Select (RetroPad index 2), FinalBurn Neo's and MAME's coin.
+// Through gameManager.simulateInput, so an online match sends it like any other press.
+function insertCoin(){
+  var f=document.getElementById("emu-iframe"), w=f&&f.contentWindow;
+  try{
+    var gm=w.EJS_emulator.gameManager;
+    gm.simulateInput(0,2,1);
+    setTimeout(function(){ try{ gm.simulateInput(0,2,0); }catch(e){} },150);
+    toast("Coin in - press Start");
+  }catch(e){ toast("The game isn't running yet",true); }
+  if(f) f.focus();
+}
+document.getElementById("emu-coin-btn").onclick=insertCoin;
 document.getElementById("emu-np-btn").onclick=openEmuLobby;
 document.getElementById("emu-ctrl-btn").onclick=function(){closeModal("emu-modal");openModal("ctrl-modal");};
 document.getElementById("emu-minimize-btn").onclick=minimizeEmu;
