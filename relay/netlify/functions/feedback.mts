@@ -62,8 +62,12 @@ export default async (req: Request, context: Context) => {
     body: JSON.stringify({ title: `[${KINDS[kind]}] ${title}`.slice(0, 120), body: lines.join("\n"), labels: ["feedback"] }),
   })
   if (!res.ok) {
-    console.log("GitHub said", res.status, (await res.text()).slice(0, 300))
-    return json(502, { error: `GitHub did not take it (${res.status}). Try again later.` })
+    const said = (await res.text()).slice(0, 300)
+    console.log("GitHub said", res.status, said)
+    // GitHub's own reason (never the token) - says what to fix on the token or the org
+    let reason = ""
+    try { reason = String(JSON.parse(said).message || "").slice(0, 200) } catch { /* not JSON */ }
+    return json(502, { error: `GitHub did not take it (${res.status}). Try again later.`, reason })
   }
   const issue = await res.json()
   // GitHub drops labels given at creation for a fine-grained token (no error), so add the
