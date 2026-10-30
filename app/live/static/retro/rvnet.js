@@ -68,6 +68,7 @@
     async offer(net, uid) {
       const peer = this._peer(net, uid);
       this._wire(net, uid, peer, peer.pc.createDataChannel("np", { ordered: false, maxRetransmits: 0 }));
+      this._wire(net, uid, peer, peer.pc.createDataChannel("st", { ordered: true }));   // resync states
       await peer.pc.setLocalDescription(await peer.pc.createOffer());
       net.send({ t: "sig", to: uid, data: { np: 1, sdp: peer.pc.localDescription } });
     },
@@ -91,6 +92,18 @@
       }
     },
     _wire(net, uid, peer, dc) {
+      if (dc.label === "st") {                 // the leader's state at a resync, in pieces
+        peer.st = dc;
+        dc.onmessage = e => {
+          let d; try { d = JSON.parse(e.data); } catch (x) { return; }
+          if (d.t !== "rs" || !(d.n > 0)) return;
+          if (!peer.parts || peer.parts.at !== d.at) peer.parts = { at: d.at, n: d.n, got: new Array(d.n), count: 0 };
+          const P = peer.parts;
+          if (P.got[d.i] === undefined) { P.got[d.i] = String(d.d); P.count++; }
+          if (P.count === P.n) { peer.parts = null; if (net.match) net.match.onRload(P.at, P.got.join(""), true); }
+        };
+        return;
+      }
       peer.dc = dc;
       dc.onopen = () => { peer.open = true; net.emit("mesh", { uid, open: true }); };
       dc.onclose = () => { peer.open = false; net.emit("mesh", { uid, open: false }); };
@@ -104,6 +117,14 @@
           peer.rtt = Math.round(r[Math.max(0, r.length - 3)]);           // covers most of the recent ones
         }
       };
+    },
+    sendState(at, data) {
+      const SIZE = 16000, n = Math.ceil(data.length / SIZE);
+      this.peers.forEach(p => {
+        if (!p.st || p.st.readyState !== "open") return;
+        try { for (let i = 0; i < n; i++) p.st.send(JSON.stringify({ t: "rs", at, i, n, d: data.slice(i * SIZE, (i + 1) * SIZE) })); }
+        catch (e) { /* closing: the server's copy still comes */ }
+      });
     },
     sendInputs(slot, list) {
       const s = JSON.stringify({ t: "i", s: slot, l: list });
@@ -139,7 +160,14 @@
       this.slot = net.mySlot();
       this.delay = go.delay; this.sumEvery = go.sumEvery || 120;
       this.bundles = new Map(); this.wake = null;
-      this.resyncAt = null; this.rload = null;
+      this.resyncAt = null;
+      this.rloads = new Map(); this.lastLoadedAt = -1;   // resync states by frame (direct link or server)
+      this.sumStates = new Map(); this.diagSent = 0; this.desyncF = null;
+      // Neo Geo: FBNeo's sound-chip counters drift between PCs while the game itself stays in
+      // step (measured: they sit in the first 0x400 bytes and the last 0x120 of the state) -
+      // the sync check leaves them out, or it would re-sync every 2 s for nothing
+      const sys = net.room && net.room.game && net.room.game.system;
+      this.skip = sys === "NEOGEO" ? [0x400, 0x120] : null;
       this.running = true; this.frame = 0;
       this.stats = { stalls: 0, resyncs: 0, fps: 0, direct: 0 };
       this.slots = go.slots || [0, 1, 2, 3];
@@ -156,6 +184,16 @@
       // the start state: everybody (leader too) loads it before frame 0
       this.gm.loadState(unb64(go.data));
       for (let s = 0; s < 4; s++) for (let i = 0; i < NINPUT; i++) this.apply(s, i, 0);
+      // what this emulator runs with (the server compares the players' reports)
+      try {
+        const E = emuWin.EJS_emulator, enc = new TextEncoder();
+        net.send({ t: "env", env: {
+          core: E.getCore ? E.getCore() : "", ejs: String(E.ejs_version || ""),
+          options: fnv(enc.encode(E.getCoreSettings ? String(E.getCoreSettings()) : "")),
+          cheats: String((E.cheats || []).filter(c => c.checked).length),
+          gamepads: String((navigator.getGamepads ? [...navigator.getGamepads()] : []).filter(Boolean).length),
+          ua: navigator.userAgent } });
+      } catch (e) { /* only a report */ }
     }
     onBundle(f, inputs) {
       if (f < this.frame) return;              // that frame already ran on the direct links' inputs
@@ -186,8 +224,26 @@
       }
       return out;
     }
-    onResync(at) { this.resyncAt = at; this.stats.resyncs++; if (this.wake) { const w = this.wake; this.wake = null; w(); } }
-    onRload(at, data) { this.rload = { at, data }; if (this.wake) { const w = this.wake; this.wake = null; w(); } }
+    onResync(at, f) {
+      if (f !== undefined) this.desyncF = f;
+      if (this.resyncAt !== at && at > this.lastLoadedAt) { this.resyncAt = at; this.stats.resyncs++; }
+      if (this.wake) { const w = this.wake; this.wake = null; w(); }
+    }
+    // the leader's state for a resync: straight from the leader (direct) or via the server,
+    // whichever comes first; a direct one can arrive before the server's word about the resync
+    onRload(at, data, direct) {
+      if (at <= this.lastLoadedAt || this.rloads.has(at)) return;
+      this.rloads.set(at, data);
+      if (direct && this.resyncAt === null && at >= this.frame) { this.resyncAt = at; this.stats.resyncs++; }
+      if (this.wake) { const w = this.wake; this.wake = null; w(); }
+    }
+    // our state at the frame where the check failed, for the server to compare (a few a match)
+    sendDiag(f) {
+      const st = this.sumStates.get(f);
+      if (!st || this.diagSent >= 3) return;
+      this.diagSent++;
+      setTimeout(() => this.net.send({ t: "dstate", f, data: b64(st) }), 1500);
+    }
     stop() {
       this.running = false;
       this.gm.simulateInput = this.origSim;
@@ -202,12 +258,21 @@
         const f = this.frame;
         // resync: stop before frame `at`; the leader sends its state, everybody loads it
         if (this.resyncAt !== null && f >= this.resyncAt) {
-          if (net.isLeader() && !this._rsent) { this._rsent = true; net.send({ t: "rstate", data: b64(this.gm.getState()) }); }
-          while (this.running && !this.rload) await this.waitEvent(250);
+          const at = this.resyncAt;
+          if (f > at) console.warn("[RVNet] past the resync point", f, at);
+          if (net.isLeader() && !this._rsent) {
+            this._rsent = true;
+            const data = b64(this.gm.getState());
+            net.send({ t: "rstate", data });
+            Mesh.sendState(at, data);              // straight to the others: no trip through the server
+            this.rloads.set(at, data);             // everybody loads it, the leader too (like at the start)
+          }
+          while (this.running && !this.rloads.has(at)) await this.waitEvent(250);
           if (!this.running) break;
-          this.gm.loadState(unb64(this.rload.data));
-          this.rload = null; this.resyncAt = null; this._rsent = false;
+          this.gm.loadState(unb64(this.rloads.get(at)));
+          this.rloads.delete(at); this.lastLoadedAt = at; this.resyncAt = null; this._rsent = false;
           net.emit("resynced", { frame: f });
+          if (this.desyncF !== null) { this.sendDiag(this.desyncF); this.desyncF = null; }
         }
         // our input for frame f+delay - ONCE: the server and the other players must all get
         // the same value for it
@@ -235,7 +300,12 @@
         const moved = await LS.stepAsync();
         if (moved !== 1) net.emit("warn", { frame: f, moved });
         this.frame = f + 1;
-        if (this.frame % this.sumEvery === 0) net.send({ t: "sum", f: this.frame, h: fnv(this.gm.getState()) });
+        if (this.frame % this.sumEvery === 0) {
+          const st = this.gm.getState();
+          this.sumStates.set(this.frame, st);                 // kept a little while: a desync report needs it
+          for (const k of this.sumStates.keys()) if (k < this.frame - 3 * this.sumEvery) this.sumStates.delete(k);
+          net.send({ t: "sum", f: this.frame, h: fnv(this.skip ? st.subarray(this.skip[0], st.length - this.skip[1]) : st) });
+        }
         // keep to real time: 60 frames a second, catching up quickly after a stall
         t0 += 1000 / 60;
         const ahead = t0 - LS.realNow();
@@ -326,6 +396,7 @@
     leave() { this.send({ t: "leave" }); this._leftRoom(); },        // stays online: create or join another
     setSlot(uid, slot) { this.send({ t: "slot", uid, slot }); },
     setDelay(n) { this.send({ t: "delay", n }); },
+    setFeel(n) { this.send({ t: "feel", n }); },
     setMode(mode) { this.send({ t: "mode", mode }); },
     kick(uid) { this.send({ t: "kick", uid }); },
     start() { this.send({ t: "start" }); },
@@ -348,13 +419,18 @@
         }
         return;
       }
+      // Everybody's emulator runs its first 60 frames before the start state goes in - the
+      // leader's to make the state, the others' too: a core that loads it right after booting
+      // is not quite where the leader's is (the old "desync at frame 120" of every match)
+      this.emuWin = null;
+      const gm = win.EJS_emulator.gameManager;
+      while (gm.getFrameNum() < 60) await sleep(50);
+      win.LS.auto = false; await sleep(150);
       if (this.isLeader() && this.starting) {        // ("starting" arrives before the room update)
         this.starting = false;
-        const gm = win.EJS_emulator.gameManager;
-        while (gm.getFrameNum() < 60) await sleep(50);          // past the core's first frames
-        win.LS.auto = false; await sleep(150);
         this.send({ t: "state", data: b64(gm.getState()) });
       }
+      this.emuWin = win;
       this._maybeStart();
     },
     _maybeStart() {
@@ -378,8 +454,8 @@
         case "f":            // bundles can arrive before this PC's emulator has finished booting
           if (this.match) this.match.onBundle(d.f, d.i); else (this.early = this.early || new Map()).set(d.f, d.i);
           break;
-        case "resync": if (this.match) this.match.onResync(d.at); break;
-        case "rload": if (this.match) this.match.onRload(d.at, d.data); break;
+        case "resync": if (this.match) this.match.onResync(d.at, d.f); break;
+        case "rload": if (this.match) this.match.onRload(d.at, d.data, false); break;
         case "ended": if (this.match) { this.match.stop(); this.match = null; } this.go = null; break;
         case "kicked": this._leftRoom(); break;
       }

@@ -5,10 +5,7 @@
   "use strict";
   const LOCKSTEP_SYSTEMS = ["NES", "SNES", "Genesis", "SMS", "GB", "GBA", "MAME", "NEOGEO"];   // proven deterministic (FBNeo: byte-identical, 2026-10-29)
   const STREAM_ONLY = ["N64"];          // not deterministic in EmulatorJS: the host streams it
-  // Neo Geo (FBNeo): the game stays in step, but the sound chip's counters drift apart between
-  // PCs, so the sync check fires every 2 s (measured 2026-10-30). Streamed by default; the
-  // leader can still switch to "everyone runs it".
-  const STREAM_FIRST = ["NEOGEO"];
+
   const $ = id => document.getElementById(id);
 
   // ── markup ──────────────────────────────────────────────────────────────────
@@ -135,13 +132,16 @@
         <div class="ol-row"><span class="ol-dim">Mode</span><select id="ol-mode"${R.game && STREAM_ONLY.includes(R.game.system) ? " disabled" : ""}>
           <option value="lockstep"${stream ? "" : " selected"}>Everyone runs it (in sync)</option>
           <option value="stream"${stream ? " selected" : ""}>Host streams it</option></select>
-          <span class="ol-dim">${R.game && STREAM_ONLY.includes(R.game.system) ? "N64 is always streamed"
-            : R.game && STREAM_FIRST.includes(R.game.system) && !stream ? "Neo Geo stutters in sync mode (re-syncs every 2 s)" : ""}</span></div>
+          <span class="ol-dim">${R.game && STREAM_ONLY.includes(R.game.system) ? "N64 is always streamed" : ""}</span></div>
         <div class="ol-row" style="margin-top:10px"><span class="ol-dim">Input delay</span>
           <select id="ol-delay" title="How far ahead each press is played. Too small for the slowest player's lag and the game keeps pausing.">
             <option value="auto"${R.auto ? " selected" : ""}>Auto - ${R.autoDelay || R.delay} frames (${Math.round((R.autoDelay || R.delay) * 16.7)} ms)</option>
             ${[2, 3, 4, 5, 6, 8, 10, 12, 15].map(n => `<option value="${n}"${!R.auto && n === R.delay ? " selected" : ""}>${n} frames (${Math.round(n * 16.7)} ms)</option>`).join("")}</select>
-          <button class="btn-primary" id="ol-start" style="margin-left:auto"${allOk ? "" : " disabled"}>Start match</button></div>`;
+          <button class="btn-primary" id="ol-start" style="margin-left:auto"${allOk ? "" : " disabled"}>Start match</button></div>
+        ${R.auto && !stream ? `<div class="ol-row"><span class="ol-dim">Feel</span>
+          <select id="ol-feel" title="Auto delay plus 0, 1 or 2 frames: a little more delay means fewer pauses when the connection hiccups">
+            ${["Lowest lag", "Balanced", "Smoothest"].map((t, n) => `<option value="${n}"${n === (R.feel == null ? 1 : R.feel) ? " selected" : ""}>${t}</option>`).join("")}</select>
+          <span class="ol-dim">${["Least delay - can stutter when the line hiccups", "One frame of headroom", "Two frames of headroom - steadiest"][R.feel == null ? 1 : R.feel]}</span></div>` : ""}`;
     } else if (lead && playing) {
       h += `<div class="ol-row"><button class="btn-ghost" id="ol-end">End match</button></div>`;
     } else if (!playing) {
@@ -158,13 +158,14 @@
       busy = true; status("Reading " + g.title + "…");
       try {
         const sys = SYS_MAP[g.system] || {};
-        RVNet.setMode(STREAM_ONLY.includes(g.system) || STREAM_FIRST.includes(g.system) ? "stream" : "lockstep");
+        RVNet.setMode(STREAM_ONLY.includes(g.system) ? "stream" : "lockstep");
         await RVNet.pickGame({ system: g.system, title: g.title, file: g.filename, core: sys.core || "" }, await romBytes(g));
         status("");
       } catch (e) { status(e.message); }
       busy = false;
     });
     if ($("ol-delay")) $("ol-delay").onchange = e => RVNet.setDelay(e.target.value === "auto" ? "auto" : +e.target.value);
+    if ($("ol-feel")) $("ol-feel").onchange = e => RVNet.setFeel(+e.target.value);
     if ($("ol-mode")) $("ol-mode").onchange = e => RVNet.setMode(e.target.value);
     if ($("ol-start")) $("ol-start").onclick = () => RVNet.start();
     if ($("ol-end")) $("ol-end").onclick = () => RVNet.end();
@@ -181,16 +182,19 @@
   }
 
   // ── events ──────────────────────────────────────────────────────────────────
-  let checkedFor = null;
+  let checking = false;
   RVNet.on("room", async R => {
     render();
-    // a new game was chosen: check MY copy (the leader's own check is done by pickGame)
-    if (R.game && !RVNet.isLeader() && R.mode !== "stream" && checkedFor !== R.game.sha1 + R.code) {
-      checkedFor = R.game.sha1 + R.code;
+    // a game was chosen (or the same one again): the server has no answer for MY copy yet -
+    // check it (the leader's own check is done by pickGame)
+    const mine = RVNet.me && R.players.find(p => p.uid === RVNet.me.uid);
+    if (R.game && !RVNet.isLeader() && R.mode !== "stream" && mine && mine.rom == null && !checking) {
+      checking = true;
       const i = libIndex(R.game);
       const g = i >= 0 ? LIBRARY[i] : LIBRARY.find(x => x.system === R.game.system && x.title === R.game.title);
       try { await RVNet.checkRom(g ? await romBytes(g) : null); }
       catch (e) { await RVNet.checkRom(null); }
+      finally { checking = false; }
       if (!g) toast("You don't have " + R.game.title + " (" + R.game.system + ") in Retro Vault", true);
     }
   });
