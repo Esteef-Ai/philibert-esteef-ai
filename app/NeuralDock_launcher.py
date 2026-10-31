@@ -4580,9 +4580,21 @@ def gui_smoke_test(path, workspace=None, test_input=""):
     return bad == 0, head + NL + NL.join(rows)
 
 
+def script_path(path):
+    """The script in a run_script path, without a leading Python command.
+    Models pass the whole test command as the path: "C:\\...\\python.exe tests/t.py"
+    or "python tests/t.py". Measured 2026-10-31 (ChordShift T03): that failed, and
+    the model wrote wrapper scripts to run its tests instead. Philibert's own-folder
+    guard checks this same cleaned path, so the command form cannot slip past it."""
+    _m = re.match(r'^\s*"?(?:[^"]*[\\/])?(?:python|py)(?:3(?:\.\d+)?)?(?:\.exe)?"?\s+(?:-\S+\s+)*(.+\.py)\s*$',
+                  str(path or ""), re.I)
+    return _m.group(1).strip().strip('"') if _m else path
+
+
 def fs_run_script(path, workspace):
     """Run a Python script in the project workspace."""
     import subprocess as _sp
+    path = script_path(path)
     ext = Path(str(path)).suffix.lower()
     if ext in _NOT_PYTHON:
         return {"stdout": "", "returncode": -1, "stderr":
@@ -8151,6 +8163,31 @@ def model_has_vision(name):
     makes Ollama return a bare 400, which is what killed the screenshot step."""
     n = name or ""
     return bool(re.search(_VISION_PAT, n, re.I)) and not re.search(_BROKEN_PAT, n, re.I)
+
+_TOOL_IDS_CACHE = {}
+
+
+def template_wants_tool_ids(model):
+    """Does this model's chat template match tool results to tool calls by id?
+
+    Most templates ignore ids, and ND's history carries none: an assistant turn with its text only,
+    then the results. A template that tracks ids (North Mini Code's: `tool_call_id not in
+    tool_ids_seen`) crashes Ollama with HTTP 500 on that history at the second round - measured
+    2026-10-31, every T3 run ended in round 1. Only those models get the calls (with ids) on the
+    assistant turn and tool_call_id on each result, so the history every other model was measured
+    with stays exactly as it was."""
+    if not model:
+        return False
+    if model not in _TOOL_IDS_CACHE:
+        try:
+            req = urllib.request.Request(OLLAMA_URL + "/api/show", data=json.dumps({"model": model}).encode(),
+                                         headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=15) as r:
+                _TOOL_IDS_CACHE[model] = "tool_call_id" in (json.loads(r.read()).get("template") or "")
+        except Exception:
+            return False                                  # unknown: not cached, asked again next time
+    return _TOOL_IDS_CACHE[model]
+
 
 def describe_screenshot(b64, why="the current screen"):
     """Hand a screenshot to the vision specialist and get words back, so a
@@ -13460,8 +13497,11 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                     f"call it again. For drive sizes, memory or hardware call computer_info; for "
                     f"files use list_dir / read_file. Otherwise answer from what you know.")
         if PORTABLE and name in ("write_file", "edit_file", "run_script", "delete_file", "move_file"):
-            _hit = next((protected_path((a or {}).get(k)) for k in ("path", "dest", "destination", "src", "source", "cwd")
-                         if protected_path((a or {}).get(k))), "")
+            _pa = dict(a or {})
+            if name == "run_script":
+                _pa["path"] = script_path(_pa.get("path"))
+            _hit = next((protected_path(_pa.get(k)) for k in ("path", "dest", "destination", "src", "source", "cwd")
+                         if protected_path(_pa.get(k))), "")
             if _hit:
                 log(f"{name} refused: {PRODUCT}'s own {_hit} folder", "warn")
                 return (f"[PROTECTED] That is {PRODUCT}'s own program ({_hit} on the drive). {PRODUCT} never "
@@ -13660,7 +13700,7 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                 log(f"write_file: {path}", "ok")
                 return _suite_tail(res)
             if name == "run_script":
-                _rp = (a.get("path","") or "").strip()
+                _rp = str(script_path((a.get("path","") or "").strip()))
                 r = fs_run_script(_rp, workspace)
                 _out = f"[RUN] Exit {r['returncode']}\n{r['stdout']}\n{r['stderr']}"
                 try:
@@ -14071,8 +14111,13 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
     # then spent two repair passes on. The placed-edit steps already confine
     # writes to one file (only_file); a top-level request that names its one
     # file gets the same guard. Reads are never restricted.
+    # Not for foreman turns (bench_fm_): the task lists its own files and the
+    # foreman checks them with git. Measured 2026-10-31: ChordShift T01 lists
+    # __init__.py AND pyproject.toml, this guessed "only __init__.py" and
+    # refused pyproject.toml every attempt.
     _scope_by_user = False
-    if allow_split and not only_file and workspace:
+    if allow_split and not only_file and workspace and \
+            not str(req_id or "").startswith("bench_fm_"):
         try:
             _bpm = build_plan_mod()
             _tgt = (_bpm.single_file_target(_last_user)
@@ -14840,7 +14885,8 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                                     "path": (c.get("arguments") or {}).get("path"),
                                     "failed": _call_failed(c)}
                                    for c in calls])
-            all_tool_results.extend(results)
+            # (no results to add: this round's calls are stopped before they run - `results`
+            # here was undefined in round 1 and the PREVIOUS round's list after it)
             clear_rewrites(session_id)
             final = ("STOPPED - the model wrote the same file over and over under "
                      "different names." + NL + NL
@@ -15291,7 +15337,17 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                                 "failed": _call_failed(c)}
                                for c in calls])
         all_tool_results.extend(results)
-        convo.append({"role": "assistant", "content": content})
+        _ids = native and template_wants_tool_ids(model)
+        if _ids:
+            # one id per result; the calls behind them, so the template can pair them up
+            _src = calls if len(calls) == len(results) else [{"name": r_["tool"], "arguments": {}} for r_ in results]
+            _cids = [f"call_{rnd}_{i}" for i in range(len(results))]
+            convo.append({"role": "assistant", "content": content,
+                          "tool_calls": [{"id": cid, "type": "function",
+                                          "function": {"name": c["name"], "arguments": c.get("arguments") or {}}}
+                                         for cid, c in zip(_cids, _src)]})
+        else:
+            convo.append({"role": "assistant", "content": content})
         left = MAX_ROUNDS - rnd
         if left <= 2:
             budget = (f"\n\nBUDGET WARNING: only {left} tool round(s) remain. "
@@ -15299,13 +15355,14 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
         else:
             budget = f"\n\n({left} tool rounds remain.)"
         if native:
-            for r_ in results:
+            for _i, r_ in enumerate(results):
                 # 30000 chars per tool result was ~7.5k tokens EACH. Three of
                 # those overflowed a 32k window on their own, before the system
                 # prompt, the memory block or the conversation. Generation then
                 # crawls and the model has no room to reason about what it read.
                 convo.append({"role": "tool",
-                              "content": clip_tool_result(r_["result"], TOOL_RESULT_CHARS)})
+                              "content": clip_tool_result(r_["result"], TOOL_RESULT_CHARS),
+                              **({"tool_call_id": _cids[_i]} if _ids else {})})
             nxt = {"role": "user", "content": "Continue. Call more tools if needed; otherwise give your final answer now. If a result says VERIFY FAILED, fix it first." + budget + plan_block(session_id)}
         else:
             ctx = "\n\n".join([f"[Tool result for {r_['tool']} {r_['arg'][:80]}]:\n"
