@@ -403,10 +403,91 @@ def github(name, body):
     return {"error": "unknown"}
 
 
+_CTX = {}
+
+
+def trust_more_roots():
+    """Secure downloads trust Windows' own certificates AND Mozilla's list (certifi, or the copy
+    inside pip, which every Philibert Python has). A new Windows laptop adds a root to its store
+    only when a browser first needs it, so Python can lack GitHub's root while Edge reaches
+    GitHub fine: every update failed with "certificate verify failed" (a laptop, 2026-10-31).
+    Philibert Setup does the same (installer/app.py). Once per process; True when it took."""
+    import importlib
+    import ssl
+    if "ctx" in _CTX:
+        return _CTX["ctx"] is not None
+    extra = None
+    for mod in ("certifi", "pip._vendor.certifi"):
+        try:
+            extra = importlib.import_module(mod).where()
+            break
+        except Exception:
+            continue
+    if not extra:
+        _CTX["ctx"] = None
+        return False
+    ctx = ssl.create_default_context()
+    try:
+        ctx.load_verify_locations(extra)
+    except Exception:
+        _CTX["ctx"] = None
+        return False
+    _CTX["ctx"] = ctx
+    ssl._create_default_https_context = lambda *a, **k: ctx     # every urllib/http.client HTTPS call
+    return True
+
+
+def _cert_failed(e):
+    import ssl
+    r = getattr(e, "reason", e)
+    return isinstance(r, ssl.SSLCertVerificationError) or "CERTIFICATE_VERIFY_FAILED" in str(e)
+
+
+def _download(url, headers, timeout=600):
+    """The bytes at url. When Python still cannot check GitHub's certificate, Windows' own
+    downloader (curl.exe, which checks it the way Edge does) is tried before giving up."""
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.read()
+    except urllib.error.HTTPError:
+        raise
+    except Exception as e:
+        curl = None
+        if sys.platform == "win32":           # Windows' own (checks certificates like Edge), else any
+            own = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "curl.exe"
+            curl = str(own) if own.is_file() else shutil.which("curl.exe")
+        if not (_cert_failed(e) and curl):
+            raise
+        import tempfile
+        fd, tmp = tempfile.mkstemp(suffix=".zip")
+        os.close(fd)
+        try:
+            cmd = [curl, "-fsSL", "--ssl-revoke-best-effort", "--max-time", str(timeout), "-o", tmp]
+            for k, v in headers.items():
+                cmd += ["-H", f"{k}: {v}"]
+            r = subprocess.run(cmd + [url], capture_output=True, text=True, timeout=timeout + 30,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            if r.returncode != 0:
+                raise e
+            return Path(tmp).read_bytes()
+        finally:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+
+CERT_HELP = ("this computer does not trust the certificate of GitHub, where updates come from. "
+             "Check that the computer's date and time are right. On a school or work computer the network "
+             "may be checking secure connections - ask IT to allow github.com, or update with Philibert Setup.")
+
+
 def update(log=None):
     """Bring the drive up to the repo's latest. git when the drive is a checkout and
     git is installed; otherwise the repo's zip (signed in, for a private repo).
     Never touches data/ or models/."""
+    trust_more_roots()
     before = version()
     busy = []                                 # files in use that could not be replaced
     repo, branch = _repo()
@@ -429,9 +510,7 @@ def update(log=None):
         url = (f"https://api.github.com/repos/{repo}/zipball/{branch}" if auth
                else f"https://codeload.github.com/{repo}/zip/refs/heads/{branch}")
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Philibert", **auth})
-            with urllib.request.urlopen(req, timeout=600) as r:
-                z = zipfile.ZipFile(io.BytesIO(r.read()))
+            z = zipfile.ZipFile(io.BytesIO(_download(url, {"User-Agent": "Philibert", **auth})))
         except urllib.error.HTTPError as e:
             if e.code == 404:     # what GitHub says about a private repo to a stranger
                 if _client_id():
@@ -441,6 +520,8 @@ def update(log=None):
                         "in to it. Set the drive up again with Philibert Setup. Your data/ and models/ are kept."}
             return {"ok": False, "message": f"Could not download the update: {e}"}
         except Exception as e:
+            if _cert_failed(e):
+                return {"ok": False, "message": "Could not download the update: " + CERT_HELP}
             return {"ok": False, "message": f"Could not download the update: {e}"}
         top = z.namelist()[0].split("/")[0]
         for n in z.namelist():

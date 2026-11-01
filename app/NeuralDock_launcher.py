@@ -20092,6 +20092,11 @@ def main():
             pass
     print(BANNER)
     load_config()
+    try:                                  # GitHub, the board server...: Mozilla's roots as well as Windows'
+        import nd_philibert
+        nd_philibert.trust_more_roots()
+    except Exception as e:
+        log(f"certificates: {e}", "warn")
     log("ESTEEF.AI // NeuralDock v3.0 starting...", "info")
     # nothing in this app works without Ollama, so bring it up before we
     # start serving a UI that would just report it offline
