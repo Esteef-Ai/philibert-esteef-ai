@@ -66,7 +66,14 @@
           ? "your other computers can keep their notes, Philibert's memory, Yo Teach and Band Manager in step with this one, through the same address. Keep the address private: it opens your notes too."
           : "only the models are shared. Allow this to let your other computers keep their notes and app data in step with this one.") + "</p>" +
         '<div class="row2">' + (s.sync_share ? '<button class="btn danger" id="sy-unshare">STOP SHARING NOTES AND DATA</button>'
-          : '<button class="btn" id="sy-share">ALSO SHARE NOTES AND APP DATA</button>') + "</div>";
+          : '<button class="btn" id="sy-share">ALSO SHARE NOTES AND APP DATA</button>') + "</div>" +
+        "<p><b>Your phone</b> - " + (s.phone
+          ? "open this address in your phone's browser (Tailscale on, signed in to your account) to chat with Philibert here and have it draw pictures. " +
+            "Read only: from the phone it can look things up, not change anything."
+          : "chat with Philibert on this computer from your phone's browser, over Tailscale.") + "</p>" +
+        '<div class="row2">' + (s.phone
+          ? '<span class="addr">' + esc(s.phone_address) + '</span><button class="btn" id="ph-copy">COPY</button><button class="btn danger" id="ph-off">TURN OFF</button>'
+          : '<button class="btn" id="ph-on">OPEN A PHONE CHAT</button>') + "</div>";
     } else {
       html += "<p>A small laptop can use the models of a bigger computer you own, over Tailscale (a free private link between your own devices). " +
         (s.tailscale_ip ? "" : "Tailscale is not running on this computer yet. ") + "On the big computer, share; on the small one, paste the address it shows.</p>" +
@@ -86,6 +93,9 @@
     if ($("sy-on")) $("sy-on").onclick = function () { toast("Syncing - the first time can take a minute..."); act({ op: "sync_with", on: true }); };
     if ($("sy-off")) $("sy-off").onclick = function () { act({ op: "sync_with", on: false }, "Stopped syncing. Each computer keeps what it has."); };
     if ($("sy-now")) $("sy-now").onclick = function () { toast("Syncing..."); act({ op: "sync_now" }); };
+    if ($("ph-on")) $("ph-on").onclick = function () { act({ op: "phone", on: true }, "Open the address on your phone."); };
+    if ($("ph-off")) $("ph-off").onclick = function () { act({ op: "phone", on: false }, "Phone chat is off."); };
+    if ($("ph-copy")) $("ph-copy").onclick = function () { navigator.clipboard.writeText(s.phone_address).then(function () { toast("Copied."); }); };
     if ($("sh-off")) $("sh-off").onclick = function () { act({ op: "disconnect" }, "Back to this computer's own models."); };
   }
   post("/api/modelshare", { op: "status" }).then(drawShare).catch(function () {});

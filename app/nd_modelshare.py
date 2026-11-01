@@ -19,6 +19,8 @@ graphics and 8 GB of RAM) can use the models on the same person's bigger compute
 Notes and app data (nd_sync) ride on the same address when the big computer also turns on
 "Share my notes and app data": /<key>/sync/<step> goes to Share.sync instead of Ollama.
 Pictures (nd_imagegen) come with the models: /<key>/images/<step> goes to Share.images.
+The phone chat, when turned on: /<key>/phone/ is a small chat page for the person's phone
+(on Tailscale too), answered by Share.phone - read only.
 
 Stdlib + psutil (already in Philibert). Tailscale itself is installed by the person.
 """
@@ -82,7 +84,7 @@ class _Relay(BaseHTTPRequestHandler):
         if len(parts) < 3 or not secrets.compare_digest(parts[1], self.key):
             return None
         path = "/" + parts[2]
-        return path if path in ALLOWED or path.startswith(("/sync/", "/images/")) else None
+        return path if path in ALLOWED or path == "/phone" or path.startswith(("/sync/", "/images/", "/phone/")) else None
 
     def _forward(self, method):
         try:
@@ -97,6 +99,8 @@ class _Relay(BaseHTTPRequestHandler):
         if n > SYNC_MAX:
             return self._refuse(413)
         body = self.rfile.read(n) if n else None
+        if path == "/phone" or path.startswith("/phone/"):
+            return self._phone(method, path, body)
         if path.startswith("/sync/"):
             return self._sync(path[6:], body, "sync")
         if path.startswith("/images/"):
@@ -124,6 +128,32 @@ class _Relay(BaseHTTPRequestHandler):
                 pass
         finally:
             conn.close()
+
+    def _phone(self, method, path, body):
+        fn = self.owner.phone if self.owner else None
+        if not fn:
+            return self._refuse(404)
+        if path == "/phone":                    # the page's links are relative: it lives at .../phone/
+            self.send_response(302)
+            self.send_header("Location", urllib.parse.urlparse(self.path).path + "/")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        try:
+            data = json.loads(body.decode()) if body else {}
+        except ValueError:
+            data = {}
+        try:
+            code, ctype, out = fn(method, path[7:], data)
+        except Exception as e:
+            code, ctype, out = 500, "application/json", json.dumps({"ok": False, "msg": str(e)[:300]}).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(out)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Referrer-Policy", "no-referrer")       # the key is in the address
+        self.end_headers()
+        self.wfile.write(out)
 
     def _sync(self, step, body, what):
         fn = getattr(self.owner, what, None) if self.owner else None
@@ -163,6 +193,7 @@ class Share:
         self.ip = ""
         self.sync = None
         self.images = None
+        self.phone = None
 
     def start(self, local_url, key, port=PORT):
         self.stop()
@@ -177,11 +208,12 @@ class Share:
             return {"ok": False, "msg": f"Could not listen on {ip}:{port} ({e})."}
         self.srv.daemon_threads = True
         self.ip = ip
+        self.port = self.srv.server_address[1]
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
         return {"ok": True, "address": self.address(key)}
 
     def address(self, key):
-        return f"http://{self.ip}:{PORT}/{key}" if self.ip else ""
+        return f"http://{self.ip}:{getattr(self, 'port', PORT)}/{key}" if self.ip else ""
 
     def stop(self):
         if self.srv:

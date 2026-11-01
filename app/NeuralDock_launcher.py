@@ -268,6 +268,11 @@ def philibert_prompt():
            "notes shown to you do not clearly answer a question about them, call memory_search - never guess. "
            "You run from the user's drive on their own computer. Be warm, direct and "
            "brief: a simple question gets a short answer.\n")
+    if getattr(_job_ctx, "tool_allow", None) is not None:
+        # the phone chat: told up front, or a refused write came back as "the file has been created"
+        out += ("THE USER IS ON THEIR PHONE, and from the phone you can only look things up (notes and memory, "
+                "Yo Teach, Band Manager, the web). You cannot create, change, save or delete anything from here: "
+                "if they ask for that, say plainly that it has to be done on the computer. Never say you did it.\n")
     try:                                   # the Band Manager's settings, shared with its page
         import nd_band
         import nd_bands
@@ -13378,6 +13383,8 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
         active_tools = [t for t in active_tools
                         if t.get("function", {}).get("name") not in (portable_drop() | _off)]
         _prev_users = [str(m.get("content") or "") for m in messages[:-1] if m.get("role") == "user"]
+        if getattr(_job_ctx, "tool_allow", None) is not None:      # the phone: read-only tools only
+            active_tools = [t for t in active_tools if t.get("function", {}).get("name") in _job_ctx.tool_allow]
         if not wants_tools(_last_user, _prev_users):
             log("A plain question - answered without the tool list, so the model thinks it through", "info")
             active_tools = []
@@ -13497,6 +13504,10 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
         a, _kvnote = unpack_kv_args(a)
         if _kvnote:
             log(f"{name}: {_kvnote}", "warn")
+        if getattr(_job_ctx, "tool_allow", None) is not None and name not in _job_ctx.tool_allow:
+            _phone_refused.add(getattr(_job_ctx, "phone_job", ""))
+            return (f"[NOT AVAILABLE] {name} cannot be used from the phone: the phone chat only reads "
+                    f"(notes and memory, Yo Teach, Band Manager, the web). Tell the user to do that on the computer.")
         if PORTABLE and name in portable_drop():
             return (f"[NOT AVAILABLE] {name} is not part of {PRODUCT} and never will be - do not "
                     f"call it again. For drive sizes, memory or hardware call computer_info; for "
@@ -14979,6 +14990,9 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                 if PORTABLE and c["name"] in portable_drop():
                     continue        # refused when it runs: never ask anyone to approve it
                                     # (each Approve came back "not available" - a loop of asks)
+                if getattr(_job_ctx, "tool_allow", None) is not None and c["name"] not in _job_ctx.tool_allow:
+                    continue        # the phone: refused when it runs, never parked for an approval
+                                    # nobody can give (asked for write_file, it waited for ever)
                 if c["name"] == "run_shell" and \
                         classify_shell(c["arguments"].get("command", ""))[0] == "read":
                     log(f"run_shell only reads - no approval needed: "
@@ -19935,7 +19949,8 @@ def _share_start():
         _share["relay"] = nd_modelshare.Share()
     _share["relay"].sync = _sync_serve if _config.get("sync_share") else None
     _share["relay"].images = _images_serve
-    return _share["relay"].start(LOCAL_OLLAMA_URL, _config["model_share_key"])
+    _share["relay"].phone = _phone_serve if _config.get("phone_share") else None
+    return _share["relay"].start(LOCAL_OLLAMA_URL, _config["model_share_key"], int(_config.get("model_share_port") or nd_modelshare.PORT))
 
 
 # ── Notes and app data kept in step with the other computer (nd_sync) ─────────
@@ -19977,6 +19992,124 @@ def _images_from(url):
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode())
     nd_imagegen.REMOTE.update(call=call, name="your other computer", seen=0.0, models=None)
+
+
+# ── The phone: a small chat page over the same sharing address (read only) ────
+PHONE_TOOLS = {"memory_search", "teach_info", "band_info", "web_search", "web_fetch"}
+_phone_pics = {}                 # picture job id -> {status, name, error}
+_phone_refused = set()           # phone chats that tried to change something (and were refused)
+PHONE_REFUSED = ("I can't do that from your phone - from here I can only look things up. Creating, changing or "
+                 "deleting anything has to be done on the computer. Nothing was changed.")
+
+
+def _phone_messages(raw):
+    """What the phone sends, cleaned: the last 20 user/assistant turns, text only."""
+    out = []
+    for m in (raw or [])[-20:]:
+        if isinstance(m, dict) and m.get("role") in ("user", "assistant"):
+            out.append({"role": m["role"], "content": str(m.get("content") or "")[:8000]})
+    return out
+
+
+def _phone_models():
+    """The chat models the phone can pick from: [{tag, label}], embedding models left out."""
+    labels = {}
+    try:
+        import nd_philibert
+        labels = {m.get("tag"): m.get("label") for m in nd_philibert.catalog()}
+    except Exception:
+        pass
+    return [{"tag": t, "label": labels.get(t) or t.split("/")[-1]} for t in _get_models() if "embed" not in t.lower()]
+
+
+def _phone_chat_job(jid, model, messages):
+    _job_ctx.tool_allow = PHONE_TOOLS
+    _job_ctx.phone_job = jid
+    run_chat_job(jid, model, messages, None, False, set(), False, False, None)
+
+
+def _phone_picture(pid, prompt):
+    import nd_imagegen
+    try:
+        r = nd_imagegen.handle({"op": "generate", "prompt": prompt, "count": 1}, _drive_root(), internet_on(),
+                               free_vram_for_comfy)
+        _phone_pics[pid] = ({"status": "done", "name": r["name"]} if r.get("ok")
+                            else {"status": "error", "error": r.get("msg") or "No picture came back."})
+    except Exception as e:
+        _phone_pics[pid] = {"status": "error", "error": str(e)[:300]}
+
+
+def _phone_serve(method, sub, body):
+    """The phone page and its calls: (status, content type, bytes)."""
+    def js(d, code=200):
+        return code, "application/json", json.dumps(d).encode()
+    if method == "GET" and sub in ("", "index.html"):
+        return 200, "text/html; charset=utf-8", (Path(__file__).parent / "live" / "static" / "phone.html").read_bytes()
+    if method == "GET" and sub.startswith("img/"):
+        import nd_imagegen
+        f = nd_imagegen.image_file(_drive_root(), sub[4:])
+        return (200, "image/png", f.read_bytes()) if f else (404, "text/plain", b"")
+    if method != "POST" or not sub.startswith("api/"):
+        return 404, "text/plain", b""
+    op = sub[4:]
+    body = body or {}
+    if op == "hello":
+        return js({"ok": True, "name": PRODUCT, "computer": socket.gethostname()})
+    if op == "models":
+        return js({"ok": True, "models": _phone_models(), "default": handler_model()})
+    if op == "chat":
+        messages = _phone_messages(body.get("messages"))
+        if not messages or messages[-1]["role"] != "user" or not messages[-1]["content"].strip():
+            return js({"ok": False, "msg": "Say something first."})
+        want = str(body.get("model") or "")
+        model = want if want and want in _get_models() else handler_model()
+        if not model:
+            return js({"ok": False, "msg": "There is no chat model on the computer yet."})
+        jid = "ph" + uuid.uuid4().hex[:8]
+        with _lock:
+            _chat_status[jid] = {"stage": "thinking", "detail": "Queued...", "pct": 3, "start": time.time()}
+        _update_chat_job(jid, status="running", started=time.time(), model=model,
+                         prompt=messages[-1]["content"][:400])
+        threading.Thread(target=_phone_chat_job, args=(jid, model, messages), daemon=True).start()
+        return js({"ok": True, "job": jid})
+    if op == "poll":
+        jid = str(body.get("job") or "")
+        if not jid.startswith("ph"):
+            return js({"ok": False, "msg": "no such reply"})
+        with _lock:
+            rec = dict(_chat_jobs.get(jid, {}))
+            st = dict(_chat_status.get(jid, {}))
+        if not rec:
+            return js({"ok": False, "msg": "no such reply"})
+        text, at, total = stream_slice(st, body.get("from") or 0)
+        out = {"ok": True, "status": rec.get("status"), "stage": st.get("stage") or "", "detail": st.get("detail") or "",
+               "stream": text, "stream_at": at, "stream_len": total}
+        if rec.get("status") == "done":
+            # A refused change: the model's own words are not to be trusted about it (an 8B said "the
+            # file has already been created" after its write was refused), so the phone gets the fact.
+            # The job's "Changed: nothing" line is always true here, so it is left out.
+            reply = rec.get("reply") or ""
+            out["reply"] = PHONE_REFUSED if jid in _phone_refused else \
+                re.sub(r"^Changed: nothing[^\n]*\n+", "", reply).strip()
+        elif rec.get("status") == "error":
+            out["error"] = rec.get("error") or "Something went wrong."
+        return js(out)
+    if op == "cancel":
+        jid = str(body.get("job") or "")
+        if jid.startswith("ph"):
+            _chat_cancel.add(jid)
+        return js({"ok": True})
+    if op == "picture":
+        prompt = str(body.get("prompt") or "").strip()[:1500]
+        if not prompt:
+            return js({"ok": False, "msg": "Say what to draw."})
+        pid = "pp" + uuid.uuid4().hex[:8]
+        _phone_pics[pid] = {"status": "running"}
+        threading.Thread(target=_phone_picture, args=(pid, prompt), daemon=True).start()
+        return js({"ok": True, "job": pid})
+    if op == "picture_poll":
+        return js({"ok": True, **_phone_pics.get(str(body.get("job") or ""), {"status": "unknown"})})
+    return js({"ok": False, "msg": "unknown"}, 404)
 
 
 def _sync_serve(step, body):
@@ -20061,6 +20194,11 @@ def modelshare_handle(body):
             r = sync_now()
             if not r.get("ok"):
                 return {"ok": False, "msg": r["text"]}
+    elif op == "phone":
+        _config["phone_share"] = bool(body.get("on"))
+        save_config()
+        if relay:
+            relay.phone = _phone_serve if _config["phone_share"] else None
     elif op == "sync_now":
         r = sync_now()
         if not r.get("ok"):
@@ -20072,7 +20210,10 @@ def modelshare_handle(body):
             "host": host, "using_host": bool(_share["using"]),
             "host_models": (nd_modelshare.probe(host) or []) if host and op == "status" else None,
             "sync_share": bool(_config.get("sync_share")), "sync_with": bool(_config.get("sync_with")),
-            "sync_last": _sync["last"], "sync_running": _sync["running"]}
+            "sync_last": _sync["last"], "sync_running": _sync["running"],
+            "phone": bool(_config.get("phone_share")),
+            "phone_address": (relay.address(_config.get("model_share_key", "")) + "/phone/")
+            if relay and relay.on and _config.get("phone_share") else ""}
 
 
 def yoteach_docs_dir():
