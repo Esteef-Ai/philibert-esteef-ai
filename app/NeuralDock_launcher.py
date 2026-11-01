@@ -271,8 +271,10 @@ def philibert_prompt():
     if getattr(_job_ctx, "tool_allow", None) is not None:
         # the phone chat: told up front, or a refused write came back as "the file has been created"
         out += ("THE USER IS ON THEIR PHONE, and from the phone you can only look things up (notes and memory, "
-                "Yo Teach, Band Manager, the web). You cannot create, change, save or delete anything from here: "
-                "if they ask for that, say plainly that it has to be done on the computer. Never say you did it.\n")
+                "Yo Teach, Band Manager, files, the web). You cannot create, change, save or delete anything from here: "
+                "if they ask for that, say plainly that it has to be done on the computer. Never say you did it. "
+                f"It is {time.strftime('%A %d %B %Y, %H:%M')} on the computer (time zone {time.strftime('%Z')}) - "
+                "answer the time and date from this.\n")
     try:                                   # the Band Manager's settings, shared with its page
         import nd_band
         import nd_bands
@@ -1477,7 +1479,7 @@ def run_cogvideo_job(job_id, params, post=None):
         except Exception: pass
 
 # ??? ComfyUI job runner ???????????????????????????????????????????????????????
-def unload_all_models(reason="a manual request"):
+def unload_all_models(reason="a manual request", base=None):
     """Evict every resident Ollama model and report what was freed.
 
     Split out of free_vram_for_comfy so it can be called unconditionally. That
@@ -1485,9 +1487,11 @@ def unload_all_models(reason="a manual request"):
     the chat model to stay warm turns it off), but an explicit "unload the GPU"
     from the UI or from Unload_GPU.bat must never be silently skipped by a flag
     the user set for a different purpose.
+    base: whose Ollama (default: the one in use, which may be another computer's).
     """
+    base = base or OLLAMA_URL
     try:
-        with urllib.request.urlopen(f"{OLLAMA_URL}/api/ps", timeout=8) as r:
+        with urllib.request.urlopen(f"{base}/api/ps", timeout=8) as r:
             loaded = json.loads(r.read()).get("models", []) or []
     except Exception as e:
         return {"ok": False, "msg": f"Ollama did not answer: {e}",
@@ -1505,7 +1509,7 @@ def unload_all_models(reason="a manual request"):
         try:
             # keep_alive 0 tells Ollama to drop the model as soon as this returns
             payload = json.dumps({"model": name, "keep_alive": 0}).encode()
-            req = urllib.request.Request(f"{OLLAMA_URL}/api/generate", data=payload,
+            req = urllib.request.Request(f"{base}/api/generate", data=payload,
                                          headers={"Content-Type": "application/json"},
                                          method="POST")
             urllib.request.urlopen(req, timeout=60).read()
@@ -1518,7 +1522,7 @@ def unload_all_models(reason="a manual request"):
     for _ in range(20):
         time.sleep(0.5)
         try:
-            with urllib.request.urlopen(f"{OLLAMA_URL}/api/ps", timeout=5) as r:
+            with urllib.request.urlopen(f"{base}/api/ps", timeout=5) as r:
                 if not (json.loads(r.read()).get("models") or []):
                     break
         except Exception:
@@ -2570,8 +2574,14 @@ def _think_kw(model):
     return {"think": bool(_config.get("agent_thinking", False))}
 
 
-def _keep_alive():
+def _keep_alive(model=None):
     # Ollama unloads after 5 min by default; a 27B reload costs minutes mid-task
+    if getattr(_job_ctx, "tool_allow", None) is not None:
+        # the phone: once the phone goes quiet the graphics card is given back (an hour
+        # held the host's card after the chat had ended, 2026-11-01)
+        return _config.get("share_keep_alive", "5m")
+    if model and _share.get("using"):
+        _share["used"].add(model)
     return _config.get("ollama_keep_alive", "60m")
 
 def ollama_chat(model, messages, timeout=1740, status_cb=None, clean=True, text_cb=None):  # 29 min — huge offloaded models can spend many minutes in prompt eval
@@ -2583,7 +2593,7 @@ def ollama_chat(model, messages, timeout=1740, status_cb=None, clean=True, text_
         "model":    model,
         "messages": messages,
         "stream":   True,
-        "keep_alive": _keep_alive(),
+        "keep_alive": _keep_alive(model),
         "options":  _ollama_options(model),
         **_think_kw(model)
     }).encode()
@@ -2648,7 +2658,7 @@ def ollama_chat_native(model, messages, tools, timeout=1740, status_cb=None, tex
         "messages": messages,
         "tools":    tools,
         "stream":   True,
-        "keep_alive": _keep_alive(),
+        "keep_alive": _keep_alive(model),
         "options":  _ollama_options(model),
         **_think_kw(model)
     }).encode()
@@ -13505,9 +13515,14 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
         if _kvnote:
             log(f"{name}: {_kvnote}", "warn")
         if getattr(_job_ctx, "tool_allow", None) is not None and name not in _job_ctx.tool_allow:
+            if TOOL_TIERS.get(name, "red") == "green":
+                # a lookup the phone does not offer: no harm done, the model answers without it
+                # (asked the time, a refused lookup turned the whole answer into "I can't")
+                return (f"[NOT AVAILABLE] {name} is not available from the phone. Answer from what you "
+                        f"already know and the other tools, without it.")
             _phone_refused.add(getattr(_job_ctx, "phone_job", ""))
-            return (f"[NOT AVAILABLE] {name} cannot be used from the phone: the phone chat only reads "
-                    f"(notes and memory, Yo Teach, Band Manager, the web). Tell the user to do that on the computer.")
+            return (f"[NOT AVAILABLE] {name} cannot be used from the phone: from the phone nothing on the "
+                    f"computer can be changed. Tell the user to do that on the computer.")
         if PORTABLE and name in portable_drop():
             return (f"[NOT AVAILABLE] {name} is not part of {PRODUCT} and never will be - do not "
                     f"call it again. For drive sizes, memory or hardware call computer_info; for "
@@ -20028,7 +20043,23 @@ def stop_own_ollama():
 
 # ── Models from another of the person's computers (nd_modelshare) ─────────────
 LOCAL_OLLAMA_URL = OLLAMA_URL
-_share = {"relay": None, "using": ""}       # the relay we run; the other computer we use now
+_share = {"relay": None, "using": "", "used": set()}   # the relay we run; the other computer we use now;
+                                                         # the models used on it (freed when we stop)
+
+
+def release_other_computer():
+    """Unload, on the other computer, the models this one used there - its graphics card is
+    not held until their timeout ran out. Only ours: it may be using others itself."""
+    host = _share.get("using")
+    for m in list(_share["used"]):
+        try:
+            req = urllib.request.Request(host.rstrip("/") + "/api/generate",
+                                         data=json.dumps({"model": m, "keep_alive": 0}).encode(),
+                                         headers={"Content-Type": "application/json"}, method="POST")
+            urllib.request.urlopen(req, timeout=5).read()
+        except Exception:
+            pass
+    _share["used"].clear()
 
 
 def use_models_at(url):
@@ -20037,6 +20068,8 @@ def use_models_at(url):
     target = url or LOCAL_OLLAMA_URL
     if target == OLLAMA_URL:
         return
+    if _share.get("using"):
+        release_other_computer()
     OLLAMA_URL = target
     try:
         import nd_philibert
@@ -20069,6 +20102,7 @@ def _share_start():
     if _share["relay"] is None:
         _share["relay"] = nd_modelshare.Share()
     _share["relay"].sync = _sync_serve if _config.get("sync_share") else None
+    _share["relay"].keep_alive = str(_config.get("share_keep_alive") or "5m")
     _share["relay"].images = _images_serve
     _share["relay"].phone = _phone_serve if _config.get("phone_share") else None
     return _share["relay"].start(LOCAL_OLLAMA_URL, _config["model_share_key"], int(_config.get("model_share_port") or nd_modelshare.PORT))
@@ -20116,7 +20150,12 @@ def _images_from(url):
 
 
 # ── The phone: a small chat page over the same sharing address (read only) ────
-PHONE_TOOLS = {"memory_search", "teach_info", "band_info", "web_search", "web_fetch"}
+# Everything that only reads. Left out though read-only: the screen capture and the managed
+# browser (it browses as the person, signed in), which act on the computer and its accounts -
+# anyone holding the address could use them - and ask_user, which would park the chat waiting
+# for an answer the phone page cannot give.
+PHONE_TOOLS = {"memory_search", "teach_info", "band_info", "web_search", "web_fetch", "computer_info",
+               "list_dir", "read_file", "search_files", "find_definition", "find_references", "resolve_app"}
 _phone_pics = {}                 # picture job id -> {status, name, error}
 _phone_refused = set()           # phone chats that tried to change something (and were refused)
 PHONE_REFUSED = ("I can't do that from your phone - from here I can only look things up. Creating, changing or "
@@ -20154,6 +20193,7 @@ def _phone_picture(pid, prompt):
     try:
         r = nd_imagegen.handle({"op": "generate", "prompt": prompt, "count": 1}, _drive_root(), internet_on(),
                                free_vram_for_comfy)
+        nd_imagegen.used_for_other()
         _phone_pics[pid] = ({"status": "done", "name": r["name"]} if r.get("ok")
                             else {"status": "error", "error": r.get("msg") or "No picture came back."})
     except Exception as e:
@@ -20258,6 +20298,19 @@ def sync_now():
     return r
 
 
+def _gpu_idle_loop():
+    """The picture engine, when another device or the phone started it: stopped after 10 quiet
+    minutes, so the graphics card is given back."""
+    while True:
+        time.sleep(60)
+        mod = sys.modules.get("nd_imagegen")
+        if mod:
+            try:
+                mod.idle_stop(int(_config.get("share_picture_idle_min") or 10))
+            except Exception:
+                pass
+
+
 def _sync_loop():
     """Every 5 minutes (and a minute after start), while sync is on and the other computer answers."""
     import nd_modelshare
@@ -20320,6 +20373,16 @@ def modelshare_handle(body):
         save_config()
         if relay:
             relay.phone = _phone_serve if _config["phone_share"] else None
+    elif op == "free_gpu":
+        r = unload_all_models("freed from Models", base=LOCAL_OLLAMA_URL)
+        try:
+            import nd_imagegen
+            if nd_imagegen.running():
+                nd_imagegen.stop()
+                r["msg"] = (r.get("msg") or "") + " The picture engine is stopped too."
+        except Exception:
+            pass
+        return {"ok": True, "msg": r.get("msg") or "Done."}
     elif op == "sync_now":
         r = sync_now()
         if not r.get("ok"):
@@ -20439,6 +20502,7 @@ def main():
             log(f"model sharing: {e}", "warn")
     threading.Thread(target=_modelhost_loop, daemon=True).start()
     threading.Thread(target=_sync_loop, daemon=True).start()
+    threading.Thread(target=_gpu_idle_loop, daemon=True).start()
     start_status_loop()
     _reap_stale_chat_jobs()   # flag chat jobs orphaned by a previous restart
     if PORTABLE:
@@ -20486,6 +20550,8 @@ def main():
         owned = False if "--headless" in sys.argv else open_ui(url)
         if owned:
             log(f"Window closed - shutting down {PRODUCT}", "info")
+            if _share.get("using"):
+                release_other_computer()
             if PORTABLE:
                 clear_run_file()
                 stop_own_ollama()

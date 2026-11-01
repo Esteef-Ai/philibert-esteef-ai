@@ -52,6 +52,7 @@ _lock = threading.Lock()
 _job = {"state": "idle", "line": "", "progress": 0.0, "error": ""}     # the install, for the page
 REMOTE = {"call": None, "name": "", "seen": 0.0, "models": None}       # the other computer's engine, if used
 SHARED = "shared"                              # where the big computer's engine saves pictures for another
+_use = {"at": 0.0, "for_other": False}         # the last picture, and whether it was for another device / the phone
 
 
 def plat():
@@ -622,6 +623,7 @@ def generate(root, prompt, negative="", size="square", width=None, height=None, 
     prompt = str(prompt or "").strip()
     if not prompt:
         raise ValueError("say what to draw")
+    _use.update(at=time.time(), for_other=bool(shared))
     if not shared and remote_models() is not None:
         return _remote_generate(root, prompt, negative, size, width, height, steps, cfg, seed, model, count, style,
                                 init, denoise, refined_from)
@@ -857,6 +859,21 @@ def _b64(f):
     return base64.b64encode(Path(f).read_bytes()).decode()
 
 
+def used_for_other():
+    """The last picture was for another device or the phone: idle_stop may stop the engine."""
+    _use.update(at=time.time(), for_other=True)
+
+
+def idle_stop(minutes=10):
+    """Stop the engine when the last picture was for another device or the phone and nothing
+    has been drawn for `minutes` - it holds the graphics card while it runs. A picture made
+    here keeps it running, as before."""
+    if _proc and _proc.poll() is None and _use["for_other"] and time.time() - _use["at"] > minutes * 60:
+        stop()
+        return True
+    return False
+
+
 def remote_models(max_age=60):
     """The picture models of the other computer this one is using, or None when pictures are
     drawn here (no other computer, it does not answer, or it has no picture engine)."""
@@ -943,6 +960,7 @@ def serve(root, step, body, free_gpu=None):
             wf["4"]["inputs"]["filename_prefix"] = SHARED + "/Philibert_4x"
             imgs = [{"path": str(paths(root)["out"] / im.get("subfolder", "") / im["filename"])}
                     for im in _run_prompt(wf, 600)]
+        used_for_other()
         res = []
         for im in imgs:
             f = Path(im["path"])

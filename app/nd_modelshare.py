@@ -105,6 +105,7 @@ class _Relay(BaseHTTPRequestHandler):
             return self._sync(path[6:], body, "sync")
         if path.startswith("/images/"):
             return self._sync(path[8:], body, "images")
+        body = self._cap_keep_alive(path, body)
         u = urllib.parse.urlparse(self.local)
         conn = http.client.HTTPConnection(u.hostname, u.port or 80, timeout=1800)
         try:
@@ -128,6 +129,22 @@ class _Relay(BaseHTTPRequestHandler):
                 pass
         finally:
             conn.close()
+
+    def _cap_keep_alive(self, path, body):
+        """Another device's request keeps the model loaded for minutes, not the hour this
+        computer gives its own chat: its graphics card is given back once the other side
+        goes quiet. An explicit unload (keep_alive 0) passes as it is."""
+        cap = getattr(self.owner, "keep_alive", "") if self.owner else ""
+        if not cap or not body or path not in ("/api/chat", "/api/generate", "/api/embed", "/api/embeddings"):
+            return body
+        try:
+            data = json.loads(body.decode())
+        except ValueError:
+            return body
+        if not isinstance(data, dict) or data.get("keep_alive") in (0, "0", "0s", "0m"):
+            return body
+        data["keep_alive"] = cap
+        return json.dumps(data).encode()
 
     def _phone(self, method, path, body):
         fn = self.owner.phone if self.owner else None
@@ -194,6 +211,7 @@ class Share:
         self.sync = None
         self.images = None
         self.phone = None
+        self.keep_alive = "5m"                  # how long another device's request keeps a model loaded
 
     def start(self, local_url, key, port=PORT):
         self.stop()

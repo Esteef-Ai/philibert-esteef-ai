@@ -98,6 +98,9 @@
           : "only the models are shared. Allow this to let your other computers keep their notes and app data in step with this one.") + "</p>" +
         '<div class="row2">' + (s.sync_share ? '<button class="btn danger" id="sy-unshare">STOP SHARING NOTES AND DATA</button>'
           : '<button class="btn" id="sy-share">ALSO SHARE NOTES AND APP DATA</button>') + "</div>" +
+        "<p><b>The graphics card</b> - a chat from your other computer or your phone keeps its model loaded here for 5 minutes " +
+          "after the last question, and pictures drawn for them stop the picture engine after 10 quiet minutes. To give the card back now:</p>" +
+        '<div class="row2"><button class="btn" id="sh-free">FREE THE GRAPHICS CARD NOW</button></div>' +
         "<p><b>Your phone</b> - " + (s.phone
           ? "open this address in your phone's browser (Tailscale on, signed in to your account) to chat with Philibert here and have it draw pictures. " +
             "Read only: from the phone it can look things up, not change anything."
@@ -129,6 +132,10 @@
     if ($("sy-on")) $("sy-on").onclick = function () { toast("Syncing - the first time can take a minute..."); act({ op: "sync_with", on: true }); };
     if ($("sy-off")) $("sy-off").onclick = function () { act({ op: "sync_with", on: false }, "Stopped syncing. Each computer keeps what it has."); };
     if ($("sy-now")) $("sy-now").onclick = function () { toast("Syncing..."); act({ op: "sync_now" }); };
+    if ($("sh-free")) $("sh-free").onclick = function () {
+      toast("Freeing the graphics card...");
+      post("/api/modelshare", { op: "free_gpu" }).then(function (r) { toast(r.msg || "Done."); });
+    };
     if ($("ph-on")) $("ph-on").onclick = function () { act({ op: "phone", on: true }, "Open the address on your phone."); };
     if ($("ph-off")) $("ph-off").onclick = function () { act({ op: "phone", on: false }, "Phone chat is off."); };
     if ($("ph-copy")) $("ph-copy").onclick = function () { navigator.clipboard.writeText(s.phone_address).then(function () { toast("Copied."); }); };
