@@ -20327,6 +20327,10 @@ def modelshare_handle(body):
     relay = _share["relay"]
     host = str(_config.get("model_host") or "")
     return {"ok": True, "tailscale_ip": nd_modelshare.tailscale_ip(),
+            # for the set-up guide: the firewall rule names this Python, and the port in use
+            "python_exe": sys.executable, "windows": os.name == "nt",
+            "port": getattr(relay, "port", nd_modelshare.PORT) if relay and relay.on
+            else int(_config.get("model_share_port") or nd_modelshare.PORT),
             "sharing": bool(relay and relay.on), "address": relay.address(_config.get("model_share_key", "")) if relay and relay.on else "",
             "host": host, "using_host": bool(_share["using"]),
             "host_models": (nd_modelshare.probe(host) or []) if host and op == "status" else None,

@@ -55,6 +55,55 @@ from a USB drive).
 - **Full view**: every tool and setting. `Start-Full-Windows.bat` /
   `Start-Full-Mac.command` open it directly.
 
+## Your other computers and your phone (Tailscale)
+
+A laptop can use the models of a bigger computer you own (the "home PC"), keep its
+notes and app data in step with it, and your phone can chat with Philibert on it. All
+of it goes over **Tailscale**, a free private link between your own devices: nothing
+is opened to the Internet and nothing passes through anyone's server.
+
+**1. Install Tailscale on every device** - the home PC, the laptop and the phone - from
+<https://tailscale.com/download> (Windows, Mac, iPhone and Android all have it), and sign
+in with **the same account** on each. Leave it running (on a phone, the switch in the app
+must be on).
+
+**2. On the home PC:** open Philibert > **Models** > *Your other computers* >
+**SHARE THIS COMPUTER'S MODELS**, and copy the address it shows
+(`http://100.x.y.z:11500/k-...`).
+- **Windows:** if Windows asks whether Python may use the network, allow it on
+  **Private** networks. If it never asks and the other devices cannot connect, open
+  PowerShell **as administrator** and allow it yourself, for Tailscale addresses only
+  (*How to set it up* in the Models panel shows this command with your drive's path filled in):
+  ```powershell
+  New-NetFirewallRule -DisplayName "Philibert model sharing (Tailscale only)" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 11500 -RemoteAddress 100.64.0.0/10 -Program "E:\Philibert\runtime\win-x64\python\python.exe" -Profile Private
+  ```
+  (`E:` is the drive Philibert is on.)
+- **Mac:** allow incoming connections when macOS asks.
+- Philibert must be running on the home PC for the others to use it.
+
+**3. On the laptop:** Philibert > **Models** > paste the address > **USE ITS MODELS**. It
+says *Connected now* when it works. From then on the laptop uses the home PC's models
+(chat and pictures) whenever it is on, and its own when it is not - by itself.
+
+**4. Notes and app data (optional):** on the home PC, **ALSO SHARE NOTES AND APP DATA**;
+on the laptop, **KEEP NOTES AND APP DATA IN STEP**. Notes, Philibert's memory, Yo Teach
+and Band Manager then sync both ways every 5 minutes while both are on.
+
+**5. Your phone:** on the home PC, **OPEN A PHONE CHAT**, and get the address it shows to
+your phone (email or message it to yourself). Open it in the phone's browser with
+Tailscale on, and use *Add to Home Screen* so it opens like an app. The phone can chat,
+look things up in your notes, Yo Teach and Band Manager, and draw pictures - it cannot
+change anything.
+
+**Someone else's device** (on their own Tailscale account): don't sign them in to yours,
+which would show them all your devices. In the Tailscale admin page (Machines > your home
+PC > *Share...*), share just that one computer with them.
+
+**If it does not connect:** Tailscale on and signed in on both? Philibert running on the
+home PC with sharing on? The Windows firewall (step 2)? Another VPN running at the same
+time can block Tailscale. **Keep the address private**; **NEW ADDRESS** makes the old one
+stop working.
+
 ## What lives where
 
 | Folder     | What                                        | In git? |

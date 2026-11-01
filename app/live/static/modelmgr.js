@@ -42,9 +42,40 @@
         : '<button class="btn primary" data-add="' + esc(o.key) + '">ADD</button>') + "</div></div>";
   }
   /* Your other computers (nd_modelshare): share this one's models over Tailscale, or use a bigger one's */
+  var guideOpen = false;
+  /* the set-up steps: Tailscale on every device, then share / use / sync / phone. The firewall rule
+     names this computer's own Python (Windows did not ask on a test PC, 2026-11-01). */
+  function guide(s) {
+    var fw = 'New-NetFirewallRule -DisplayName "Philibert model sharing (Tailscale only)" -Direction Inbound -Action Allow ' +
+      "-Protocol TCP -LocalPort " + (s.port || 11500) + " -RemoteAddress 100.64.0.0/10 -Program \"" + (s.python_exe || "") + "\" -Profile Private";
+    return '<div class="guide"><ol>' +
+      "<li><b>Install Tailscale on every device</b> - this computer, your other computer and your phone - from " +
+      '<a href="https://tailscale.com/download" target="_blank" rel="noopener">tailscale.com/download</a> ' +
+      "(Windows, Mac, iPhone and Android), and sign in with <b>the same account</b> on each. It is free, and it links only your own devices: " +
+      "nothing is opened to the Internet. Leave it running (on a phone, its switch must be on)." +
+      (s.tailscale_ip ? ' <span class="ok">This computer is on Tailscale (' + esc(s.tailscale_ip) + ").</span>" : ' <span class="off">Not on this computer yet.</span>') + "</li>" +
+      "<li><b>On the big computer</b> (the one with the good graphics card): <b>SHARE THIS COMPUTER'S MODELS</b> here, and copy the address. " +
+      "Philibert has to be running on it for the others to use it." +
+      (s.windows ? " If Windows asks whether Python may use the network, allow <b>Private</b> networks. If it never asks and the other " +
+        "devices cannot connect, open PowerShell <b>as administrator</b> on this computer and run this - it opens only that port, only to " +
+        'your Tailscale devices:<pre id="sh-fw">' + esc(fw) + '</pre><button class="btn" id="sh-fw-copy" type="button">COPY</button>'
+        : " If macOS asks whether to accept incoming connections, allow it.") + "</li>" +
+      "<li><b>On the smaller computer:</b> open Models, paste the address, <b>USE ITS MODELS</b>. It says <i>Connected now</i> when it works. " +
+      "Chat and pictures then run on the big computer whenever it is on, and on this one when it is not - by themselves.</li>" +
+      "<li><b>Notes and app data</b> (optional): <b>ALSO SHARE NOTES AND APP DATA</b> on the big one, <b>KEEP NOTES AND APP DATA IN STEP</b> " +
+      "on the smaller one. Notes, memory, Yo Teach and Band Manager then sync both ways every 5 minutes.</li>" +
+      "<li><b>Your phone:</b> install Tailscale on it (step 1), then <b>OPEN A PHONE CHAT</b> on the big computer and send the address to " +
+      "your phone (email or message it to yourself). Open it in the phone's browser and use <i>Add to Home Screen</i>. From the phone, " +
+      "Philibert can chat, look things up and draw pictures - it cannot change anything.</li>" +
+      "<li><b>Someone else's device</b> (their own Tailscale account): do not sign them in to yours, which shows them all your devices. " +
+      "In the Tailscale admin page, open this computer under <i>Machines</i> and choose <i>Share...</i> to share only it.</li>" +
+      "</ol><p>Not connecting? Check that Tailscale is on and signed in on both, Philibert is running here with sharing on, and the firewall " +
+      "(step 2). Another VPN running at the same time can block Tailscale. Keep the address private - <b>NEW ADDRESS</b> makes the old one stop working.</p></div>";
+  }
   function drawShare(s) {
     if (!s || s.ok === false && !s.tailscale_ip && s.msg) { $("share").innerHTML = ""; return; }
-    var html = '<div class="share"><b>Your other computers</b>';
+    var html = '<div class="share"><div class="head"><b>Your other computers</b>' +
+      '<button class="howbtn" id="sh-how" type="button">' + (guideOpen ? "HIDE THE STEPS" : "HOW TO SET IT UP") + "</button></div>";
     if (s.host) {
       html += "<p>This computer uses the models on your other computer while it can reach it, and its own when it cannot. " +
         (s.using_host ? '<span class="ok">Connected now' + (s.host_models ? " · " + s.host_models.length + " models there" : "") + ".</span>"
@@ -81,7 +112,12 @@
         '<div class="row2" style="margin-top:10px"><input id="sh-in" placeholder="http://100.x.y.z:11500/k-... from your other computer">' +
         '<button class="btn" id="sh-go">USE ITS MODELS</button></div>';
     }
+    if (guideOpen) html += guide(s);
     $("share").innerHTML = html + "</div>";
+    $("sh-how").onclick = function () { guideOpen = !guideOpen; drawShare(s); };
+    if ($("sh-fw-copy")) $("sh-fw-copy").onclick = function () {
+      navigator.clipboard.writeText($("sh-fw").textContent).then(function () { toast("Copied - paste it into PowerShell opened as administrator."); });
+    };
     function act(d, msg) { post("/api/modelshare", d).then(function (r) { if (r.ok === false) toast(r.msg); else if (msg) toast(msg); else if (r.sync_last) toast(r.sync_last.text); drawShare(r.ok === false ? s : r); load(); }); }
     if ($("sh-on")) $("sh-on").onclick = function () { act({ op: "share", on: true }, "Sharing. Paste the address on your other computer."); };
     if ($("sh-stop")) $("sh-stop").onclick = function () { act({ op: "share", on: false }, "Stopped sharing."); };
