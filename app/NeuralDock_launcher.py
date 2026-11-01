@@ -262,7 +262,8 @@ def philibert_prompt():
     "what is the capital of California?" called web_search, was refused, and then
     answered that California has no capital."""
     out = ("\n\nYOU ARE PHILIBERT by Esteef.Ai, a private, general-purpose assistant: questions and answers, writing, notes, files and folders, pictures and simple coding. The Band Manager app keeps "
-           "gigs, tours, merch and bills for people who play in a band - use it when they ask about those. "
+           "gigs, tours, merch and bills for people who play in a band - use it when they ask about those. The Yo Teach app keeps a teacher's students, classes, attendance, class notes "
+           "and the lessons and worksheets made there - use teach_info when they ask about those. "
            "You run from the user's drive on their own computer. Be warm, direct and "
            "brief: a simple question gets a short answer.\n")
     try:                                   # the Band Manager's settings, shared with its page
@@ -7315,7 +7316,7 @@ def _written_paths(rows):
 
 TOOL_TIERS = {
     "list_dir":"green", "read_file":"green", "search_files":"green", "computer_info":"green",
-    "band_info":"green", "band_save":"yellow",
+    "band_info":"green", "band_save":"yellow", "teach_info":"green",
     "find_definition":"green", "find_references":"green",
     "web_search":"green", "web_fetch":"green", "screen_capture":"green",
     "delegate":"green", "list_specialists":"green", "list_devices":"green",
@@ -9954,6 +9955,7 @@ def computer_info():
 TOOL_SCHEMAS = [
   {"type":"function","function":{"name":"band_info","description":"Look up the user's band records in the Band Manager: their gigs, tours, venues, contacts, suppliers, songs, setlists, merch, money, bills and reminders, or an overview (next gigs, what is due, bills to pay, tours, the year's money and its currency). Use it for any question about gigs, tours, bookings, setlists, songs, venues, suppliers, bills, merch stock or band money. For one tour's gigs and totals give what=tours and its id.","parameters":{"type":"object","properties":{"what":{"type":"string","description":"overview | gigs | tours | venues | contacts | suppliers | songs | setlists | merch | money | bills | reminders"},"id":{"type":"integer","description":"With what=tours: one tour in detail"},"query":{"type":"string","description":"Optional words to filter by, e.g. a venue or song name"}},"required":["what"]}}},
   {"type":"function","function":{"name":"band_save","description":"Add or change a record in the user's Band Manager (the user approves it). table: gigs | tours | venues | contacts | suppliers | songs | setlists | merch | money | bills | reminders. fields: the values - gigs {date YYYY-MM-DD, venue_id, tour_id, title, status idea|hold|confirmed|played|cancelled, fee, load_in HH:MM, set_time HH:MM, set_length minutes, notes}; tours {name, starts, ends}; suppliers {name, kind, person, phone, email, website}; bills {what, supplier_id, amount, due, category, tour_id, gig_id, paid 0|1 - paying books the expense in money}; venues {name, address, city, capacity}; contacts {name, role, phone, email}; songs {title, key, bpm, length_sec}; merch {name, variant, price, stock}; money {date, kind income|expense, amount, category, gig_id}; reminders {text, due}. Give id to change an existing record. Look ids up with band_info first.","parameters":{"type":"object","properties":{"table":{"type":"string"},"fields":{"type":"object"},"id":{"type":"integer"}},"required":["table","fields"]}}},
+  {"type":"function","function":{"name":"teach_info","description":"Look up the teacher's records in the Yo Teach app: today's classes with attendance, notes and class summaries; the students (by label, e.g. Student G, with their subject, level and documented supports); the lessons and worksheets already made; or one class meeting in full. Use it for any question about their classes, students, attendance, class notes or teaching documents. To make a new lesson or worksheet as Word + PDF files, tell them to use Yo Teach > Make.","parameters":{"type":"object","properties":{"what":{"type":"string","description":"today | students | docs | session"},"id":{"type":"integer","description":"With what=session: the class meeting's id"},"query":{"type":"string","description":"With what=students: words to filter by, e.g. a label or subject"}},"required":["what"]}}},
   {"type":"function","function":{"name":"publish_app","description":"Put an app or page you built onto the user's desktop (Philibert's Full edition) as an icon they can open. Give the folder that holds it (with index.html) or a single .html file, and a short name. Publishing again with the same name updates it.","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Absolute path of the app's folder, or of one .html file"},"name":{"type":"string","description":"The icon's name, e.g. 'Setlist Timer'"},"entry":{"type":"string","description":"Optional: the page to open, if not index.html"},"icon":{"type":"string","description":"Optional: an image file inside the folder to use as the icon"}},"required":["path","name"]}}},
   {"type":"function","function":{"name":"computer_info","description":"Facts about THIS computer: every drive's total size, used and free space and format (C:, D:, USB drives), memory, processor, graphics card and OS. Use it for any question about disk space, drive size, RAM or hardware - never a shell command.","parameters":{"type":"object","properties":{}}}},
   {"type":"function","function":{"name":"design_review","description":"LOOK at an HTML file you have written: renders it in a real headless browser at desktop and mobile sizes, runs automated checks, and returns a critique of how it actually looks. ALWAYS call this after writing or editing any HTML/CSS page, before telling the user it is done. It is the only way you can see your own output - without it you are working blind. Fast (a few seconds) and read-only.","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Absolute path to the .html file to render and review"},"brief":{"type":"string","description":"Optional: the design brief or intent to judge it against, e.g. the palette, mood and audience you were aiming for"}},"required":["path"]}}},
@@ -13552,6 +13554,9 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                 import nd_bands
                 _bn = nd_bands.active(_CONFIG_DIR)["name"]
                 return f"[BAND: {_bn}] " + nd_band.tool(name, a, nd_bands.db_path(_CONFIG_DIR))
+            if name == "teach_info":
+                import nd_yoteach
+                return "[YO TEACH] " + nd_yoteach.tool(name, a, _CONFIG_DIR / "yoteach.db")
             if name == "publish_app":
                 import nd_retro_desktop
                 r = nd_retro_desktop.publish(APPS_DIR, a.get("path", ""), a.get("name", ""),
@@ -18300,6 +18305,8 @@ class Handler(BaseHTTPRequestHandler):
             bare_path = "/live/notes.html"
         elif bare_path == "/band":
             bare_path = "/live/band.html"
+        elif bare_path == "/yoteach":
+            bare_path = "/live/yoteach.html"
         elif bare_path == "/images":
             bare_path = "/live/images.html"
         elif bare_path == "/files":
@@ -18546,7 +18553,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error":"unauthorized","hint":"Send X-ND-Token. Pair in Setup > Devices."}, 401)
             return
 
-        if path in ("/api/notes", "/api/chats", "/api/desktop", "/api/band", "/api/images", "/api/files", "/api/feedback", "/api/board"):
+        if path in ("/api/notes", "/api/chats", "/api/desktop", "/api/band", "/api/images", "/api/files", "/api/feedback", "/api/board", "/api/yoteach", "/api/modelshare"):
             # The Notes app (nd_notes.py) and saved chats (nd_chats.py). They
             # write files, so a page from another site in the user's own browser
             # must not be able to drive them.
@@ -18593,6 +18600,14 @@ class Handler(BaseHTTPRequestHandler):
                             except Exception as e:
                                 log(f"band calendar sync: {e}", "warn")
                         threading.Thread(target=_gigcal, daemon=True).start()
+                return
+            if path == "/api/modelshare":
+                self.send_json(modelshare_handle(body))
+                return
+            if path == "/api/yoteach":
+                import nd_yoteach
+                self.send_json(nd_yoteach.handle(body, _CONFIG_DIR / "yoteach.db", yoteach_docs_dir(),
+                                                 yoteach_llm, yoteach_chrome()))
                 return
             if path == "/api/board":
                 import nd_board
@@ -19868,6 +19883,125 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error":"not found"},404)
 
 # ??? Entry point ??????????????????????????????????????????????????????????????
+# ── Models from another of the person's computers (nd_modelshare) ─────────────
+LOCAL_OLLAMA_URL = OLLAMA_URL
+_share = {"relay": None, "using": ""}       # the relay we run; the other computer we use now
+
+
+def use_models_at(url):
+    """Point every model call at `url` ("" = this computer's own Ollama)."""
+    global OLLAMA_URL
+    target = url or LOCAL_OLLAMA_URL
+    if target == OLLAMA_URL:
+        return
+    OLLAMA_URL = target
+    try:
+        import nd_philibert
+        nd_philibert.OLLAMA_URL = target
+    except Exception:
+        pass
+    _share["using"] = url or ""
+    log("Models: " + ("the other computer's (" + url.split("/k-")[0] + ")" if url else "this computer's own"), "info")
+    threading.Thread(target=refresh_status_cache, daemon=True).start()
+
+
+def _modelhost_loop():
+    """Use the other computer's models while it answers; this computer's own otherwise."""
+    import nd_modelshare
+    while True:
+        host = str(_config.get("model_host") or "")
+        if host:
+            use_models_at(host if nd_modelshare.probe(host) is not None else "")
+        elif _share["using"]:
+            use_models_at("")
+        time.sleep(30)
+
+
+def _share_start():
+    import nd_modelshare
+    if not _config.get("model_share_key"):
+        _config["model_share_key"] = nd_modelshare.new_key()
+        save_config()
+    if _share["relay"] is None:
+        _share["relay"] = nd_modelshare.Share()
+    return _share["relay"].start(LOCAL_OLLAMA_URL, _config["model_share_key"])
+
+
+def modelshare_handle(body):
+    import nd_modelshare
+    op = str((body or {}).get("op") or "status")
+    relay = _share["relay"]
+    if op == "share":
+        on = bool(body.get("on"))
+        _config["model_share"] = on
+        if body.get("new_key"):
+            _config["model_share_key"] = nd_modelshare.new_key()
+        save_config()
+        if relay:
+            relay.stop()
+        if on:
+            r = _share_start()
+            if not r.get("ok"):
+                _config["model_share"] = False
+                save_config()
+                return r
+    elif op == "connect":
+        addr = nd_modelshare.clean_address(body.get("address"))
+        if not addr:
+            return {"ok": False, "msg": "That does not look like a sharing address. It starts with http://100. and has a key at the end - copy it from the other computer."}
+        models = nd_modelshare.probe(addr, timeout=6)
+        if models is None:
+            return {"ok": False, "msg": "The other computer did not answer. Check that it is on, Philibert is running there with sharing on, "
+                                        "and Tailscale is signed in on both."}
+        _config["model_host"] = addr
+        save_config()
+        use_models_at(addr)
+    elif op == "disconnect":
+        _config["model_host"] = ""
+        save_config()
+        use_models_at("")
+    relay = _share["relay"]
+    host = str(_config.get("model_host") or "")
+    return {"ok": True, "tailscale_ip": nd_modelshare.tailscale_ip(),
+            "sharing": bool(relay and relay.on), "address": relay.address(_config.get("model_share_key", "")) if relay and relay.on else "",
+            "host": host, "using_host": bool(_share["using"]),
+            "host_models": (nd_modelshare.probe(host) or []) if host and op == "status" else None}
+
+
+def yoteach_docs_dir():
+    """Where Yo Teach writes lessons and worksheets: Documents/Yo Teach in Philibert's folder
+    (the File Manager shows it), or beside the data on a non-portable install."""
+    return (_drive_root() if PORTABLE else _CONFIG_DIR) / "Documents" / "Yo Teach"
+
+
+def yoteach_llm(model, messages):
+    """Yo Teach's model call: plain text, no tools, 15 minutes at most."""
+    return ollama_chat(model, messages, timeout=900)
+
+
+def yoteach_chrome():
+    """A Chromium to print PDFs with: the drive's own first, else Chrome or Edge on the PC."""
+    exe = portable_browser()
+    if exe:
+        return exe
+    try:
+        import nd_browser
+        return nd_browser.find_chrome()
+    except Exception:
+        return ""
+
+
+def _yoteach_timer():
+    """Yo Teach's class summaries: every minute, a running class that asks for a summary
+    every N minutes gets one when there are new notes, and a class that ended gets its last."""
+    import nd_yoteach
+    db = _CONFIG_DIR / "yoteach.db"
+    while True:
+        time.sleep(60)
+        if db.exists():
+            nd_yoteach.tick(db, yoteach_llm)
+
+
 def main():
     # Force UTF-8 output on Windows so the terminal doesn't crash
     import sys
@@ -19903,6 +20037,15 @@ def main():
         except Exception as e:
             log(f"temp clean-up skipped: {e}", "warn")
     threading.Thread(target=_temp_cleanup, daemon=True).start()
+    threading.Thread(target=_yoteach_timer, daemon=True).start()
+    if _config.get("model_share"):
+        try:
+            r = _share_start()
+            log("Sharing models over Tailscale: " + (r.get("address", "").split("/k-")[0] if r.get("ok") else r.get("msg", "")),
+                "info" if r.get("ok") else "warn")
+        except Exception as e:
+            log(f"model sharing: {e}", "warn")
+    threading.Thread(target=_modelhost_loop, daemon=True).start()
     start_status_loop()
     _reap_stale_chat_jobs()   # flag chat jobs orphaned by a previous restart
     if PORTABLE:

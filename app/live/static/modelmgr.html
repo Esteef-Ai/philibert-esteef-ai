@@ -34,6 +34,14 @@
   .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); font:12px var(--mono); background:#102038;
            border:1px solid rgba(0,242,254,.4); border-radius:7px; padding:8px 14px; opacity:0; transition:opacity .25s; pointer-events:none; }
   .toast.on { opacity:1; }
+  .share { border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin:4px 0 18px; background:rgba(22,37,68,.35); }
+  .share b { color:#fff; } .share p { color:var(--dim); font-size:13px; line-height:1.5; margin:6px 0 10px; }
+  .share .row2 { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .share input { flex:1; min-width:240px; background:rgba(8,15,30,.8); border:1px solid var(--line); border-radius:6px; padding:8px 10px;
+                 color:inherit; font:12px var(--mono); outline:none; }
+  .share input:focus { border-color:rgba(0,242,254,.6); }
+  .share .addr { font:12px var(--mono); color:var(--cyan); word-break:break-all; user-select:all; }
+  .share .ok { color:var(--green); } .share .off { color:var(--amber); }
 </style>
 </head>
 <body>
@@ -41,6 +49,7 @@
   <h1>Models</h1>
   <p class="lead">The AI models on this drive, in plain words: what each one is, what it is good for, and whether it suits this
     computer. Add one and it downloads onto the drive; it then works on every computer you plug the drive into.</p>
+  <div id="share"></div>
   <div id="body"></div>
 </div>
 <div class="toast" id="toast"></div>

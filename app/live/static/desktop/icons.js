@@ -45,6 +45,13 @@
       r(13, 10, 1, 1, YL) + r(16, 10, 1, 1, YL) + r(19, 10, 1, 1, YL) +
       p("M3 30l3-1 2-3 2 1-1 3-3 1z", MR, K) + p("M8 26l9-17", "none", K) + p("M15.5 8.5l3 -4 1 1-3 4", OL, K) +
       '<circle cx="6" cy="27" r="3.5" fill="' + RD + '" stroke="' + K + '"/>',
+    // Yo Teach: a mortarboard on a stack of books, an apple beside it
+    yoteach:
+      r(4.5, 22.5, 20, 4, RD, K) + r(5, 23, 19, 1, W) + r(6.5, 18.5, 18, 4, BL, K) + r(7, 19, 17, 1, CY) +
+      r(23, 23, 1, 3, W) + r(24, 19, 1, 3, W) +
+      p("M3.5 10.5 15 5.5l11.5 5L15 15.5z", K, K) + p("M8.5 12.5v4c0 1 3 2.5 6.5 2.5s6.5-1.5 6.5-2.5v-4L15 15.5z", DG, K) +
+      p("M25.5 11v6", "none", YL) + r(24.5, 16.5, 2, 3, YL, K) +
+      '<circle cx="28" cy="27" r="3" fill="' + RD + '" stroke="' + K + '"/>' + p("M28 24v-2", "none", GR),
     // Image Generation: a painter's palette with a brush across it
     images:
       p("M16 4.5c7 0 12.5 4.5 12.5 10 0 3-2.5 4-4.5 3.5s-3.5 1-2.5 3c1 2.5-1 5-5.5 5C9 26 3.5 21 3.5 15S9 4.5 16 4.5z", "#c08040", K) +
@@ -145,6 +152,7 @@
     suite: "M7 7h10v10H7zM10 10h4v4h-4zM9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3",
     vault: "M6.5 8.5h11a3.5 3.5 0 0 1 3.5 3.5v1.5a3 3 0 0 1-5.4 1.8L14 13.5h-4l-1.6 1.8A3 3 0 0 1 3 13.5V12a3.5 3.5 0 0 1 3.5-3.5zM7.5 10.5v3M6 12h3M15.5 11.5h.01M17.5 13h.01",
     band: "M4 6h16v14H4zM4 9.5h16M12 15m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0M7 7.8h.01M10 7.8h.01",
+    yoteach: "M2.5 9.5 12 5l9.5 4.5L12 14zM6.5 11.5v4.5c0 1.4 2.5 3 5.5 3s5.5-1.6 5.5-3v-4.5M21.5 9.5v6",
     images: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15.5 9.5m-1.5 0a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0",
     control: "M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4",
     store: "M5 8h14l-1 12H6zM9 8V6a3 3 0 0 1 6 0v2M10.5 11.5h3.5M10.5 11.5v5.5h3.5M10.5 14.2h3",
@@ -166,7 +174,7 @@
   };
   var TINT = {
     chat: ["#22d3ee", "#0369a1"], notes: ["#fcd34d", "#d97706"], suite: ["#a78bfa", "#5b21b6"], vault: ["#fb7185", "#be123c"],
-    band: ["#fdba74", "#c2410c"], images: ["#f472b6", "#7e22ce"], control: ["#9ca3af", "#374151"], store: ["#2dd4bf", "#0f766e"], feedback: ["#fde047", "#ea580c"], board: ["#fbbf24", "#b45309"],
+    band: ["#fdba74", "#c2410c"], yoteach: ["#86efac", "#15803d"], images: ["#f472b6", "#7e22ce"], control: ["#9ca3af", "#374151"], store: ["#2dd4bf", "#0f766e"], feedback: ["#fde047", "#ea580c"], board: ["#fbbf24", "#b45309"],
     files: ["#fcd34d", "#ca8a04"], models: ["#67e8f9", "#0e7490"], trash: ["#d1d5db", "#4b5563"],
     trash_full: ["#d1d5db", "#4b5563"], app: ["#60a5fa", "#1d4ed8"], programs: ["#60a5fa", "#1d4ed8"], folder: ["#fcd34d", "#ca8a04"],
     help: ["#34d399", "#047857"], find: ["#60a5fa", "#1e40af"], docs: ["#93c5fd", "#1d4ed8"], gpu: ["#4ade80", "#15803d"],

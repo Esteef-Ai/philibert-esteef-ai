@@ -41,6 +41,38 @@
         : o.installed ? (o.keep || o.ro ? "" : '<button class="btn danger" data-rm="' + esc(o.key) + '">REMOVE</button>')
         : '<button class="btn primary" data-add="' + esc(o.key) + '">ADD</button>') + "</div></div>";
   }
+  /* Your other computers (nd_modelshare): share this one's models over Tailscale, or use a bigger one's */
+  function drawShare(s) {
+    if (!s || s.ok === false && !s.tailscale_ip && s.msg) { $("share").innerHTML = ""; return; }
+    var html = '<div class="share"><b>Your other computers</b>';
+    if (s.host) {
+      html += "<p>This computer uses the models on your other computer while it can reach it, and its own when it cannot. " +
+        (s.using_host ? '<span class="ok">Connected now' + (s.host_models ? " · " + s.host_models.length + " models there" : "") + ".</span>"
+                      : '<span class="off">Not reachable right now - using this computer\'s own models.</span>') + "</p>" +
+        '<div class="row2"><span class="addr">' + esc(s.host.split("/k-")[0]) + '</span><button class="btn danger" id="sh-off">STOP USING IT</button></div>';
+    } else if (s.sharing) {
+      html += "<p>Your other computers can use this computer's models. On the other computer, open Models and paste this address " +
+        "(both need Tailscale signed in to your account). Only running models is allowed through it.</p>" +
+        '<div class="row2"><span class="addr" id="sh-addr">' + esc(s.address) + '</span><button class="btn" id="sh-copy">COPY</button>' +
+        '<button class="btn" id="sh-new" title="Make a new address; the old one stops working">NEW ADDRESS</button><button class="btn danger" id="sh-stop">STOP SHARING</button></div>';
+    } else {
+      html += "<p>A small laptop can use the models of a bigger computer you own, over Tailscale (a free private link between your own devices). " +
+        (s.tailscale_ip ? "" : "Tailscale is not running on this computer yet. ") + "On the big computer, share; on the small one, paste the address it shows.</p>" +
+        '<div class="row2"><button class="btn primary" id="sh-on"' + (s.tailscale_ip ? "" : " disabled") + ">SHARE THIS COMPUTER'S MODELS</button></div>" +
+        '<div class="row2" style="margin-top:10px"><input id="sh-in" placeholder="http://100.x.y.z:11500/k-... from your other computer">' +
+        '<button class="btn" id="sh-go">USE ITS MODELS</button></div>';
+    }
+    $("share").innerHTML = html + "</div>";
+    function act(d, msg) { post("/api/modelshare", d).then(function (r) { if (r.ok === false) toast(r.msg); else if (msg) toast(msg); drawShare(r.ok === false ? s : r); load(); }); }
+    if ($("sh-on")) $("sh-on").onclick = function () { act({ op: "share", on: true }, "Sharing. Paste the address on your other computer."); };
+    if ($("sh-stop")) $("sh-stop").onclick = function () { act({ op: "share", on: false }, "Stopped sharing."); };
+    if ($("sh-new")) $("sh-new").onclick = function () { act({ op: "share", on: true, new_key: true }, "New address - the old one no longer works."); };
+    if ($("sh-copy")) $("sh-copy").onclick = function () { navigator.clipboard.writeText(s.address).then(function () { toast("Copied."); }); };
+    if ($("sh-go")) $("sh-go").onclick = function () { act({ op: "connect", address: $("sh-in").value }, "Connected - the chat now uses your other computer's models."); };
+    if ($("sh-off")) $("sh-off").onclick = function () { act({ op: "disconnect" }, "Back to this computer's own models."); };
+  }
+  post("/api/modelshare", { op: "status" }).then(drawShare).catch(function () {});
+
   function draw() {
     var groups = { chat: [], eyes: [], notes: [] };
     (chat.models || []).forEach(function (m) {
