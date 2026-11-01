@@ -29,8 +29,12 @@
                   font:inherit; font-size:13px; }
   .modelrow { display:flex; align-items:center; gap:8px; padding:6px 16px; border-bottom:1px solid var(--line);
               background:rgba(10,18,34,.95); font-size:13px; color:var(--dim); }
+  .modelrow { flex-wrap:wrap; }
   .modelrow select { flex:1; min-width:0; background:var(--panel); color:var(--text); border:1px solid var(--line);
                      border-radius:8px; padding:6px 8px; font:inherit; font-size:14px; }
+  .modelrow .fit { flex-basis:100%; font-size:12px; padding-left:48px; }
+  .modelrow .fit:empty { display:none; }
+  .fit.green { color:#3ddc97; } .fit.yellow { color:var(--amber); } .fit.red { color:var(--red); }
   #banner { display:none; background:#3a1d26; color:#ffd6dc; font-size:13px; padding:8px 16px; }
   #log { flex:1; overflow-y:auto; padding:14px 12px 8px; display:flex; flex-direction:column; gap:10px;
          overscroll-behavior:contain; }
@@ -88,7 +92,7 @@
   <div class="grow"><h1>Philibert</h1><div class="sub" id="sub">Connecting…</div></div>
   <button id="new" type="button">New chat</button>
 </header>
-<div class="modelrow" id="modelrow" hidden><label for="model">Model</label><select id="model"></select></div>
+<div class="modelrow" id="modelrow" hidden><label for="model">Model</label><select id="model"></select><span class="fit" id="fit"></span></div>
 <div id="banner">Can't reach your computer. Check that Tailscale is on here and Philibert is running there.</div>
 <div id="log"></div>
 <footer>
@@ -305,14 +309,27 @@
       var want = "";
       try { want = localStorage.getItem(MKEY) || ""; } catch (e) {}
       if (!r.models.some(function (m) { return m.tag === want; })) want = r.default || r.models[0].tag;
+      fits = {};
       $("model").innerHTML = r.models.map(function (m) {
-        return '<option value="' + esc(m.tag) + '"' + (m.tag === want ? " selected" : "") + ">" + esc(m.label) +
-          (m.tag === r.default ? " (default)" : "") + "</option>";
+        fits[m.tag] = m.fit;
+        // a coloured dot in the option text: phones ignore styling inside a <select>
+        return '<option value="' + esc(m.tag) + '"' + (m.tag === want ? " selected" : "") + ">" + (DOT[m.fit] || "") + " " +
+          esc(m.label) + (m.tag === r.default ? " (default)" : "") + "</option>";
       }).join("");
       $("modelrow").hidden = false;
+      showFit();
     }).catch(function () {});
   }
-  $("model").onchange = function () { try { localStorage.setItem(MKEY, this.value); } catch (e) {} };
+  /* green / yellow / red: how the model runs on the computer, the Models app's words */
+  var DOT = { green: "🟢", yellow: "🟡", red: "🔴" };
+  var FIT = { green: "runs well on your computer", yellow: "works on your computer, slowly", red: "too big for your computer - very slow" };
+  var fits = {};
+  function showFit() {
+    var f = fits[$("model").value];
+    $("fit").className = "fit " + (f || "");
+    $("fit").textContent = f ? FIT[f] : "";
+  }
+  $("model").onchange = function () { try { localStorage.setItem(MKEY, this.value); } catch (e) {} showFit(); };
 
   draw(); setBusy(null); grow();
   api("hello").then(function (r) { online(true); $("sub").textContent = "on " + (r.computer || "your computer"); models(); })

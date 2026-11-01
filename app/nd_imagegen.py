@@ -265,7 +265,9 @@ def running():
         return False
 
 
-def start(root, free_gpu=None, timeout=240):
+def start(root, free_gpu=None, timeout=600):
+    # 10 minutes: from a USB or spinning hard drive, with other programs reading it, torch alone
+    # took over 4 minutes to load and the picture failed with "did not start in time" (2026-11-01)
     global _proc
     if running():
         return True

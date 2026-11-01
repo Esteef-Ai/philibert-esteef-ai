@@ -20171,15 +20171,48 @@ def _phone_messages(raw):
     return out
 
 
+_NOT_FOR_CHAT = re.compile(r"coder|devstral|codestral|codellama|starcoder|embed|llava|\bvl\b|vl:|-vl|vision", re.I)
+_phone_gpu = {}
+
+
+def phone_fit(need_gb, gpu_gb):
+    """green / yellow / red, the Models app's rule (modelmgr.js chatFit): fits the card,
+    runs slowly (up to 1.6x the card), too big. Unknown card -> yellow."""
+    if not gpu_gb:
+        return "yellow"
+    return "green" if need_gb <= gpu_gb else "yellow" if need_gb <= gpu_gb * 1.6 else "red"
+
+
 def _phone_models():
-    """The chat models the phone can pick from: [{tag, label}], embedding models left out."""
-    labels = {}
+    """The chat models the phone can pick from: [{tag, label, fit}], best fit first. Coding,
+    picture-reading and embedding models are left out - a coder answered chat badly."""
+    cat, gb = {}, 0.0
     try:
         import nd_philibert
-        labels = {m.get("tag"): m.get("label") for m in nd_philibert.catalog()}
+        cat = {m.get("tag"): m for m in nd_philibert.catalog()}
+        if "gb" not in _phone_gpu:
+            _phone_gpu["gb"] = nd_philibert.gpu_gb()
+        gb = _phone_gpu["gb"]
     except Exception:
         pass
-    return [{"tag": t, "label": labels.get(t) or t.split("/")[-1]} for t in _get_models() if "embed" not in t.lower()]
+    try:
+        with urllib.request.urlopen(f"{OLLAMA_URL}/api/tags", timeout=5) as r:
+            tags = json.loads(r.read()).get("models", [])
+    except Exception:
+        tags = []
+    out = []
+    for t in tags:
+        tag = t.get("name") or ""
+        m = cat.get(tag) or cat.get(tag[:-7] if tag.endswith(":latest") else tag) or {}
+        label = m.get("label") or tag.split("/")[-1]
+        if m.get("kind", "chat") != "chat" or m.get("tier") == "vision" or _NOT_FOR_CHAT.search(tag + " " + label):
+            continue
+        # the catalog's own need, else the file's size plus room for the conversation
+        need = m.get("min_gpu_gb") if m.get("min_gpu_gb") is not None else (t.get("size") or 0) / 1e9 * 1.2
+        out.append({"tag": tag, "label": label, "fit": phone_fit(need, gb), "size": (t.get("size") or 0)})
+    order = {"green": 0, "yellow": 1, "red": 2}
+    out.sort(key=lambda x: (order[x["fit"]], -x["size"] if x["fit"] == "green" else x["size"]))
+    return out
 
 
 def _phone_chat_job(jid, model, messages):
@@ -20217,7 +20250,11 @@ def _phone_serve(method, sub, body):
     if op == "hello":
         return js({"ok": True, "name": PRODUCT, "computer": socket.gethostname()})
     if op == "models":
-        return js({"ok": True, "models": _phone_models(), "default": handler_model()})
+        models = _phone_models()
+        default = handler_model()
+        if not any(m["tag"] == default for m in models):
+            default = next((m["tag"] for m in models if m["fit"] == "green"), models[0]["tag"] if models else "")
+        return js({"ok": True, "models": models, "default": default})
     if op == "chat":
         messages = _phone_messages(body.get("messages"))
         if not messages or messages[-1]["role"] != "user" or not messages[-1]["content"].strip():
