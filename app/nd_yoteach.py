@@ -84,6 +84,8 @@ Students: use only what is written down about the student. Never invent a diagno
 grade or interest. A one-time theme is not a lasting interest."""
 SETTINGS = {"writer_model": "", "vision_model": "", "summary_model": "", "rules": DEFAULT_RULES,
             "school": "", "teacher": ""}
+# nd_sync: the first time two computers' copies meet, rows with these values are the same row
+SYNC_KEYS = {"students": ["label"], "classes": ["name"]}
 KEEP_AUTO = 14
 _lock = threading.Lock()
 _jobs = {}                                   # job id -> {status, step, done, total, result, error}

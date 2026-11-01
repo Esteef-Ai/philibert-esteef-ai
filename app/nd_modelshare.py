@@ -16,6 +16,9 @@ graphics and 8 GB of RAM) can use the models on the same person's bigger compute
                     when it does not (the big one is off, no Tailscale), they use this
                     computer's own models again, by themselves. Checked every 30 s.
 
+Notes and app data (nd_sync) ride on the same address when the big computer also turns on
+"Share my notes and app data": /<key>/sync/<step> goes to Share.sync instead of Ollama.
+
 Stdlib + psutil (already in Philibert). Tailscale itself is installed by the person.
 """
 import http.client
@@ -28,6 +31,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = 11500
+SYNC_MAX = 64 * 1024 * 1024                    # one sync request (a 20 MB file, base64)
 TAILNET = ipaddress.ip_network("100.64.0.0/10")
 ALLOWED = {"/api/chat", "/api/generate", "/api/tags", "/api/show", "/api/embed", "/api/embeddings",
            "/api/ps", "/api/version"}
@@ -59,6 +63,7 @@ class _Relay(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     local = ""                                  # the local Ollama, set on the class by start()
     key = ""
+    owner = None                                # the Share, whose .sync answers /sync/ (None = refused)
 
     def log_message(self, *a):
         pass
@@ -73,7 +78,7 @@ class _Relay(BaseHTTPRequestHandler):
         if len(parts) < 3 or not secrets.compare_digest(parts[1], self.key):
             return None
         path = "/" + parts[2]
-        return path if path in ALLOWED else None
+        return path if path in ALLOWED or path.startswith("/sync/") else None
 
     def _forward(self, method):
         try:
@@ -85,7 +90,11 @@ class _Relay(BaseHTTPRequestHandler):
         if not path:
             return self._refuse(404)
         n = int(self.headers.get("Content-Length") or 0)
+        if n > SYNC_MAX:
+            return self._refuse(413)
         body = self.rfile.read(n) if n else None
+        if path.startswith("/sync/"):
+            return self._sync(path[6:], body)
         u = urllib.parse.urlparse(self.local)
         conn = http.client.HTTPConnection(u.hostname, u.port or 80, timeout=1800)
         try:
@@ -110,6 +119,21 @@ class _Relay(BaseHTTPRequestHandler):
         finally:
             conn.close()
 
+    def _sync(self, step, body):
+        fn = self.owner.sync if self.owner else None
+        if not fn or method_not_post(self.command):
+            return self._refuse(404)
+        try:
+            out = fn(step, json.loads(body.decode()) if body else {})
+        except Exception as e:                  # the laptop shows why, and tries again later
+            out = {"ok": False, "msg": f"{type(e).__name__}: {e}"}
+        data = json.dumps(out).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_GET(self):
         self._forward("GET")
 
@@ -120,12 +144,17 @@ class _Relay(BaseHTTPRequestHandler):
         self._refuse(405)
 
 
+def method_not_post(m):
+    return m != "POST"
+
+
 class Share:
-    """The relay on the big computer."""
+    """The relay on the big computer. sync = fn(step, body) -> dict to also serve nd_sync."""
 
     def __init__(self):
         self.srv = None
         self.ip = ""
+        self.sync = None
 
     def start(self, local_url, key, port=PORT):
         self.stop()
@@ -133,7 +162,7 @@ class Share:
         if not ip:
             return {"ok": False, "msg": "Tailscale is not running on this computer, so there is nothing to share over. "
                                         "Install Tailscale, sign in, and try again."}
-        handler = type("Relay", (_Relay,), {"local": local_url.rstrip("/"), "key": key})
+        handler = type("Relay", (_Relay,), {"local": local_url.rstrip("/"), "key": key, "owner": self})
         try:
             self.srv = ThreadingHTTPServer((ip, port), handler)
         except OSError as e:

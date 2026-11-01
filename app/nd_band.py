@@ -62,6 +62,9 @@ REQUIRED = {"contacts": "name", "venues": "name", "gigs": "date", "songs": "titl
 CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "NZD", "JPY", "CHF", "SEK", "NOK", "DKK", "PLN", "CZK",
               "MXN", "BRL", "ZAR", "INR", "KRW", "SGD", "HKD", "ILS", "TRY"]
 SETTINGS = {"currency": "USD", "units": "imperial"}
+# nd_sync: the first time two computers' copies meet, rows with these values are the same row
+SYNC_KEYS = {"contacts": ["name"], "venues": ["name"], "songs": ["title"], "setlists": ["name"], "tours": ["name"],
+             "suppliers": ["name"], "merch": ["name", "variant"], "gigs": ["date", "title"]}
 UNITS = {"imperial": "feet and inches, pounds, miles", "metric": "metres and centimetres, kilograms, kilometres"}
 KEEP_AUTO = 14
 _lock = threading.Lock()

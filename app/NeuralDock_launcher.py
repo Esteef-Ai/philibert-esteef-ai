@@ -19924,7 +19924,61 @@ def _share_start():
         save_config()
     if _share["relay"] is None:
         _share["relay"] = nd_modelshare.Share()
+    _share["relay"].sync = _sync_serve if _config.get("sync_share") else None
     return _share["relay"].start(LOCAL_OLLAMA_URL, _config["model_share_key"])
+
+
+# ── Notes and app data kept in step with the other computer (nd_sync) ─────────
+_sync = {"last": None, "running": False}
+
+
+def sync_device_id():
+    if not _config.get("device_id"):
+        _config["device_id"] = "d-" + secrets.token_hex(8)
+        save_config()
+    return _config["device_id"]
+
+
+def sync_areas():
+    import nd_sync
+    root, vault = str(_config.get("obsidian_root") or ""), str(_config.get("obsidian_vault") or "")
+    return nd_sync.PhilibertAreas(_CONFIG_DIR, Path(root) / vault if root and vault else None, yoteach_docs_dir())
+
+
+def _sync_serve(step, body):
+    """The hub's side: what a laptop asks for over the sharing address."""
+    import nd_sync
+    return nd_sync.serve(sync_areas(), step, body, sync_device_id())
+
+
+def sync_now():
+    import nd_sync
+    host = str(_config.get("model_host") or "")
+    if not host:
+        return {"ok": False, "msg": "Connect to your other computer first."}
+    _sync["running"] = True
+    try:
+        r = nd_sync.sync_once(host, sync_areas(), _CONFIG_DIR / "sync_state.json", device_id=sync_device_id())
+    except Exception as e:
+        r = {"ok": False, "msg": f"The sync stopped part way ({type(e).__name__}: {e}). Nothing is lost; it tries again in 5 minutes."}
+    finally:
+        _sync["running"] = False
+    r["text"] = nd_sync.summary(r)
+    r["at"] = time.time()
+    _sync["last"] = {k: r.get(k) for k in ("ok", "text", "at")}
+    log("Sync: " + r["text"], "info" if r.get("ok") else "warn")
+    return r
+
+
+def _sync_loop():
+    """Every 5 minutes (and a minute after start), while sync is on and the other computer answers."""
+    import nd_modelshare
+    time.sleep(60)
+    while True:
+        host = str(_config.get("model_host") or "")
+        if _config.get("sync_with") and host and nd_modelshare.probe(host) is not None:
+            sync_now()
+        time.sleep(300)
 
 
 def modelshare_handle(body):
@@ -19958,14 +20012,33 @@ def modelshare_handle(body):
         use_models_at(addr)
     elif op == "disconnect":
         _config["model_host"] = ""
+        _config["sync_with"] = False
         save_config()
         use_models_at("")
+    elif op == "sync_share":
+        _config["sync_share"] = bool(body.get("on"))
+        save_config()
+        if relay:
+            relay.sync = _sync_serve if _config["sync_share"] else None
+    elif op == "sync_with":
+        _config["sync_with"] = bool(body.get("on"))
+        save_config()
+        if _config["sync_with"]:
+            r = sync_now()
+            if not r.get("ok"):
+                return {"ok": False, "msg": r["text"]}
+    elif op == "sync_now":
+        r = sync_now()
+        if not r.get("ok"):
+            return {"ok": False, "msg": r["text"]}
     relay = _share["relay"]
     host = str(_config.get("model_host") or "")
     return {"ok": True, "tailscale_ip": nd_modelshare.tailscale_ip(),
             "sharing": bool(relay and relay.on), "address": relay.address(_config.get("model_share_key", "")) if relay and relay.on else "",
             "host": host, "using_host": bool(_share["using"]),
-            "host_models": (nd_modelshare.probe(host) or []) if host and op == "status" else None}
+            "host_models": (nd_modelshare.probe(host) or []) if host and op == "status" else None,
+            "sync_share": bool(_config.get("sync_share")), "sync_with": bool(_config.get("sync_with")),
+            "sync_last": _sync["last"], "sync_running": _sync["running"]}
 
 
 def yoteach_docs_dir():
@@ -20046,6 +20119,7 @@ def main():
         except Exception as e:
             log(f"model sharing: {e}", "warn")
     threading.Thread(target=_modelhost_loop, daemon=True).start()
+    threading.Thread(target=_sync_loop, daemon=True).start()
     start_status_loop()
     _reap_stale_chat_jobs()   # flag chat jobs orphaned by a previous restart
     if PORTABLE:
