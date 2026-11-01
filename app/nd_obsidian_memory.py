@@ -162,7 +162,10 @@ def slugify(text: str, maxlen: int = 60) -> str:
 
 
 def _tokens(text: str) -> set:
-    words = re.findall(r"[a-z0-9][a-z0-9'\-]{2,}", (text or "").lower())
+    low = (text or "").lower()
+    words = re.findall(r"[a-z0-9][a-z0-9'\-]{2,}", low)
+    # "Student D" -> student-d: one letter alone is dropped, and then every student looks alike
+    words += [a + "-" + b for a, b in re.findall(r"\b([a-z]{3,})[ _-]([a-z0-9])\b", low)]
     return {w for w in words if w not in STOPWORDS}
 
 
@@ -591,6 +594,33 @@ class ObsidianMemory:
         except Exception as exc:
             self.last_error = f"search failed: {exc}"
             return []
+
+    def lookup(self, query: str, k: int = 6, limit: int = 6000) -> str:
+        """For the chat's memory_search: the notes that answer a question, as text.
+        The hybrid index when it is there, the keyword score otherwise."""
+        if not self.available:
+            return "No notes folder is set up."
+        out, used = [], 0
+        idx = self.index()
+        hits = []
+        if idx is not None:
+            try:
+                hits = [(h["crumb"], h["text"]) for h in idx.lookup(query, k=k)]
+            except Exception as exc:
+                self.last_error = f"lookup failed: {exc}"
+        if not hits:
+            qt = _tokens(query)
+            scored = sorted(((self._score(p, qt), p) for p in self.all_notes()), key=lambda x: (-x[0], str(x[1])))
+            hits = [(p.stem, self._read_note(p)[1].strip()) for sc, p in scored[:k] if sc > 0]
+        for crumb, text in hits:
+            piece = f"### {crumb}\n{text}"
+            if used + len(piece) > limit:
+                piece = piece[:max(0, limit - used - 20)].rstrip() + "\n...(truncated)"
+            out.append(piece)
+            used += len(piece)
+            if used >= limit:
+                break
+        return "\n\n".join(out) if out else "Nothing in the notes matches that."
 
     def _context_for(self, user_text: str, budget: Optional[int]) -> str:
         budget = int(budget or self.budget)

@@ -216,11 +216,20 @@ def chunk_note(path: Path, vault: Path, fm: dict, body: str) -> List[dict]:
 _WORD = re.compile(r"[a-z0-9][a-z0-9_.\-]*")
 
 
+_LABEL = re.compile(r"\b([a-z]{3,})[ _-]([a-z0-9])\b")
+
+
 def index_tokens(text: str) -> List[str]:
     """Lexical tokens. Deliberately keeps _ . - so OLLAMA_KV_CACHE_TYPE and
-    q8_0 and sm_120 survive as single searchable terms."""
-    toks = _WORD.findall(text.lower())
-    out = []
+    q8_0 and sm_120 survive as single searchable terms.
+
+    A word followed by one letter or digit is also one term: "Student D" -> student-d,
+    "Spanish 4" -> spanish-4. Alone, "d" is too short to keep, so every "Student X"
+    question looked the same and asking about Student D brought back Student J's
+    notes first (a teacher's vault, 2026-11-01)."""
+    low = text.lower()
+    toks = _WORD.findall(low)
+    out = [m.group(1) + "-" + m.group(2) for m in _LABEL.finditer(low)]
     for t in toks:
         t = t.strip(".-")
         if len(t) < 2:
@@ -575,6 +584,20 @@ class MemoryIndex:
             out.append(ch)
         return out
 
+    def lookup(self, query: str, k: int = 8) -> List[dict]:
+        """search(), with any note the question names first: "Student A" -> the Student A
+        note, even when another student's note matches the rest of the question better
+        (asked "what memory aid for Student A?", Student J's memory-aid section won)."""
+        hits = self.search(query, k=k)
+        named = {m.group(1) + "-" + m.group(2) for m in _LABEL.finditer(query.lower())}
+        if named:
+            pinned = [dict(c, score=1.0, why="named") for c in self.chunks
+                      if named & set(index_tokens(c["note"]))]
+            if pinned:
+                keys = {(c["note"], c["crumb"]) for c in pinned[:3]}
+                hits = pinned[:3] + [h for h in hits if (h["note"], h["crumb"]) not in keys]
+        return hits[:max(k, 3)]
+
     # -- context ----------------------------------------------------------
 
     def context_for(self, query: str = "", budget: Optional[int] = None) -> str:
@@ -606,7 +629,7 @@ class MemoryIndex:
 
         # Tier 3 -- the actual retrieval
         self.ensure()
-        hits = self.search(query, k=12) if query.strip() else []
+        hits = self.lookup(query, k=12) if query.strip() else []
         if not hits:
             # No query, or nothing matched. Fall back to whole notes so an
             # empty-query call still carries real content. The shared rendering

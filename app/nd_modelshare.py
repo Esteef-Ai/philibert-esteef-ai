@@ -18,6 +18,7 @@ graphics and 8 GB of RAM) can use the models on the same person's bigger compute
 
 Notes and app data (nd_sync) ride on the same address when the big computer also turns on
 "Share my notes and app data": /<key>/sync/<step> goes to Share.sync instead of Ollama.
+Pictures (nd_imagegen) come with the models: /<key>/images/<step> goes to Share.images.
 
 Stdlib + psutil (already in Philibert). Tailscale itself is installed by the person.
 """
@@ -63,14 +64,17 @@ class _Relay(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     local = ""                                  # the local Ollama, set on the class by start()
     key = ""
-    owner = None                                # the Share, whose .sync answers /sync/ (None = refused)
+    owner = None                                # the Share: .sync answers /sync/, .images /images/ (None = refused)
 
     def log_message(self, *a):
         pass
 
     def _refuse(self, code=404):
+        # the request body was not read: close, so its bytes are not taken for the next request
+        self.close_connection = True
         self.send_response(code)
         self.send_header("Content-Length", "0")
+        self.send_header("Connection", "close")
         self.end_headers()
 
     def _route(self):
@@ -78,7 +82,7 @@ class _Relay(BaseHTTPRequestHandler):
         if len(parts) < 3 or not secrets.compare_digest(parts[1], self.key):
             return None
         path = "/" + parts[2]
-        return path if path in ALLOWED or path.startswith("/sync/") else None
+        return path if path in ALLOWED or path.startswith(("/sync/", "/images/")) else None
 
     def _forward(self, method):
         try:
@@ -94,7 +98,9 @@ class _Relay(BaseHTTPRequestHandler):
             return self._refuse(413)
         body = self.rfile.read(n) if n else None
         if path.startswith("/sync/"):
-            return self._sync(path[6:], body)
+            return self._sync(path[6:], body, "sync")
+        if path.startswith("/images/"):
+            return self._sync(path[8:], body, "images")
         u = urllib.parse.urlparse(self.local)
         conn = http.client.HTTPConnection(u.hostname, u.port or 80, timeout=1800)
         try:
@@ -119,8 +125,8 @@ class _Relay(BaseHTTPRequestHandler):
         finally:
             conn.close()
 
-    def _sync(self, step, body):
-        fn = self.owner.sync if self.owner else None
+    def _sync(self, step, body, what):
+        fn = getattr(self.owner, what, None) if self.owner else None
         if not fn or method_not_post(self.command):
             return self._refuse(404)
         try:
@@ -149,12 +155,14 @@ def method_not_post(m):
 
 
 class Share:
-    """The relay on the big computer. sync = fn(step, body) -> dict to also serve nd_sync."""
+    """The relay on the big computer. sync / images = fn(step, body) -> dict to also serve
+    nd_sync and nd_imagegen."""
 
     def __init__(self):
         self.srv = None
         self.ip = ""
         self.sync = None
+        self.images = None
 
     def start(self, local_url, key, port=PORT):
         self.stop()

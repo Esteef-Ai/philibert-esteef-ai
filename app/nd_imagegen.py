@@ -15,8 +15,14 @@ computer the drive is plugged into later.
 ComfyUI runs on 127.0.0.1:8199 - not its usual 8188, so a ComfyUI the person
 already has on this computer is left alone - with no window and no browser.
 
+Another computer's engine (nd_modelshare): while this computer uses the models of a bigger
+one of the person's, REMOTE["call"] is set and pictures are drawn there instead - the request
+goes over the sharing address (/<key>/images/<step>, answered by serve() on the big one) and
+the picture comes back into this computer's own gallery. Nothing is kept on the big one.
+
 Entry points: handle(body, root, ...) for /api/images; tool(args, root, ...)
-for the chat's generate_image; python nd_imagegen.py --install <drive root>.
+for the chat's generate_image; serve(root, step, body, ...) for another computer;
+python nd_imagegen.py --install <drive root>.
 """
 import atexit
 import json
@@ -44,6 +50,8 @@ SIZES = {"square": (1024, 1024), "poster": (832, 1216), "banner": (1344, 768), "
 _proc = None
 _lock = threading.Lock()
 _job = {"state": "idle", "line": "", "progress": 0.0, "error": ""}     # the install, for the page
+REMOTE = {"call": None, "name": "", "seen": 0.0, "models": None}       # the other computer's engine, if used
+SHARED = "shared"                              # where the big computer's engine saves pictures for another
 
 
 def plat():
@@ -608,11 +616,15 @@ def _run_prompt(wf, timeout):
 
 def generate(root, prompt, negative="", size="square", width=None, height=None, steps=None, cfg=None, seed=None,
              ckpt=None, free_gpu=None, timeout=1200, model=None, count=1, style="none", init=None, denoise=1.0,
-             refined_from=None):
-    """Make count pictures (variations: one seed each, from seed up). Returns a list."""
+             refined_from=None, shared=False):
+    """Make count pictures (variations: one seed each, from seed up). Returns a list.
+    shared: drawn for another computer - saved under out/shared/, out of this gallery."""
     prompt = str(prompt or "").strip()
     if not prompt:
         raise ValueError("say what to draw")
+    if not shared and remote_models() is not None:
+        return _remote_generate(root, prompt, negative, size, width, height, steps, cfg, seed, model, count, style,
+                                init, denoise, refined_from)
     w, h = SIZES.get(size, SIZES["square"])
     if width and height:
         w, h = max(512, min(2048, int(width) // 64 * 64)), max(512, min(2048, int(height) // 64 * 64))
@@ -645,6 +657,10 @@ def generate(root, prompt, negative="", size="square", width=None, height=None, 
         cfg = float(cfg or d["cfg"])
         neg_used = ", ".join(x for x in (negative.strip(), st_["neg"], NEG_BASE) if x)
         wf = wf_sdxl(full, neg_used, w, h, steps, cfg, d["sampler"], d["scheduler"], seed, ck, count, init, denoise)
+    if shared:
+        for node in wf.values():
+            if node["class_type"] == "SaveImage":
+                node["inputs"]["filename_prefix"] = SHARED + "/" + node["inputs"]["filename_prefix"]
     imgs = _run_prompt(wf, timeout)
     out = []
     for i, im in enumerate(imgs):
@@ -688,6 +704,15 @@ def upscale(root, name, free_gpu=None):
     f = image_file(root, name)
     if not f:
         raise ValueError("no such picture")
+    if remote_models() is not None:
+        r = _remote("upscale", {"init_b64": _b64(f)}, 700)["images"][0]
+        try:
+            meta = json.loads(f.with_suffix(".json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            meta = {}
+        meta.update(upscaled_from=f.name, w=(meta.get("w") or 0) * 4, h=(meta.get("h") or 0) * 4)
+        g = _keep(root, r["b64"], meta, "Philibert_4x")
+        return {"name": g.name, **meta}
     up = next((m for m in catalog(root) if m["kind"] == "upscale" and model_installed(root, m)), None)
     if not up:
         raise RuntimeError("Download the 4x upscaler in Models first.")
@@ -747,6 +772,18 @@ def trash(root, name):
 
 
 def status(root):
+    rm = remote_models()
+    if rm is not None:
+        dm = next((m for m in rm if m.get("recommended") and m["kind"] in ("zimage", "sdxl")), None) or \
+            next((m for m in rm if m["kind"] in ("zimage", "sdxl")), None)
+        return {"ok": True, "installed": True, "running": True, "checkpoints": [], "rating": "green",
+                "why": f"Pictures are drawn on {REMOTE['name'] or 'your other computer'}, with its models.",
+                "remote": REMOTE["name"] or "your other computer", "platform": plat(), "setup": dict(_job),
+                "models": rm, "default_model": dm["id"] if dm else None, "download": dict(_mjob),
+                "styles": [{"id": s["id"], "name": s["name"]} for s in STYLES],
+                "more_styles": [{"id": s["id"], "name": s["name"], "group": s["group"]} for s in MORE_STYLES],
+                "defaults": DEFAULTS, "zimage_takes_negative": ZIMAGE_TAKES_NEGATIVE,
+                "editor": "", "sizes": {k: list(v) for k, v in SIZES.items()}}
     r = rating()
     dm = default_model(root)
     return {"ok": True, "installed": installed(root), "running": running(), "checkpoints": checkpoints(root),
@@ -763,6 +800,11 @@ def handle(body, root, internet=True, free_gpu=None):
     body = body or {}
     op = body.get("op", "")
     try:
+        if op in ("install", "start", "model_download", "model_remove") and remote_models() is not None:
+            if op == "start":
+                return {"ok": True, "editor": ""}
+            return {"ok": False, "msg": f"Pictures are drawn on {REMOTE['name'] or 'your other computer'} right now: "
+                                        "set up and add picture models there."}
         if op == "status":
             return status(root)
         if op == "install":
@@ -797,7 +839,7 @@ def handle(body, root, internet=True, free_gpu=None):
 
 def tool(a, root, free_gpu=None):
     """The chat's generate_image. Returns (text for the model, the PNG bytes or None)."""
-    if not installed(root):
+    if not installed(root) and remote_models() is None:
         return ("[NOT SET UP] Image Generation is not set up on this computer. Tell the user they can set it up "
                 "from the Image Generation icon on the desktop (it downloads the picture engine and a model). "
                 "Do not try anything else."), None
@@ -807,6 +849,118 @@ def tool(a, root, free_gpu=None):
     except (RuntimeError, ValueError, urllib.error.URLError, OSError) as e:
         return f"[ERROR generate_image: {e}]", None
     return r, Path(r["path"]).read_bytes()
+
+
+# --- another computer's engine ----------------------------------------------------------
+def _b64(f):
+    import base64
+    return base64.b64encode(Path(f).read_bytes()).decode()
+
+
+def remote_models(max_age=60):
+    """The picture models of the other computer this one is using, or None when pictures are
+    drawn here (no other computer, it does not answer, or it has no picture engine)."""
+    call = REMOTE.get("call")
+    if not call:
+        return None
+    if time.time() - REMOTE["seen"] > max_age:
+        try:
+            r = call("models", {}, 15)
+            REMOTE["models"] = r.get("models") if r.get("ok") and r.get("models") else None
+        except Exception:
+            REMOTE["models"] = None
+        REMOTE["seen"] = time.time()
+    return REMOTE["models"]
+
+
+def _remote(step, body, timeout):
+    r = REMOTE["call"](step, body, timeout)
+    if not r.get("ok"):
+        REMOTE["seen"] = 0.0                      # look again next time
+        raise RuntimeError(r.get("msg") or "the other computer could not draw it")
+    return r
+
+
+def _keep(root, b64, meta, prefix="Philibert"):
+    """A picture from the other computer, into this gallery (with its .json, like one made here)."""
+    import base64
+    out = paths(root)["out"]
+    out.mkdir(parents=True, exist_ok=True)
+    f = out / f"{prefix}_{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:4]}.png"
+    f.write_bytes(base64.b64decode(b64))
+    f.with_suffix(".json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    return f
+
+
+def _remote_generate(root, prompt, negative, size, width, height, steps, cfg, seed, model, count, style, init, denoise,
+                     refined_from):
+    body = {"prompt": prompt, "negative": negative, "size": size, "width": width, "height": height, "steps": steps,
+            "cfg": cfg, "seed": seed, "model": model, "count": count, "style": style, "denoise": denoise}
+    if init:
+        body["init_b64"] = _b64(paths(root)["out"] / "input" / init)
+    out = []
+    for r in _remote("generate", body, 1300)["images"]:
+        meta = {k: v for k, v in r.items() if k not in ("b64", "name", "path")}
+        if refined_from:
+            meta.update(refined_from=refined_from, strength=round(float(denoise), 2))
+        f = _keep(root, r["b64"], meta)
+        out.append({"name": f.name, "path": str(f), **meta})
+    return out
+
+
+def serve(root, step, body, free_gpu=None):
+    """The big computer's side: draw for another of the person's computers. The pictures are
+    handed back and not kept here (they were never in this gallery: out/shared/)."""
+    body = body or {}
+    if not installed(root):
+        return {"ok": False, "msg": "Image Generation is not set up on the other computer."}
+    if step == "models":
+        return {"ok": True, "models": [m for m in models(root) if m["installed"]]}
+    if step not in ("generate", "upscale"):
+        return {"ok": False, "msg": f"unknown step {step!r}"}
+    init = None
+    if body.get("init_b64"):
+        import base64
+        inp = paths(root)["out"] / "input"
+        inp.mkdir(parents=True, exist_ok=True)
+        init = f"{SHARED}-{uuid.uuid4().hex[:10]}.png"
+        (inp / init).write_bytes(base64.b64decode(body["init_b64"]))
+    try:
+        if step == "generate":
+            imgs = generate(root, body.get("prompt"), str(body.get("negative") or ""), body.get("size") or "square",
+                            body.get("width"), body.get("height"), body.get("steps"), body.get("cfg"), body.get("seed"),
+                            free_gpu=free_gpu, model=body.get("model"), count=body.get("count") or 1,
+                            style=body.get("style") or "none", init=init, denoise=float(body.get("denoise") or 1.0),
+                            shared=True)
+        else:
+            if not init:
+                return {"ok": False, "msg": "no picture to upscale"}
+            up = next((m for m in catalog(root) if m["kind"] == "upscale" and model_installed(root, m)), None)
+            if not up:
+                return {"ok": False, "msg": "The other computer has no upscaler: download the 4x upscaler in its Models."}
+            start(root, free_gpu)
+            wf = wf_upscale(init, up["files"][0]["file"])
+            wf["4"]["inputs"]["filename_prefix"] = SHARED + "/Philibert_4x"
+            imgs = [{"path": str(paths(root)["out"] / im.get("subfolder", "") / im["filename"])}
+                    for im in _run_prompt(wf, 600)]
+        res = []
+        for im in imgs:
+            f = Path(im["path"])
+            res.append({**{k: v for k, v in im.items() if k not in ("path", "name")}, "b64": _b64(f)})
+            for g in (f, f.with_suffix(".json")):
+                try:
+                    g.unlink()
+                except OSError:
+                    pass
+        return {"ok": True, "images": res}
+    except (RuntimeError, ValueError, urllib.error.URLError, OSError) as e:
+        return {"ok": False, "msg": str(e)}
+    finally:
+        if init:
+            try:
+                (paths(root)["out"] / "input" / init).unlink()
+            except OSError:
+                pass
 
 
 if __name__ == "__main__":

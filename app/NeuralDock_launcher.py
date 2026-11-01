@@ -264,6 +264,8 @@ def philibert_prompt():
     out = ("\n\nYOU ARE PHILIBERT by Esteef.Ai, a private, general-purpose assistant: questions and answers, writing, notes, files and folders, pictures and simple coding. The Band Manager app keeps "
            "gigs, tours, merch and bills for people who play in a band - use it when they ask about those. The Yo Teach app keeps a teacher's students, classes, attendance, class notes "
            "and the lessons and worksheets made there - use teach_info when they ask about those. "
+           "The user's notes and memory are searchable: when they ask you to check your memory or notes, or the "
+           "notes shown to you do not clearly answer a question about them, call memory_search - never guess. "
            "You run from the user's drive on their own computer. Be warm, direct and "
            "brief: a simple question gets a short answer.\n")
     try:                                   # the Band Manager's settings, shared with its page
@@ -7316,7 +7318,7 @@ def _written_paths(rows):
 
 TOOL_TIERS = {
     "list_dir":"green", "read_file":"green", "search_files":"green", "computer_info":"green",
-    "band_info":"green", "band_save":"yellow", "teach_info":"green",
+    "band_info":"green", "band_save":"yellow", "teach_info":"green", "memory_search":"green",
     "find_definition":"green", "find_references":"green",
     "web_search":"green", "web_fetch":"green", "screen_capture":"green",
     "delegate":"green", "list_specialists":"green", "list_devices":"green",
@@ -9955,6 +9957,7 @@ def computer_info():
 TOOL_SCHEMAS = [
   {"type":"function","function":{"name":"band_info","description":"Look up the user's band records in the Band Manager: their gigs, tours, venues, contacts, suppliers, songs, setlists, merch, money, bills and reminders, or an overview (next gigs, what is due, bills to pay, tours, the year's money and its currency). Use it for any question about gigs, tours, bookings, setlists, songs, venues, suppliers, bills, merch stock or band money. For one tour's gigs and totals give what=tours and its id.","parameters":{"type":"object","properties":{"what":{"type":"string","description":"overview | gigs | tours | venues | contacts | suppliers | songs | setlists | merch | money | bills | reminders"},"id":{"type":"integer","description":"With what=tours: one tour in detail"},"query":{"type":"string","description":"Optional words to filter by, e.g. a venue or song name"}},"required":["what"]}}},
   {"type":"function","function":{"name":"band_save","description":"Add or change a record in the user's Band Manager (the user approves it). table: gigs | tours | venues | contacts | suppliers | songs | setlists | merch | money | bills | reminders. fields: the values - gigs {date YYYY-MM-DD, venue_id, tour_id, title, status idea|hold|confirmed|played|cancelled, fee, load_in HH:MM, set_time HH:MM, set_length minutes, notes}; tours {name, starts, ends}; suppliers {name, kind, person, phone, email, website}; bills {what, supplier_id, amount, due, category, tour_id, gig_id, paid 0|1 - paying books the expense in money}; venues {name, address, city, capacity}; contacts {name, role, phone, email}; songs {title, key, bpm, length_sec}; merch {name, variant, price, stock}; money {date, kind income|expense, amount, category, gig_id}; reminders {text, due}. Give id to change an existing record. Look ids up with band_info first.","parameters":{"type":"object","properties":{"table":{"type":"string"},"fields":{"type":"object"},"id":{"type":"integer"}},"required":["table","fields"]}}},
+  {"type":"function","function":{"name":"memory_search","description":"Search the user's own notes and memory (the notes folder) for the answer to a question about them, their work, people or plans. Use it whenever the user asks you to check, look in or remember your memory or notes, and whenever the notes shown above do not clearly answer a question about the user. Answer from what it returns, and say so when nothing matches - never guess.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"What to look for, in the user's words, e.g. 'Student D memory aid' or 'Ecuador trip dates'"}},"required":["query"]}}},
   {"type":"function","function":{"name":"teach_info","description":"Look up the teacher's records in the Yo Teach app: today's classes with attendance, notes and class summaries; the students (by label, e.g. Student G, with their subject, level and documented supports); the lessons and worksheets already made; or one class meeting in full. Use it for any question about their classes, students, attendance, class notes or teaching documents. To make a new lesson or worksheet as Word + PDF files, tell them to use Yo Teach > Make.","parameters":{"type":"object","properties":{"what":{"type":"string","description":"today | students | docs | session"},"id":{"type":"integer","description":"With what=session: the class meeting's id"},"query":{"type":"string","description":"With what=students: words to filter by, e.g. a label or subject"}},"required":["what"]}}},
   {"type":"function","function":{"name":"publish_app","description":"Put an app or page you built onto the user's desktop (Philibert's Full edition) as an icon they can open. Give the folder that holds it (with index.html) or a single .html file, and a short name. Publishing again with the same name updates it.","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Absolute path of the app's folder, or of one .html file"},"name":{"type":"string","description":"The icon's name, e.g. 'Setlist Timer'"},"entry":{"type":"string","description":"Optional: the page to open, if not index.html"},"icon":{"type":"string","description":"Optional: an image file inside the folder to use as the icon"}},"required":["path","name"]}}},
   {"type":"function","function":{"name":"computer_info","description":"Facts about THIS computer: every drive's total size, used and free space and format (C:, D:, USB drives), memory, processor, graphics card and OS. Use it for any question about disk space, drive size, RAM or hardware - never a shell command.","parameters":{"type":"object","properties":{}}}},
@@ -13554,6 +13557,11 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                 import nd_bands
                 _bn = nd_bands.active(_CONFIG_DIR)["name"]
                 return f"[BAND: {_bn}] " + nd_band.tool(name, a, nd_bands.db_path(_CONFIG_DIR))
+            if name == "memory_search":
+                _o = obs()
+                if not _o:
+                    return "[MEMORY] No notes folder is set up."
+                return "[MEMORY] " + _o.lookup(str(a.get("query") or ""))
             if name == "teach_info":
                 import nd_yoteach
                 return "[YO TEACH] " + nd_yoteach.tool(name, a, _CONFIG_DIR / "yoteach.db")
@@ -19901,6 +19909,7 @@ def use_models_at(url):
     except Exception:
         pass
     _share["using"] = url or ""
+    _images_from(url)
     log("Models: " + ("the other computer's (" + url.split("/k-")[0] + ")" if url else "this computer's own"), "info")
     threading.Thread(target=refresh_status_cache, daemon=True).start()
 
@@ -19925,6 +19934,7 @@ def _share_start():
     if _share["relay"] is None:
         _share["relay"] = nd_modelshare.Share()
     _share["relay"].sync = _sync_serve if _config.get("sync_share") else None
+    _share["relay"].images = _images_serve
     return _share["relay"].start(LOCAL_OLLAMA_URL, _config["model_share_key"])
 
 
@@ -19943,6 +19953,30 @@ def sync_areas():
     import nd_sync
     root, vault = str(_config.get("obsidian_root") or ""), str(_config.get("obsidian_vault") or "")
     return nd_sync.PhilibertAreas(_CONFIG_DIR, Path(root) / vault if root and vault else None, yoteach_docs_dir())
+
+
+def _images_serve(step, body):
+    """The big computer draws pictures for the other one (nd_imagegen.serve)."""
+    import nd_imagegen
+    return nd_imagegen.serve(_drive_root(), step, body, free_vram_for_comfy)
+
+
+def _images_from(url):
+    """While this computer uses another's models, its pictures are drawn there too."""
+    try:
+        import nd_imagegen
+    except Exception:
+        return
+    if not url:
+        nd_imagegen.REMOTE.update(call=None, name="", seen=0.0, models=None)
+        return
+
+    def call(step, body, timeout):
+        req = urllib.request.Request(url.rstrip("/") + "/images/" + step, data=json.dumps(body or {}).encode(),
+                                     headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode())
+    nd_imagegen.REMOTE.update(call=call, name="your other computer", seen=0.0, models=None)
 
 
 def _sync_serve(step, body):
