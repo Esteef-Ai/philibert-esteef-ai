@@ -18005,6 +18005,19 @@ def _open_portable_browser(url):
     launch with the same profile to the running one and exits at once, so
     "closed" means: no Chromium process left using this profile.
     """
+    exe, profile, args = _portable_browser_args(url)
+    try:
+        proc = subprocess.Popen(args)
+    except Exception as e:
+        log(f"Portable browser failed to start ({e})", "warn")
+        return False
+    log(f"Opening {PRODUCT} in the drive's browser", "ok")
+    t0 = time.time()
+    proc.wait()
+    return _wait_portable_browser_closed(exe, profile, t0, proc.returncode)
+
+
+def _portable_browser_args(url):
     exe = portable_browser()
     profile = os.environ.get("ND_BROWSER_PROFILE") or str(_CONFIG_DIR / "browser")
     Path(profile).mkdir(parents=True, exist_ok=True)
@@ -18017,15 +18030,10 @@ def _open_portable_browser(url):
             "--start-maximized"]
     if os.environ.get("ND_BROWSER_KIOSK") == "1":
         args.append("--kiosk")
-    try:
-        proc = subprocess.Popen(args)
-    except Exception as e:
-        log(f"Portable browser failed to start ({e})", "warn")
-        return False
-    log(f"Opening {PRODUCT} in the drive's browser", "ok")
-    t0 = time.time()
-    proc.wait()
+    return exe, profile, args
 
+
+def _wait_portable_browser_closed(exe, profile, t0, rc):
     def still_open():
         try:
             import psutil
@@ -18054,7 +18062,7 @@ def _open_portable_browser(url):
     except Exception:
         quick_exit = False
     if quick_exit:
-        log(f"The drive's browser closed straight away (exit code {proc.returncode}) - "
+        log(f"The drive's browser closed straight away (exit code {rc}) - "
             "trying another window", "warn")
         return False
     while True:
@@ -19905,6 +19913,119 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error":"not found"},404)
 
 # ??? Entry point ??????????????????????????????????????????????????????????????
+# ── One Philibert per drive ───────────────────────────────────────────────────
+# A copy that outlived its setup window (2026-11-01: copies from 1:28 and 1:29 still
+# running at 1:39, each with its model server, and seven more model servers from earlier
+# starts) waited for "no Philibert window left" - and one window from Oct 30 was still
+# open, so none of them ever quit. Now a second start opens a window to the running copy,
+# and a start clears model servers that earlier starts of this drive left behind.
+RUN_FILE = _CONFIG_DIR / "philibert.run.json"
+_STARTED = time.time()
+
+
+def running_instance():
+    """The Philibert already running from this drive ({pid, port, url}), or None."""
+    try:
+        r = json.loads(RUN_FILE.read_text(encoding="utf-8"))
+        pid, port = int(r.get("pid") or 0), int(r.get("port") or 0)
+    except (OSError, ValueError, TypeError):
+        return None
+    if not pid or pid == os.getpid() or not port:
+        return None
+    try:
+        import psutil
+        if not psutil.pid_exists(pid):
+            return None
+    except ImportError:
+        pass
+    try:
+        urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=3).close()
+        return r
+    except Exception:
+        return None
+
+
+def write_run_file(url):
+    try:
+        RUN_FILE.write_text(json.dumps({"pid": os.getpid(), "port": PORT, "url": url, "started": _STARTED}),
+                            encoding="utf-8")
+    except OSError as e:
+        log(f"run file: {e}", "warn")
+
+
+def clear_run_file():
+    try:
+        if json.loads(RUN_FILE.read_text(encoding="utf-8")).get("pid") == os.getpid():
+            RUN_FILE.unlink()
+    except (OSError, ValueError):
+        pass
+
+
+def _drive_ollamas():
+    """(process, listening ports) for each of this drive's Ollama servers."""
+    exe = os.environ.get("ND_OLLAMA_EXE") or ""
+    if not exe:
+        return []
+    try:
+        import psutil
+    except ImportError:
+        return []
+    want = os.path.normcase(os.path.abspath(exe))
+    out = []
+    for p in psutil.process_iter():
+        try:
+            if os.path.normcase(p.exe()) != want:
+                continue
+            ports = {c.laddr.port for c in p.net_connections(kind="tcp") if c.status == psutil.CONN_LISTEN}
+            out.append((p, ports))
+        except Exception:
+            continue
+    return out
+
+
+def _ollama_port():
+    try:
+        return int(OLLAMA_URL.rsplit(":", 1)[-1].split("/")[0])
+    except ValueError:
+        return 0
+
+
+def _stop_tree(p):
+    for c in p.children(recursive=True):        # the model runners, holding graphics memory
+        try:
+            c.kill()
+        except Exception:
+            pass
+    p.kill()
+
+
+def stop_leftover_ollamas():
+    """Model servers that earlier starts of this drive left running. Only this drive's
+    Ollama, and never the one this copy uses. Called when no other copy is running."""
+    mine, n = _ollama_port(), 0
+    for p, ports in _drive_ollamas():
+        try:
+            if mine in ports or p.create_time() > _STARTED:
+                continue                         # ours, or one starting up right now
+            _stop_tree(p)
+            n += 1
+        except Exception:
+            continue
+    if n:
+        log(f"Stopped {n} model server(s) left running by earlier starts", "info")
+
+
+def stop_own_ollama():
+    """This copy's model server, when its window closes (setup does it too, if it is still there)."""
+    mine = _ollama_port()
+    for p, ports in _drive_ollamas():
+        if mine in ports:
+            try:
+                _stop_tree(p)
+            except Exception:
+                pass
+
+
 # ── Models from another of the person's computers (nd_modelshare) ─────────────
 LOCAL_OLLAMA_URL = OLLAMA_URL
 _share = {"relay": None, "using": ""}       # the relay we run; the other computer we use now
@@ -20267,6 +20388,20 @@ def main():
             pass
     print(BANNER)
     load_config()
+    if PORTABLE and "--headless" not in sys.argv:
+        other = running_instance()
+        if other:
+            log(f"{PRODUCT} is already running from this drive - opening its window", "info")
+            try:
+                if portable_browser():
+                    subprocess.Popen(_portable_browser_args(other["url"])[2])
+                else:
+                    import webbrowser
+                    webbrowser.open(other["url"])
+            except Exception as e:
+                log(f"Could not open its window: {e}", "warn")
+            return
+        threading.Thread(target=stop_leftover_ollamas, daemon=True).start()
     try:                                  # GitHub, the board server...: Mozilla's roots as well as Windows'
         import nd_philibert
         nd_philibert.trust_more_roots()
@@ -20333,6 +20468,10 @@ def main():
     # The HTTP server must run in the background, because the WebView2 window
     # takes over the main thread and only returns when the user closes it.
     threading.Thread(target=_serve_supervised, args=(server,), daemon=True).start()
+    if PORTABLE and "--headless" not in sys.argv:
+        write_run_file(url)
+        import atexit
+        atexit.register(clear_run_file)
     # Asks the same question a client would, from outside the request path: a
     # loop can be alive and still wedged, and nothing inside the process can
     # tell the difference.
@@ -20343,6 +20482,9 @@ def main():
         owned = False if "--headless" in sys.argv else open_ui(url)
         if owned:
             log(f"Window closed - shutting down {PRODUCT}", "info")
+            if PORTABLE:
+                clear_run_file()
+                stop_own_ollama()
             return
         while True:
             time.sleep(3600)

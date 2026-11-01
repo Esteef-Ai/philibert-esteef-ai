@@ -39,6 +39,20 @@ try {
     exit 0
 }
 
+# -- already running (its setup window gone)? open a window to it, not a second copy --
+# Two copies each kept a model server running and neither ever quit (2026-11-01). The
+# running copy writes data\philibert.run.json; it counts only if it still answers.
+try {
+    $run = Get-Content (Join-Path $data "philibert.run.json") -Raw | ConvertFrom-Json
+    if ($run.pid -and (Get-Process -Id $run.pid -ErrorAction SilentlyContinue)) {
+        Invoke-WebRequest "http://127.0.0.1:$($run.port)/api/status" -UseBasicParsing -TimeoutSec 3 | Out-Null
+        Start-Process -FilePath (Join-Path $rt "chromium\chrome-win64\chrome.exe") -ArgumentList @(
+            "--app=$($run.url)", "--user-data-dir=`"$(Join-Path $data 'browser\windows')`"",
+            "--no-first-run", "--no-default-browser-check", "--start-maximized")
+        exit 0
+    }
+} catch {}
+
 # -- the drive's format: say so plainly instead of failing halfway --------------
 try { $fs = (Get-Volume -FilePath $root -ErrorAction Stop).FileSystemType } catch { $fs = "" }
 if ($fs -match "^FAT32$|^FAT$") {

@@ -67,6 +67,20 @@ fi
 echo $$ > "$LOCK/pid"
 trap 'rm -rf "$LOCK"' EXIT
 
+# Already running (its setup window gone)? Open a window to it, not a second copy: two
+# copies each kept a model server running and neither ever quit (2026-11-01). The running
+# copy writes data/philibert.run.json; it counts only if it still answers.
+RUNF="$ROOT/data/philibert.run.json"
+if [ -f "$RUNF" ]; then
+  RPID="$(sed -n 's/.*"pid": *\([0-9]*\).*/\1/p' "$RUNF")"
+  RPORT="$(sed -n 's/.*"port": *\([0-9]*\).*/\1/p' "$RUNF")"
+  RURL="$(sed -n 's/.*"url": *"\([^"]*\)".*/\1/p' "$RUNF")"
+  if [ -n "$RPID" ] && kill -0 "$RPID" 2>/dev/null && curl -s -m 3 "http://127.0.0.1:$RPORT/api/status" >/dev/null; then
+    "$CR" --app="$RURL" --user-data-dir="$ROOT/data/browser/mac" --no-first-run --no-default-browser-check >/dev/null 2>&1 &
+    exit 0
+  fi
+fi
+
 # -- the drive's format: say so plainly instead of failing halfway --------------
 FS="$(diskutil info "$ROOT" 2>/dev/null | awk -F': *' '/Type \(Bundle\)/{print $2}')"
 case "$FS" in
