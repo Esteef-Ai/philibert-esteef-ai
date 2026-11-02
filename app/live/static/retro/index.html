@@ -117,6 +117,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
 .empty-btn:hover{opacity:.85;}
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:500;align-items:center;justify-content:center;padding:.5rem;}
 .modal-overlay.open{display:flex;}
+/* minimized game: still laid out, or the browser stops drawing it and an online match stalls */
+.modal-overlay.emu-bg:not(.open){display:flex;visibility:hidden;pointer-events:none;}
 .modal{background:var(--surface);border:1px solid var(--border2);border-radius:14px;display:flex;flex-direction:column;max-height:96vh;overflow:hidden;position:relative;}
 .modal-hdr{padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.75rem;flex-shrink:0;}
 .modal-hdr h2{font-family:'Press Start 2P',monospace;font-size:.55rem;letter-spacing:.1em;color:var(--accent2);flex:1;}
@@ -1756,6 +1758,7 @@ function buildFilter(){
 }
 
 function emuTeardown(){
+  document.getElementById("emu-modal").classList.remove("emu-bg");
   const iframe=document.getElementById("emu-iframe");
   // the battery save goes to the drive before the game goes away. This page sends it,
   // not the game's frame: a request from a frame being torn down is cut off above 64 KB
@@ -1777,11 +1780,13 @@ function closeEmu(){
 function minimizeEmu(){
   // Hide modal but keep iframe running
   document.getElementById("emu-modal").classList.remove("open");
+  document.getElementById("emu-modal").classList.add("emu-bg");
   document.body.style.overflow="";
   showRestoreBar();
 }
 function restoreEmu(){
   document.getElementById("emu-modal").classList.add("open");
+  document.getElementById("emu-modal").classList.remove("emu-bg");
   document.body.style.overflow="hidden";
   hideRestoreBar();
   // Refocus iframe so keyboard input works again

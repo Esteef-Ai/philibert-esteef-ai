@@ -246,13 +246,18 @@
   RVNet.on("ended", d => { backToLobby(); toast((d && d.why ? d.why + " - " : "") + "Match ended - back in the room"); });
   RVNet.on("chat", d => toast(d.name + ": " + d.text));
   // closing the game window during a match: the leader ends it (everybody back in the room,
-  // ready for the next game); anyone else leaves it and can create or join another room
+  // ready for the next game); anyone else leaves it and can create or join another room.
+  // Minimized is not closed: the game is still running and the room stays up.
   setInterval(() => {
-    const open = $("emu-modal") && $("emu-modal").classList.contains("open");
-    if (RVNet.match && !open) {
-      if (RVNet.isLeader()) { RVNet.match.stop(); RVNet.match = null; RVNet.end(); }
-      else { RVNet.leave(); toast("You left the online match"); }
-    }
-    if (RVStream.hosting && !open) { RVStream.stop(); RVNet.end(); toast("Stream ended"); }
+    const m = $("emu-modal"), open = m && (m.classList.contains("open") || m.classList.contains("emu-bg"));
+    // (also while it was still loading: no match yet, but the room would stay "playing" for good)
+    const inGame = RVNet.match || RVStream.hosting || window._rvNetplay || window._rvStreamHost;
+    if (!inGame || open || !RVNet.room) return;
+    const hosted = RVStream.hosting || window._rvStreamHost;
+    window._rvNetplay = window._rvStreamHost = false;
+    if (RVStream.hosting) RVStream.stop();
+    if (RVNet.match) { RVNet.match.stop(); RVNet.match = null; }
+    if (RVNet.isLeader()) { RVNet.end(); if (hosted) toast("Stream ended"); }
+    else { RVNet.leave(); toast("You left the online match"); }
   }, 1000);
 })();

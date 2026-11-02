@@ -413,7 +413,10 @@
       this.emuWin = win;
       if (this.mode === "stream") {                    // stream mode: only the host runs the game
         if (this.isLeader() && window.RVStream) {
-          while (!win.EJS_emulator.gameManager.getFrameNum || win.EJS_emulator.gameManager.getFrameNum() < 2) await sleep(50);
+          while (!win.EJS_emulator.gameManager.getFrameNum || win.EJS_emulator.gameManager.getFrameNum() < 2) {
+            await sleep(50);
+            if (!win.EJS_emulator || !win.EJS_emulator.gameManager) return;   // closed while it loaded
+          }
           window.RVStream.host(win);
           this.emit("playing", { mode: "stream" });
         }
