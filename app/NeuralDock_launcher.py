@@ -2064,6 +2064,43 @@ def note_usage(model, tokens_in, tokens_out, secs=0.0):
         _usage_dirty = True
 
 
+_PREFILL_LAST = {}
+
+
+def note_prefill(model, messages, tools, obj):
+    """With agent_prefill_log on: how much of this prompt matched the last one, and what reading it cost.
+    llama.cpp reuses only an unchanged START of the prompt, so one early change means re-reading all of it.
+    Numbers and roles only, never the text. Off by default; it can never affect a reply."""
+    if not _config.get("agent_prefill_log"):
+        return
+    try:
+        parts = [("tools", json.dumps(tools or [], sort_keys=True))]
+        parts += [(str(m.get("role")), json.dumps(m, sort_keys=True, ensure_ascii=False)) for m in messages]
+        last = _PREFILL_LAST.get(model) or []
+        common, diff = 0, None
+        for i, (role, txt) in enumerate(parts):
+            old = last[i][1] if i < len(last) else None
+            if old == txt:
+                common += len(txt)
+                continue
+            if old is not None:
+                common += len(os.path.commonprefix([old, txt]))
+            diff = {"part": i, "role": role}
+            break
+        _PREFILL_LAST[model] = parts
+        rec = {"ts": datetime.now().isoformat(timespec="seconds"), "model": model, "parts": len(parts),
+               "chars": sum(len(t) for _, t in parts), "common_chars": common, "first_change": diff,
+               "prompt_eval_count": obj.get("prompt_eval_count"),
+               "prompt_eval_s": round((obj.get("prompt_eval_duration") or 0) / 1e9, 2),
+               "eval_count": obj.get("eval_count"),
+               "eval_s": round((obj.get("eval_duration") or 0) / 1e9, 2)}
+        out = Path(__file__).resolve().parent / "temp" / "prefill_log.jsonl"
+        with out.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(rec) + "\n")
+    except Exception as e:
+        log(f"prefill log skipped: {e}", "warn")
+
+
 def note_gpu_energy(watts, seconds, idle_watts):
     """Integrate GPU power into Wh, counting only draw ABOVE idle.
 
@@ -2633,6 +2670,7 @@ def ollama_chat(model, messages, timeout=1740, status_cb=None, clean=True, text_
                         note_usage(model, obj.get("prompt_eval_count"),
                                    obj.get("eval_count"),
                                    (obj.get("total_duration") or 0) / 1e9)
+                        note_prefill(model, messages, None, obj)
                         break
                 except json.JSONDecodeError:
                     continue
@@ -2724,6 +2762,7 @@ def ollama_chat_native(model, messages, tools, timeout=1740, status_cb=None, tex
                     eval_tokens = int(obj.get("eval_count") or 0)
                     note_usage(model, prompt_tokens, eval_tokens,
                                (obj.get("total_duration") or 0) / 1e9)
+                    note_prefill(model, messages, tools, obj)
                     break
         _flush(force=True)
         return {"content": "".join(chunks), "tool_calls": calls, "native_ok": True,

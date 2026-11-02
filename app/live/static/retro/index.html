@@ -1600,6 +1600,8 @@ async function launchGame(idx){
     +"P.setItem=function(k,v){if(K.test(k))return;return s.call(this,k,v);};})();</"+_t+">");
   // Stream host: copy the game's sound into a stream the friends can hear (before EmulatorJS)
   if(window._rvStreamHost) _dl.push("<"+_t+" src='/retro/lib/audiotap.js'></"+_t+">");
+  // Controllers: works around two EmulatorJS bugs (before EmulatorJS)
+  _dl.push("<"+_t+" src='/retro/lib/gamepadfix.js'></"+_t+">");
   _dl.push("<div id='game'></div><"+_t+">");
   _dl.push("EJS_player='#game';EJS_core='"+( sys.core||"nes" )+"';EJS_gameUrl='"+romBlobUrl+"';");
   if(isNeo) _dl.push("EJS_biosUrl='neogeo.zip';EJS_dontExtractBIOS=true;"+(g.parent?"EJS_gameParentUrl='"+g.parent+".zip';":""));
