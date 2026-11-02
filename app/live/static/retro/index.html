@@ -1027,6 +1027,9 @@ const SYSTEMS=[
   {id:"NEOGEO",label:"Neo Geo",color:"#d4a017",exts:[".zip"],core:"fbneo",emoji:"🕹️",isNeo:true},
 ];
 const SYS_MAP=Object.fromEntries(SYSTEMS.map(s=>[s.id,s]));
+// The pad a game really uses. A Sega shelf often holds Mega Drive / Genesis .bin files: the core
+// runs them fine, but as Master System EmulatorJS only gives them two buttons (no Start, no A/X/Y/Z)
+function padSystem(g){ return g&&g.system==="SMS"&&!/\.(sms|gg|sg)(\.zip)?$/i.test(g.filename||"") ? "Genesis" : (g&&g.system); }
 
 let LIBRARY=[],folderHandles={},activeSystem="All",viewMode="grid",sortKey="name",searchQ="",detailIdx=-1,activeGameIdx=-1;
 let CFG={port:8088,hostOverride:"",romBaseUrl:"/retro/roms",netplayPort:3000,autoMeta:true,showZipBadge:true,autoStart:false,ejsUrl:"/retro/emulator/",artMode:"box"};
@@ -1593,6 +1596,7 @@ async function launchGame(idx){
     const has = await fetch(CFG.ejsUrl.replace(/\/$/,"")+"/cores/parallel_n64-wasm.data",{method:"HEAD"}).then(r=>r.ok).catch(()=>false);
     if(has){ core = "parallel_n64"; stateCore = "_parallel"; }   // one core's save states don't load in the other
   }
+  const scheme = padSystem(g)==="Genesis" && g.system==="SMS" ? "EJS_controlScheme='segaMD';" : "";
   var stateKey = "rvstate_" + g.system + "_" + safeName + stateCore;
   var _t = "scr"+"ipt";
   var _dl = [];
@@ -1612,7 +1616,7 @@ async function launchGame(idx){
   // Controllers: works around two EmulatorJS bugs (before EmulatorJS)
   _dl.push("<"+_t+" src='/retro/lib/gamepadfix.js'></"+_t+">");
   _dl.push("<div id='game'></div><"+_t+">");
-  _dl.push("EJS_player='#game';EJS_core='"+core+"';EJS_gameUrl='"+romBlobUrl+"';");
+  _dl.push("EJS_player='#game';EJS_core='"+core+"';"+scheme+"EJS_gameUrl='"+romBlobUrl+"';");
   if(isNeo) _dl.push("EJS_biosUrl='neogeo.zip';EJS_dontExtractBIOS=true;"+(g.parent?"EJS_gameParentUrl='"+g.parent+".zip';":""));
   _dl.push("EJS_gameName='"+safeName+"';EJS_pathtodata='"+ejsBase+"/';EJS_startOnLoaded=true;");
   _dl.push("EJS_color='#7c5cbf';EJS_backgroundColor='#000000';EJS_disableAutoLang=false;EJS_threads=false;")
@@ -2000,7 +2004,7 @@ document.getElementById("ctrl-reset").onclick=function(){
   Object.assign(CTRL,DEF_CTRL);Object.assign(CTRL2,DEF_CTRL2);
   GAMEPAD_ASSIGN={};buildCtrlGrids();toast("Mappings reset");
 };
-document.getElementById("ctrl-save").onclick=()=>{saveCtrl();closeModal("ctrl-modal");toast("Controller mapping saved.");};
+document.getElementById("ctrl-save").onclick=()=>{saveCtrl();toast("Controller mapping saved.");};
 document.getElementById("tb-controller").onclick=openCtrlModal;
 document.getElementById("mn-ctrl-map").onclick=openCtrlModal;
 
@@ -2906,7 +2910,7 @@ document.getElementById("ctrl-detect-btn").onclick=()=>{
       +" visible="+document.visibilityState+" host="+location.host;
   }
 };
-document.getElementById("ctrl-save").onclick=function(){ saveCtrl(); pttSave(); closeModal("ctrl-modal"); toast("Controller mapping + PTT saved."); };
+document.getElementById("ctrl-save").onclick=function(){ saveCtrl(); pttSave(); toast("Controller mapping saved"); };   // stays open: the next button can be checked
 document.getElementById("ctrl-reset").onclick=()=>{ Object.assign(CTRL,DEF_CTRL); buildCtrlGrids(); };
 document.getElementById("tb-controller").onclick=openCtrlModal;
 document.getElementById("mn-ctrl-map").onclick=openCtrlModal;

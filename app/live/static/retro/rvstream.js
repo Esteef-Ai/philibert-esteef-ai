@@ -29,7 +29,8 @@
     for (const gp of (navigator.getGamepads ? navigator.getGamepads() : [])) {
       if (!gp) continue;
       if (window.RVPads) {                      // the player's own setup for this controller
-        const sys = window.RVNet && RVNet.room && RVNet.room.game && RVNet.room.game.system;
+        const g = window.RVNet && RVNet.room && RVNet.room.game;
+        const sys = g && padSystem({ system: g.system, filename: g.file });
         RVPads.readPad(gp, sys, NINPUT).forEach((x, i) => { if (x) v[i] = x; });
         break;
       }

@@ -33,7 +33,9 @@
     18: "LEFT_STICK_Y:+1", 19: "LEFT_STICK_Y:-1", 20: "RIGHT_STICK_X:+1", 21: "RIGHT_STICK_X:-1",
     22: "RIGHT_STICK_Y:+1", 23: "RIGHT_STICK_Y:-1" };
   // N64: A and B sit where they do on the real pad (the bottom and left face buttons)
-  const DEFAULT_OVERRIDE = { N64: { 0: "BUTTON_1", 1: "BUTTON_3" } };
+  // Genesis: the three main buttons in a row along the face buttons, X Y Z on the top row
+  const DEFAULT_OVERRIDE = { N64: { 0: "BUTTON_1", 1: "BUTTON_3" },
+    Genesis: { 1: "BUTTON_3", 0: "BUTTON_1", 8: "BUTTON_2", 10: "LEFT_TOP_SHOULDER", 9: "BUTTON_4", 11: "RIGHT_TOP_SHOULDER" } };
   function defaults(sys) {
     const out = {};
     Object.keys(TABLES[sys] || {}).forEach(id => { out[id] = (DEFAULT_OVERRIDE[sys] || {})[id] || BASE[id] || ""; });
@@ -56,7 +58,7 @@
   const DRAW = {
     NES: { body: "box", fill: "#c9c9c4", items: [DP(92, 125), P(2, 180, 135, "Select"), P(3, 232, 135, "Start"), R(0, 300, 128, "#c8102e", 16), R(8, 350, 128, "#c8102e", 16)] },
     SNES: { body: "dogbone", fill: "#b9b9c4", items: [DP(105, 128), P(2, 182, 138, "Select"), P(3, 232, 138, "Start"), R(1, 288, 128, "#3a9f49", 13), R(9, 318, 100, "#3b5fc0", 13), R(0, 318, 156, "#e0b92e", 13), R(8, 348, 128, "#c8102e", 13), P(10, 92, 50, "L", 70, 12), P(11, 328, 50, "R", 70, 12)] },
-    Genesis: { body: "crescent", fill: "#2b2b30", items: [DP(105, 125), P(3, 208, 112, "Start"), R(1, 262, 142, "#555", 14), R(0, 298, 132, "#555", 14), R(8, 334, 122, "#555", 14), R(10, 256, 100, "#444", 10), R(9, 288, 92, "#444", 10), R(11, 320, 84, "#444", 10), P(2, 362, 76, "Mode", 36, 12)] },
+    Genesis: { body: "crescent", fill: "#2b2b30", items: [DP(105, 125), P(3, 200, 92, "Start"), P(2, 200, 130, "Mode", 36, 12), R(1, 262, 150, "#555", 15), R(0, 303, 138, "#555", 15), R(8, 344, 126, "#555", 15), R(10, 262, 104, "#444", 12), R(9, 303, 92, "#444", 12), R(11, 344, 80, "#444", 12)] },
     SMS: { body: "box", fill: "#29292e", items: [DP(105, 125), R(0, 288, 128, "#c8102e", 18, "1"), R(8, 340, 128, "#c8102e", 18, "2")] },
     N64: { body: "n64", fill: "#a9acb4", items: [DP(96, 112), { k: "stick", x: 210, y: 150, r: 19, ids: [19, 18, 17, 16] }, P(3, 210, 86, "Start", 30, 12), R(0, 286, 150, "#2f6fd0", 13), R(1, 260, 122, "#37a14a", 13),
       R(23, 338, 62, "#e6b800", 9, "▲"), R(22, 338, 126, "#e6b800", 9, "▼"), R(21, 310, 94, "#e6b800", 9, "◀"), R(20, 366, 94, "#e6b800", 9, "▶"),
@@ -66,7 +68,7 @@
     MAME: { body: "panel", fill: "#26262d", items: [stick4([4, 5, 6, 7]), R(0, 228, 148, "#d32", 14, "1"), R(8, 268, 142, "#fc0", 14, "2"), R(1, 308, 142, "#2b6", 14, "3"), R(9, 228, 104, "#27c", 14, "4"), R(10, 268, 98, "#b4c", 14, "5"), R(11, 308, 98, "#e72", 14, "6"), P(2, 186, 72, "Coin", 36, 12), P(3, 238, 72, "Start", 36, 12)] },
     NEOGEO: { body: "panel", fill: "#18181d", items: [stick4([4, 5, 6, 7]), R(0, 222, 134, "#d32", 16), R(8, 262, 118, "#fc0", 16), R(1, 302, 110, "#2b6", 16), R(9, 342, 112, "#27c", 16), P(2, 212, 72, "Coin", 36, 12), P(3, 264, 72, "Start", 36, 12)] },
   };
-  const SYS_NAMES = { NES: "NES", SNES: "SNES", Genesis: "Genesis", SMS: "Master System", N64: "N64", GBA: "GBA", GB: "Game Boy", MAME: "Arcade (MAME)", NEOGEO: "Neo Geo" };
+  const SYS_NAMES = { NES: "NES", SNES: "SNES", Genesis: "Genesis / Mega Drive", SMS: "Master System", N64: "N64", GBA: "GBA", GB: "Game Boy", MAME: "Arcade (MAME)", NEOGEO: "Neo Geo" };
 
   // ── names of the buttons on the controller in your hands ───────────────────────
   const NAMES = {
@@ -200,7 +202,7 @@
   }
   setInterval(() => {
     const f = $("emu-iframe"), g = activeGameIdx >= 0 ? LIBRARY[activeGameIdx] : null;
-    if (g && f && f.contentWindow) { try { apply(f.contentWindow, g.system); } catch (e) { console.warn("[RVPads]", e); } }
+    if (g && f && f.contentWindow) { try { apply(f.contentWindow, padSystem(g)); } catch (e) { console.warn("[RVPads]", e); } }
   }, 500);
 
   // ── the screen ─────────────────────────────────────────────────────────────────
@@ -213,6 +215,7 @@
   const css = document.createElement("style");
   css.textContent = `
 #ctrl-modal .modal{width:min(980px,100%)!important}
+body:has(#ctrl-modal.open) #emu-restore-bar{left:1rem!important;right:auto!important}
 .rp-top{display:flex;flex-wrap:wrap;gap:.5rem .75rem;align-items:flex-end;padding:.75rem 1.25rem}
 .rp-top label{display:flex;flex-direction:column;gap:.2rem;font-size:.66rem;color:var(--muted);min-width:0;flex:1 1 150px}
 .rp-top .form-select{width:100%}
@@ -462,7 +465,7 @@
     readPad, mapFor, TABLES, defaults, labelName,
     open() {
       const g = activeGameIdx >= 0 ? LIBRARY[activeGameIdx] : null;
-      if (g && TABLES[g.system]) sys = g.system;
+      if (g && TABLES[padSystem(g)]) sys = padSystem(g);
       render();
       if (!timer) timer = setInterval(monitor, 33);
     }
