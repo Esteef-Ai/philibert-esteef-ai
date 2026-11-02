@@ -302,6 +302,7 @@ $work = {
                     $sync.StepPct = -1; $sync.Detail = "Starting Ollama"
                     $o = Start-Process -FilePath $cfg.Ol -ArgumentList "serve" -WindowStyle Hidden -PassThru
                     $sync.OllamaPid = $o.Id
+                    $env:ND_OLLAMA_PID = "$($o.Id)"    # Philibert clears what an earlier start left, not this one
                     $up = $false
                     foreach ($k in 1..60) {
                         if ($o.HasExited) { break }

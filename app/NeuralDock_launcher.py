@@ -18087,12 +18087,16 @@ def _portable_browser_args(url):
     return exe, profile, args
 
 
+BROWSER_NO_WINDOW_CHECKS = 5     # about 7 seconds without a window: closed, even if Chromium stays behind
+
+
 def _wait_portable_browser_closed(exe, profile, t0, rc):
-    def still_open():
+    def browser_pids():
         try:
             import psutil
         except Exception:
-            return False
+            return []
+        pids = []
         key = os.path.normcase(profile)
         exe_name = os.path.normcase(os.path.basename(exe))
         # attrs are NOT pre-fetched: with attrs, process_iter re-raises odd OS
@@ -18103,10 +18107,13 @@ def _wait_portable_browser_closed(exe, profile, t0, rc):
                     continue
                 if any(key in os.path.normcase(a) for a in (p.cmdline() or [])
                        if a.startswith("--user-data-dir")):
-                    return True
+                    pids.append(p.pid)
             except Exception:
                 continue
-        return False
+        return pids
+
+    def still_open():
+        return bool(browser_pids())
 
     # Gone within seconds and no window left: it never really opened (on a Mac, Chromium
     # wants symlinks in its profile, which an exFAT drive can't hold). Say so and let
@@ -18119,10 +18126,21 @@ def _wait_portable_browser_closed(exe, profile, t0, rc):
         log(f"The drive's browser closed straight away (exit code {rc}) - "
             "trying another window", "warn")
         return False
+    # Chromium can stay running with no window left (one had since 2026-10-30), and Philibert then never closed
+    import nd_cleanup
+    seen, none = False, 0
     while True:
         try:
-            if not still_open():
+            pids = browser_pids()
+            if not pids:
                 break
+            windows = nd_cleanup.open_windows(pids)
+            if windows:
+                seen, none = True, 0
+            elif windows == 0 and (seen or time.time() - t0 > 60):
+                none += 1
+                if none >= BROWSER_NO_WINDOW_CHECKS:
+                    break
         except Exception as e:      # never let the window watch stop the server
             log(f"Window check failed ({e}); checking again", "warn")
         time.sleep(1.5)
@@ -20076,6 +20094,32 @@ def stop_leftover_ollamas():
         log(f"Stopped {n} model server(s) left running by earlier starts", "info")
 
 
+def close_everything():
+    """Philibert closed: let go of push to talk, free the graphics card, leave nothing of the drive's running."""
+    for step in (lambda: "nd_retro_vault" in sys.modules and sys.modules["nd_retro_vault"].ptt_hold(""),
+                 lambda: "nd_imagegen" in sys.modules and sys.modules["nd_imagegen"].stop(),
+                 stop_own_ollama,
+                 lambda: __import__("nd_cleanup").stop_drive_processes(_CONFIG_DIR.parent / "runtime")):
+        try:
+            step()
+        except Exception as e:      # the next step still has to run
+            log(f"Closing: {e}", "warn")
+
+
+def clear_old_processes():
+    """A new start: what an earlier copy left behind (a crash, a forced close) still holds the graphics card.
+    The model server setup has just started stays; without its number no model server is touched."""
+    try:
+        import nd_cleanup
+        own = os.environ.get("ND_OLLAMA_PID", "")
+        gone = nd_cleanup.stop_drive_processes(_CONFIG_DIR.parent / "runtime", keep_pids=[int(own)] if own.isdigit() else [],
+                                               keep_names=() if own.isdigit() else ("ollama", "ollama.exe"))
+        if gone:
+            log(f"Closed what an earlier start left running: {', '.join(sorted(set(gone)))}", "info")
+    except Exception as e:
+        log(f"Couldn't check for old processes: {e}", "warn")
+
+
 def stop_own_ollama():
     """This copy's model server, when its window closes (setup does it too, if it is still there)."""
     mine = _ollama_port()
@@ -20558,6 +20602,8 @@ def main():
     except Exception as e:
         log(f"certificates: {e}", "warn")
     log("ESTEEF.AI // NeuralDock v3.0 starting...", "info")
+    if PORTABLE and "--headless" not in sys.argv:
+        clear_old_processes()
     # nothing in this app works without Ollama, so bring it up before we
     # start serving a UI that would just report it offline
     threading.Thread(target=ensure_ollama_running, daemon=True).start()
@@ -20637,7 +20683,7 @@ def main():
                 release_other_computer()
             if PORTABLE:
                 clear_run_file()
-                stop_own_ollama()
+                close_everything()
             return
         while True:
             time.sleep(3600)
