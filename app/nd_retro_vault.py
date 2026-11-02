@@ -860,6 +860,9 @@ def handle_get(v, path, query):
         f = v.emulator_file(urllib.parse.unquote(rel[9:])) or v.fetch_on_demand(urllib.parse.unquote(rel[9:]))
         return (200, TYPES.get(f.suffix.lower(), "application/octet-stream"), f) if f else \
                (404, "text/plain", b"Retro Vault's emulator is not on this drive yet.")
+    if rel == "api/controllers":
+        p = v.saves / "controllers.json"
+        return (200, "application/json", p) if p.is_file() else (200, "application/json", b"{}")
     if rel.startswith("state/"):
         p = v.state_path(rel[6:])
         return (200, "application/octet-stream", p) if p and p.is_file() else (404, "text/plain", b"")
@@ -955,6 +958,19 @@ def handle_post(v, path, raw):
         except ValueError:
             d = {}
         return 200, "application/json", json.dumps(v.describe(d.get("games"))).encode()
+    if rel == "api/controllers":                    # controller setups, on the drive so they travel with it
+        try:
+            d = json.loads(raw or b"")
+        except ValueError:
+            d = None
+        if not isinstance(d, dict) or len(raw) > 1_000_000:
+            return 400, "application/json", b'{"ok":false}'
+        p = v.saves / "controllers.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".saving")
+        tmp.write_bytes(raw)
+        os.replace(tmp, p)
+        return 200, "application/json", b'{"ok":true}'
     if rel.startswith("state/"):
         p = v.state_path(rel[6:])
         if not p or not raw or len(raw) > 64_000_000:

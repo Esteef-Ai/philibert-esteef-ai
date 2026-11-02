@@ -606,13 +606,13 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
         <button class="btn-ghost" id="ctrl-detect-btn" style="font-size:.68rem;padding:.28rem .7rem;">Detect</button>
       </div>
       <div class="stabs" style="padding:0 1.25rem;">
-        <button class="stab active" data-tab="cp1kb">P1 Keys</button>
-        <button class="stab" data-tab="cp1gp">P1 Pad</button>
+        <button class="stab active" data-tab="cpsetup">Setup</button>
+        <button class="stab" data-tab="cp1kb">P1 Keys</button>
         <button class="stab" data-tab="cp2kb">P2 Keys</button>
-        <button class="stab" data-tab="cp2gp">P2 Pad</button>
         <button class="stab" data-tab="cassign">Assign</button>
       </div>
-      <div id="cp1kb" class="stab-panel active"><div class="ctrl-grid" id="ctrl-kb-grid"></div></div>
+      <div id="cpsetup" class="stab-panel active"></div>
+      <div id="cp1kb" class="stab-panel"><div class="ctrl-grid" id="ctrl-kb-grid"></div></div>
       <div id="cp1gp" class="stab-panel"><div class="ctrl-grid" id="ctrl-gp-grid"></div></div>
       <div id="cp2kb" class="stab-panel">
         <div style="padding:.45rem 1.25rem;font-size:.69rem;color:var(--muted);">P2 keyboard: WASD+LKJI+MN (override in P2 Keys tab)</div>
@@ -1869,7 +1869,7 @@ function insertCoin(){
 }
 document.getElementById("emu-coin-btn").onclick=insertCoin;
 document.getElementById("emu-np-btn").onclick=openEmuLobby;
-document.getElementById("emu-ctrl-btn").onclick=function(){closeModal("emu-modal");openModal("ctrl-modal");};
+document.getElementById("emu-ctrl-btn").onclick=function(){minimizeEmu();openCtrlModal();};
 document.getElementById("emu-minimize-btn").onclick=minimizeEmu;
 // Wire in-emulator PTT controls - sync with main PTT settings
 (function(){
@@ -2911,7 +2911,7 @@ document.getElementById("ctrl-reset").onclick=()=>{ Object.assign(CTRL,DEF_CTRL)
 document.getElementById("tb-controller").onclick=openCtrlModal;
 document.getElementById("mn-ctrl-map").onclick=openCtrlModal;
 
-function openCtrlModal(){ updCtrlStatus(); buildCtrlGrids(); openModal("ctrl-modal"); }
+function openCtrlModal(){ updCtrlStatus(); buildCtrlGrids(); openModal("ctrl-modal"); if(window.RVPads) RVPads.open(); }
 
 
 // ===================================================
@@ -3654,5 +3654,6 @@ async function artPoll(){
 <script src="/retro/lib/rvnet.js"></script>
 <script src="/retro/lib/rvstream.js"></script>
 <script src="/retro/lib/rvnet-ui.js"></script>
+<script src="/retro/lib/rvpads.js"></script>
 </body>
 </html>

@@ -28,6 +28,11 @@
     const v = new Array(NINPUT).fill(0);
     for (const gp of (navigator.getGamepads ? navigator.getGamepads() : [])) {
       if (!gp) continue;
+      if (window.RVPads) {                      // the player's own setup for this controller
+        const sys = window.RVNet && RVNet.room && RVNet.room.game && RVNet.room.game.system;
+        RVPads.readPad(gp, sys, NINPUT).forEach((x, i) => { if (x) v[i] = x; });
+        break;
+      }
       gp.buttons.forEach((b, i) => { if (PAD[i] !== undefined && (b.pressed || b.value > 0.5)) v[PAD[i]] = 1; });
       axis(gp.axes[0] || 0, 16, 17, v); axis(gp.axes[1] || 0, 18, 19, v);
       axis(gp.axes[2] || 0, 20, 21, v); axis(gp.axes[3] || 0, 22, 23, v);
