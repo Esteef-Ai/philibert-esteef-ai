@@ -485,7 +485,7 @@ body:has(#ctrl-modal.open) #emu-restore-bar{left:1rem!important;right:auto!impor
   // Discord only listens for a key or mouse button, so holding the talk button holds the same one it is set
   // to, through Philibert on this PC. Each setup keeps its own button, and the game doesn't see that button.
   const PTT_OUT = { mouse5: "Mouse 5 (forward side button)", mouse4: "Mouse 4 (back side button)", mouse3: "Middle mouse button" };
-  let pttWant = "", pttSent = "", pttAt = 0, pttBusy = false, pttTestUntil = 0, pttTestOut = "", pttTold = false, pttKeyWait = false;
+  let pttWant = "", pttSent = "", pttAt = 0, pttBusy = false, pttTestUntil = 0, pttTestOut = "", pttTold = false, pttKeyWait = false, pttBad = "";
   function pttOf(gp) {
     const p = gp && DATA.profiles[profileOf(padIdOf(gp))].ptt;
     return p && p.button && p.out ? p : null;
@@ -543,12 +543,23 @@ body:has(#ctrl-modal.open) #emu-restore-bar{left:1rem!important;right:auto!impor
     pttBusy = true; pttSent = pttWant; pttAt = now;
     fetch("/retro/api/ptt", { method: "POST", body: JSON.stringify({ out: pttWant }) })
       .then(r => {
-        if (r.ok || pttTold) return;
+        pttBad = r.ok ? "" : r.status === 403 ? "Discord push to talk only works on the PC running Philibert" : r.status === 404 ? "Restart Philibert to use Discord push to talk" : "Windows didn't accept the push-to-talk press";
+        pttChip();
+        if (!pttBad || pttTold) return;
         pttTold = true;
-        toast(r.status === 403 ? "Discord push to talk only works on the PC running Philibert" : r.status === 404 ? "Restart Philibert to use Discord push to talk" : "Windows didn't accept the push-to-talk press", true);
+        toast(pttBad, true);
       })
-      .catch(() => {})
+      .catch(() => { pttBad = "Philibert didn't answer, so Discord got nothing"; pttChip(); })
       .finally(() => { pttBusy = false; pttSend(); });
+  }
+  // says "Talking" only when the press really went out
+  function pttChip() {
+    let chip = $("rv-talking");
+    if (!chip && pttWant) { chip = document.createElement("div"); chip.id = "rv-talking"; document.body.appendChild(chip); }
+    if (!chip) return;
+    chip.style.display = pttWant ? "block" : "none";
+    chip.textContent = pttBad ? "Not sent: " + pttBad : "🎙 Talking";
+    chip.style.background = pttBad ? "#b3261e" : "#1f8f55";
   }
   function pttPoll() {
     let out = "";
@@ -561,9 +572,7 @@ body:has(#ctrl-modal.open) #emu-restore-bar{left:1rem!important;right:auto!impor
     if (!out && Date.now() < pttTestUntil) out = pttTestOut;
     if (out !== pttWant) {
       pttWant = out;
-      let chip = $("rv-talking");
-      if (!chip && out) { chip = document.createElement("div"); chip.id = "rv-talking"; chip.textContent = "🎙 Talking"; document.body.appendChild(chip); }
-      if (chip) chip.style.display = out ? "block" : "none";
+      pttChip();
     }
     pttSend();
   }
