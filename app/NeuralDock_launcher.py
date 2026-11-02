@@ -12991,7 +12991,11 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                 "tool_calls": [], "tool_results": [], "needs_permission": None}
 
     # Otherwise: ask, unless already pinned or already chosen this session.
-    elif _ui_job and _config.get("ask_model_per_task", True) and not pending_permissions:
+    # A benchmark run is exempt, same as from the code pin above: it keeps its
+    # explicit model. Measured 2026-11-02: "web page" in a foreman plan made every
+    # task a UI job, so a run meant to test Defiance ran entirely on the pinned ZB.
+    elif (_ui_job and _config.get("ask_model_per_task", True) and not pending_permissions
+            and not str(req_id or "").startswith("bench")):
         _pinned = (_config.get("task_model_pinned") or {}).get("ui")
         # "Ask every time" means every time the USER hands over a new UI task --
         # not on the internal steps of one. A continuation ("continue") and an
