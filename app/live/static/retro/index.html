@@ -1586,7 +1586,14 @@ async function launchGame(idx){
   const safeName = (isMame || isNeo)
     ? (g.filename||g.title||"game").replace(/\.zip$/i,"").replace(/[^a-zA-Z0-9_-]/g,"").toLowerCase().trim()||"game"
     : (g.title||g.filename||"game").replace(/[^a-zA-Z0-9 _-]/g,"").trim()||"game";
-  var stateKey = "rvstate_" + g.system + "_" + safeName;
+  // Mario Kart 64 splitscreen: mupen64plus draws no TIME and a black box for LAP, parallel_n64 draws
+  // both. An older drive offline doesn't have that core yet: the game still runs on the usual one.
+  let core = sys.core||"nes", stateCore = "";
+  if(g.system==="N64" && /mario\s*kart\s*64/i.test((g.title||"")+" "+(g.filename||""))){
+    const has = await fetch(CFG.ejsUrl.replace(/\/$/,"")+"/cores/parallel_n64-wasm.data",{method:"HEAD"}).then(r=>r.ok).catch(()=>false);
+    if(has){ core = "parallel_n64"; stateCore = "_parallel"; }   // one core's save states don't load in the other
+  }
+  var stateKey = "rvstate_" + g.system + "_" + safeName + stateCore;
   var _t = "scr"+"ipt";
   var _dl = [];
   _dl.push("<!DOCTYPE html><html><head><meta charset='UTF-8'>");
@@ -1605,7 +1612,7 @@ async function launchGame(idx){
   // Controllers: works around two EmulatorJS bugs (before EmulatorJS)
   _dl.push("<"+_t+" src='/retro/lib/gamepadfix.js'></"+_t+">");
   _dl.push("<div id='game'></div><"+_t+">");
-  _dl.push("EJS_player='#game';EJS_core='"+( sys.core||"nes" )+"';EJS_gameUrl='"+romBlobUrl+"';");
+  _dl.push("EJS_player='#game';EJS_core='"+core+"';EJS_gameUrl='"+romBlobUrl+"';");
   if(isNeo) _dl.push("EJS_biosUrl='neogeo.zip';EJS_dontExtractBIOS=true;"+(g.parent?"EJS_gameParentUrl='"+g.parent+".zip';":""));
   _dl.push("EJS_gameName='"+safeName+"';EJS_pathtodata='"+ejsBase+"/';EJS_startOnLoaded=true;");
   _dl.push("EJS_color='#7c5cbf';EJS_backgroundColor='#000000';EJS_disableAutoLang=false;EJS_threads=false;")

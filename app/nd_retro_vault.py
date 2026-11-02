@@ -39,7 +39,8 @@ EJS_BASE = f"https://cdn.emulatorjs.org/{EJS_VERSION}/data/"
 CORES = ["fceumm", "snes9x", "genesis_plus_gx", "mgba", "mupen64plus_next", "gambatte", "mame2003_plus"]
 # Cores added after drives were already set up: Setup fetches them with the rest, a drive
 # without them gets them the first time a game needs them (while online) - see handle_get
-ON_DEMAND_CORES = ["fbneo"]            # Neo Geo (FinalBurn Neo)
+ON_DEMAND_CORES = ["fbneo",            # Neo Geo (FinalBurn Neo)
+                   "parallel_n64"]     # Mario Kart 64: the usual N64 core loses its 2-3-4 player TIME and LAP
 ON_DEMAND_FILES = [f for c in ON_DEMAND_CORES for f in
                    (f"cores/{c}-wasm.data", f"cores/{c}-legacy-wasm.data", f"cores/reports/{c}.json")]
 EJS_FILES = (["loader.js", "emulator.min.js", "emulator.min.css",
