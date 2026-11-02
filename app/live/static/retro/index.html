@@ -85,6 +85,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
    so box art never appeared (the original Retro Vault too). Laid out, invisible, faded in. */
 .game-art img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .25s;border-radius:8px;z-index:1;}
 .game-art img.loaded{opacity:1;}
+.mp-badge{position:absolute;bottom:6px;left:6px;z-index:1;padding:2px 6px;border-radius:4px;background:rgba(0,0,0,.85);border:1px solid #ffd54a;color:#ffd54a;font-size:.68rem;font-weight:700;line-height:1.2;white-space:nowrap;}
+.mp-inline{margin-left:.45rem;font-size:.68rem;font-weight:700;color:#ffd54a;white-space:nowrap;}
 .sys-badge{position:absolute;top:6px;left:6px;font-family:'Press Start 2P',monospace;font-size:.38rem;padding:2px 5px;border-radius:3px;letter-spacing:.04em;color:#fff;}
 .zip-badge{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.65);border-radius:3px;padding:2px 5px;font-size:.58rem;color:var(--muted);}
 .play-overlay{position:absolute;inset:0;background:rgba(0,0,0,.52);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .14s;}
@@ -1387,7 +1389,19 @@ function buildSidebar(){
   });
 }
 
+// Multiplayer games: the player counts of each shelf, asked for once per visit
+const PLAYERS={};
+const playersOf=g=>(PLAYERS[g.system]||{})[g.filename]||0;
+function askPlayers(){
+  new Set(LIBRARY.map(g=>g.system)).forEach(s=>{
+    if(PLAYERS[s]) return;
+    PLAYERS[s]={};
+    fetch("/retro/api/players?system="+encodeURIComponent(s)).then(r=>r.ok?r.json():{})
+      .then(d=>{ if(Object.keys(d).length){ PLAYERS[s]=d; renderGames(); } }).catch(()=>{});
+  });
+}
 function renderGames(){
+  askPlayers();
   const gridEl=document.getElementById("game-grid"),listEl=document.getElementById("game-list");
   const emptyEl=document.getElementById("empty-state"),noResEl=document.getElementById("no-results");
   let games=LIBRARY.filter(g=>{
@@ -1420,6 +1434,7 @@ function renderGames(){
             :''}
           <span style="position:absolute;opacity:${(g.coverBox||g.coverCart)?'0':'1'};transition:opacity .2s;font-size:3rem">${g.emoji||sys.emoji||'🎮'}</span>
           <span class="sys-badge" style="background:${sys.color||'#7c5cbf'}">${sysTag(g)}</span>
+          ${playersOf(g)?`<span class="mp-badge" title="Up to ${playersOf(g)} players">${playersOf(g)}P</span>`:''}
           <div class="play-overlay"><div class="play-circle"><svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg></div></div>
         </div>
         <div class="card-info">
@@ -1440,7 +1455,7 @@ function renderGames(){
       const idx=LIBRARY.indexOf(g),sys=SYS_MAP[g.system]||{};
       return`<div class="list-row" data-idx="${idx}" tabindex="0" role="button">
         <span class="list-num">${i+1}</span>
-        <span class="list-title">${g.title}${g.isZip&&CFG.showZipBadge?' <span style="font-size:.6rem;color:var(--dim)">[Z]</span>':""}</span>
+        <span class="list-title">${g.title}${g.isZip&&CFG.showZipBadge?' <span style="font-size:.6rem;color:var(--dim)">[Z]</span>':""}${playersOf(g)?`<span class="mp-inline" title="Up to ${playersOf(g)} players">${playersOf(g)}P</span>`:""}</span>
         <span class="list-sys" style="background:${sys.color||"#7c5cbf"}">${sysTag(g)}</span>
         <span class="list-genre">${g.genre||"—"}</span>
         <span class="list-year">${g.year||"—"}</span>

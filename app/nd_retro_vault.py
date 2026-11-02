@@ -91,6 +91,96 @@ LIBRETRO = {
     "NEOGEO": "SNK - Neo Geo",
 }
 _art_lock = threading.Lock()
+
+# Discord push to talk: a controller button held down is a real mouse button or key held down on this PC,
+# which is what Discord listens for. handle_ptt is reached only from a browser on this PC (see the launcher).
+# The page repeats itself while the button is held: if it stops, the button is let go by itself, so a closed
+# or frozen page can't leave the microphone open or a mouse button stuck.
+PTT_MOUSE = {"mouse3": (0x0020, 0x0040, 0), "mouse4": (0x0080, 0x0100, 1), "mouse5": (0x0080, 0x0100, 2)}
+PTT_LET_GO_SECS = 1.5
+_ptt_lock = threading.Lock()
+_ptt = {"held": "", "seen": 0.0, "watch": False}
+
+
+def _ptt_valid(out):
+    if out in PTT_MOUSE:
+        return True
+    m = re.fullmatch(r"vk:(\d{1,3})", out)
+    return bool(m) and 8 <= int(m.group(1)) <= 254
+
+
+def _ptt_input(out, down):
+    """One real press or release, as Windows sees it from a mouse or keyboard. -> True if it was sent"""
+    if sys.platform != "win32":
+        return False
+    import ctypes
+    from ctypes import wintypes as w
+    ptr = ctypes.c_size_t
+
+    class MOUSE(ctypes.Structure):
+        _fields_ = [("dx", w.LONG), ("dy", w.LONG), ("data", w.DWORD), ("flags", w.DWORD), ("time", w.DWORD), ("extra", ptr)]
+
+    class KEY(ctypes.Structure):
+        _fields_ = [("vk", w.WORD), ("scan", w.WORD), ("flags", w.DWORD), ("time", w.DWORD), ("extra", ptr)]
+
+    class U(ctypes.Union):
+        _fields_ = [("mi", MOUSE), ("ki", KEY)]
+
+    class INPUT(ctypes.Structure):
+        _fields_ = [("type", w.DWORD), ("u", U)]
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    user32.SendInput.argtypes = (w.UINT, ctypes.POINTER(INPUT), ctypes.c_int)
+    user32.SendInput.restype = w.UINT
+    user32.MapVirtualKeyW.argtypes = (w.UINT, w.UINT)
+    user32.MapVirtualKeyW.restype = w.UINT
+    i = INPUT()
+    if out in PTT_MOUSE:
+        on, off, x = PTT_MOUSE[out]
+        i.type = 0
+        i.u.mi = MOUSE(0, 0, x, on if down else off, 0, 0)
+    else:
+        vk = int(out[3:])
+        extended = 1 if vk in (0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2D, 0x2E, 0xA3, 0xA5) else 0
+        i.type = 1
+        i.u.ki = KEY(vk, user32.MapVirtualKeyW(vk, 0), extended | (0 if down else 2), 0, 0)
+    return user32.SendInput(1, ctypes.byref(i), ctypes.sizeof(INPUT)) == 1
+
+
+def _ptt_watch():
+    while True:
+        time.sleep(0.25)
+        with _ptt_lock:
+            if _ptt["held"] and time.time() - _ptt["seen"] > PTT_LET_GO_SECS:
+                _ptt_input(_ptt["held"], False)
+                _ptt["held"] = ""
+
+
+def ptt_hold(out):
+    """Hold this mouse button or key ("" lets go). -> True when Windows took it."""
+    with _ptt_lock:
+        ok = True
+        if _ptt["held"] and _ptt["held"] != out:
+            _ptt_input(_ptt["held"], False)
+            _ptt["held"] = ""
+        if out and _ptt["held"] != out:
+            ok = _ptt_input(out, True)
+            _ptt["held"] = out if ok else ""
+        _ptt["seen"] = time.time()
+        if not _ptt["watch"]:
+            _ptt["watch"] = True
+            threading.Thread(target=_ptt_watch, daemon=True).start()
+        return ok
+
+
+def handle_ptt(raw):
+    try:
+        out = json.loads(raw or b"").get("out", "")
+    except (ValueError, AttributeError):
+        return 400, "application/json", b'{"ok":false}'
+    if not isinstance(out, str) or (out and not _ptt_valid(out)):
+        return 400, "application/json", b'{"ok":false}'
+    return (200, "application/json", b'{"ok":true}') if ptt_hold(out) else (500, "application/json", b'{"ok":false}')
 # libretro-thumbnails: one GitHub repo per system, named with underscores
 # ("Nintendo_-_Super_Nintendo_Entertainment_System"). The old links used the
 # spaced name and every request was a 404 - art never arrived (2026-10-22).
@@ -111,6 +201,16 @@ ALSO = {"SMS": ["Sega - Mega Drive - Genesis", "Sega - Game Gear", "Sega - 32X"]
 
 CHEAT_API = "https://api.github.com/repos/libretro/libretro-database"
 CHEAT_RAW = "https://raw.githubusercontent.com/libretro/libretro-database/master/cht/"
+PLAYERS_RAW = "https://raw.githubusercontent.com/libretro/libretro-database/master/metadat/maxusers/"
+
+
+def parse_maxusers(text):
+    """A libretro maxusers .dat -> {art_key: most players}: versions of one game count as one."""
+    out = {}
+    for name, n in re.findall(r'(?:comment|name)\s+"([^"]+)"\s+users\s+(\d+)', text):
+        k = art_key(name)
+        out[k] = max(int(n), out.get(k, 0))
+    return out
 
 
 def parse_cht(text):
@@ -735,6 +835,46 @@ class Vault:
     def profile_path(self, uid):
         return self.saves / "profiles" / (uid + ".json") if _PROFILE_ID.match(uid or "") else None
 
+    # --- how many can play: libretro-database's player counts (CC BY-SA 4.0), kept on the drive ---
+    def _player_counts(self, db):
+        """{art_key: most players} of one system, or None when it isn't here and can't be fetched."""
+        f = self.root / "players" / (db + ".json")
+        if f.is_file() and (time.time() - f.stat().st_mtime < INDEX_DAYS * 86400 or not self.online()):
+            return json.loads(f.read_text(encoding="utf-8"))
+        if not self.online():
+            return None
+        try:
+            with urllib.request.urlopen(urllib.request.Request(PLAYERS_RAW + urllib.parse.quote(db + ".dat"), headers=UA), timeout=30) as r:
+                counts = parse_maxusers(r.read().decode("utf-8", "replace"))
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+            counts = {}                                  # the database has no counts for this system
+        except OSError:
+            return json.loads(f.read_text(encoding="utf-8")) if f.is_file() else None
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(counts), encoding="utf-8")
+        return counts
+
+    def players(self, sys_id):
+        """-> {file name: most players} for the games of a system that two or more can play."""
+        counts = {}
+        for db in art_repos(sys_id):
+            for k, n in (self._player_counts(db) or {}).items():
+                counts[k] = max(n, counts.get(k, 0))
+        out = {}
+        for g in self.list_system(sys_id):
+            k = art_key(g["name"])
+            n = counts.get(k, 0)
+            if k not in counts:                          # "Street Fighter II - The World Warrior" is "Street Fighter II" there
+                for size in range(len(k) - 1, 9, -1):    # (not "Mega Man X" for "Mega Man X2", nor "Doom" for "Doom II")
+                    if k[:size] in counts and not k[size].isdigit() and k[size] not in "ivx":
+                        n = counts[k[:size]]
+                        break
+            if n >= 2:
+                out[g["name"]] = n
+        return out
+
     # --- the code book: libretro-database's cheat files (CC BY-SA 4.0), kept on the drive ---
     def _cheat_names(self, db):
         """The cheat files of one system, {name: size}: a list from GitHub, kept for INDEX_DAYS."""
@@ -950,6 +1090,11 @@ def handle_get(v, path, query):
     if rel == "api/controllers":
         p = v.saves / "controllers.json"
         return (200, "application/json", p) if p.is_file() else (200, "application/json", b"{}")
+    if rel == "api/players":
+        sys_id = (query.get("system") or [""])[0]
+        if sys_id not in SYS_EXTS:
+            return 400, "application/json", b"{}"
+        return 200, "application/json", json.dumps(v.players(sys_id)).encode()
     if rel == "api/cheats":
         q = lambda n: (query.get(n) or [""])[0]
         if q("system") not in LIBRETRO:

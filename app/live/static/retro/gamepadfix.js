@@ -22,8 +22,12 @@
       if (seen.length > pads.length) pads = seen;
     }
     for (const g of pads) {
+      // the Discord talk button belongs to Discord: the game doesn't see it
+      let talk = -1;
+      try { talk = window.parent.RVPads.pttButton(g); } catch (e) { /* not set up */ }
+      const buttons = talk < 0 ? g.buttons : Array.prototype.map.call(g.buttons, (b, i) => (i === talk ? { pressed: false, touched: false, value: 0 } : b));
       out.push({ id: g.id, index: out.length, mapping: g.mapping, connected: true,
-                 timestamp: g.timestamp, axes: g.axes, buttons: g.buttons });
+                 timestamp: g.timestamp, axes: g.axes, buttons });
     }
     return out;
   };
@@ -45,4 +49,8 @@
     if (changed) em.updateGamepadLabels();
   };
   setInterval(window.RVPadAssign, 500);
+  // A side mouse button (held by hand or sent for Discord) over the game must not go Back or Forward
+  ["mousedown", "mouseup", "auxclick"].forEach(t => window.addEventListener(t, e => {
+    if (e.button === 1 || e.button === 3 || e.button === 4) e.preventDefault();
+  }, true));
 })();

@@ -137,7 +137,10 @@
     if (d && typeof d.profiles === "object" && d.profiles) {
       Object.keys(d.profiles).forEach(n => {
         const p = d.profiles[n];
-        if (p && typeof p === "object") out.profiles[n] = { maps: (p.maps && typeof p.maps === "object") ? p.maps : {} };
+        if (p && typeof p === "object") {
+          out.profiles[n] = { maps: (p.maps && typeof p.maps === "object") ? p.maps : {} };
+          if (p.ptt && typeof p.ptt === "object") out.profiles[n].ptt = p.ptt;
+        }
       });
     }
     if (!out.profiles[DEFAULT]) out.profiles[DEFAULT] = { maps: {} };
@@ -224,6 +227,12 @@ body:has(#ctrl-modal.open) #emu-restore-bar{left:1rem!important;right:auto!impor
 .rp-raw{display:flex;flex-wrap:wrap;gap:3px;margin-top:.4rem}
 .rp-raw span{font-size:.6rem;padding:1px 5px;border-radius:4px;background:var(--surface3);color:var(--dim)}
 .rp-raw span.on{background:var(--accent);color:#fff}
+.rp-ptt{margin:0 1.25rem .9rem;padding:.65rem .8rem;border:1px solid var(--border);border-radius:7px;background:var(--surface2)}
+.rp-ptt h4{margin:0 0 .5rem;font-size:.72rem;color:var(--text)}
+.rp-ptt-row{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+.rp-ptt-row .rp-row{flex:0 1 240px}
+.rp-ptt-note{margin-top:.5rem;font-size:.68rem;line-height:1.55;color:var(--muted)}
+#rv-talking{position:fixed;left:14px;bottom:14px;z-index:100000;display:none;padding:.3rem .65rem;border-radius:99px;background:#1f8f55;color:#fff;font-size:.72rem;font-weight:700;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.5)}
 .rp-warn{margin:.5rem 1.25rem 0;font-size:.7rem;line-height:1.5;color:var(--muted)}
 .rp-pads{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:.75rem;padding:.75rem 1.25rem}
 .rp-pad h4{margin:0 0 .3rem;font-size:.72rem;color:var(--muted);font-weight:600}
@@ -311,6 +320,7 @@ body:has(#ctrl-modal.open) #emu-restore-bar{left:1rem!important;right:auto!impor
         <div class="rp-pad"><h4>Your controller</h4><div id="rp-your">${yourSvg(gp)}</div></div>
       </div>
       <div class="rp-rows" id="rp-rows">${rows}</div>
+      ${pttHtml(gp, prof, map)}
       <div class="rp-btns">
         <button class="btn-ghost" id="rp-new">New setup</button>
         <button class="btn-ghost" id="rp-ren"${prof === DEFAULT ? " disabled" : ""}>Rename</button>
@@ -353,6 +363,7 @@ body:has(#ctrl-modal.open) #emu-restore-bar{left:1rem!important;right:auto!impor
       if (b >= 0) document.querySelectorAll(`.rp-y[data-b="${b}"]`).forEach(x => x.classList.add("hover"));
     };
     $("rp-classic").onmouseover = hover; $("rp-rows").onmouseover = hover;
+    pttWire(prof);
   }
   function askName(q, v) {
     const n = (prompt(q, v) || "").trim().slice(0, 40);
@@ -382,6 +393,12 @@ body:has(#ctrl-modal.open) #emu-restore-bar{left:1rem!important;right:auto!impor
   }
   function assign(id, label) {
     const gp = curPad(), padId = padIdOf(gp), prof = profileOf(padId);
+    if (id === "ptt") {
+      DATA.profiles[prof].ptt = Object.assign({ out: "mouse5" }, DATA.profiles[prof].ptt, { button: label });
+      listening = null;
+      save(); render();
+      return;
+    }
     const maps = DATA.profiles[prof].maps, cur = mapFor(padId, sys);
     const own = maps[sys] = maps[sys] || {};
     // a button drives one thing: whatever used it goes to what this one had
@@ -398,6 +415,7 @@ body:has(#ctrl-modal.open) #emu-restore-bar{left:1rem!important;right:auto!impor
       if (on && !listening.base[i]) { assign(listening.id, btnLabel(i)); return; }
       if (!on) listening.base[i] = false;
     }
+    if (listening.id === "ptt") return;               // the talk button is a button, not a stick
     for (let i = 0; i < gp.axes.length; i++) {
       const v = gp.axes[i], was = listening.axes[i] || 0;
       if (Math.abs(v) > 0.7 && Math.abs(was) < 0.4) { assign(listening.id, axisLabel(i, v)); return; }
@@ -443,7 +461,8 @@ body:has(#ctrl-modal.open) #emu-restore-bar{left:1rem!important;right:auto!impor
       last = said.join(" + ") + "  →  " + SYS_NAMES[sys] + ": " + (hits.length ? hits.join(" + ") : "nothing");
       lastAt = Date.now();
     }
-    if (listening) now.textContent = "Press the button for " + TABLES[sys][listening.id] + "…";
+    if (pttButton(gp) >= 0 && amount(gp, btnLabel(pttButton(gp))) > 0 && said.length) last = said.join(" + ") + "  →  Discord talk";
+    if (listening) now.textContent = "Press the button for " + (listening.id === "ptt" ? "Discord talk" : TABLES[sys][listening.id]) + "…";
     else now.textContent = last && Date.now() - lastAt < 4000 ? last : "Press something on your controller";
     const chips = gp.buttons.map((b, i) => `<span class="${b.pressed || b.value > PRESS ? "on" : ""}">B${i}</span>`)
       .concat(Array.from(gp.axes).map((v, i) => `<span class="${Math.abs(v) > PRESS ? "on" : ""}">A${i} ${v.toFixed(2)}</span>`)).join("");
@@ -453,16 +472,113 @@ body:has(#ctrl-modal.open) #emu-restore-bar{left:1rem!important;right:auto!impor
 
   // ── a stream of a game someone else hosts: this controller -> control ids ──────
   function readPad(gp, system, n) {
-    const s = TABLES[system] ? system : "N64", map = mapFor(gp.id, s), v = new Array(n).fill(0);
+    const s = TABLES[system] ? system : "N64", map = mapFor(gp.id, s), v = new Array(n).fill(0), talk = pttButton(gp);
     Object.keys(map).forEach(id => {
+      if (talk >= 0 && labelIndex(map[id]) === talk) return;      // that button belongs to Discord
       const a = amount(gp, map[id]);
       if (a > 0) v[id] = +id >= 16 && +id <= 23 ? Math.round(32767 * a) : 1;
     });
     return v;
   }
 
+  // ── Discord push to talk ───────────────────────────────────────────────────────
+  // Discord only listens for a key or mouse button, so holding the talk button holds the same one it is set
+  // to, through Philibert on this PC. Each setup keeps its own button, and the game doesn't see that button.
+  const PTT_OUT = { mouse5: "Mouse 5 (forward side button)", mouse4: "Mouse 4 (back side button)", mouse3: "Middle mouse button" };
+  let pttWant = "", pttSent = "", pttAt = 0, pttBusy = false, pttTestUntil = 0, pttTestOut = "", pttTold = false, pttKeyWait = false;
+  function pttOf(gp) {
+    const p = gp && DATA.profiles[profileOf(padIdOf(gp))].ptt;
+    return p && p.button && p.out ? p : null;
+  }
+  function pttButton(gp) {
+    const p = pttOf(gp);
+    return p ? labelIndex(p.button) : -1;
+  }
+  function pttHtml(gp, prof, map) {
+    const p = DATA.profiles[prof].ptt || {}, out = p.out || "mouse5";
+    const used = p.button ? Object.keys(map).filter(id => map[id] === p.button).map(id => TABLES[sys][id]) : [];
+    const opts = Object.keys(PTT_OUT).map(k => `<option value="${k}"${k === out ? " selected" : ""}>${PTT_OUT[k]}</option>`).join("")
+      + (out.startsWith("vk:") ? `<option value="${esc(out)}" selected>Key: ${esc(p.keyName || out)}</option>` : "")
+      + `<option value="key">A keyboard key…</option>`;
+    return `<div class="rp-ptt"><h4>Discord push to talk</h4>
+      <div class="rp-ptt-row">
+        <button type="button" class="rp-row" data-id="ptt" id="rp-ptt-btn"><b>Talk button</b><span style="color:var(--dim)">→</span><i>${p.button ? esc(labelName(p.button, gp)) : "not set"}</i></button>
+        <label style="font-size:.7rem;color:var(--muted)">Your Discord push-to-talk is on <select class="form-select" id="rp-ptt-out">${opts}</select></label>
+        <button class="btn-ghost" id="rp-ptt-test">Test for 3 seconds</button>
+        <button class="btn-ghost" id="rp-ptt-clear"${p.button ? "" : " disabled"}>Clear</button>
+      </div>
+      <div class="rp-ptt-note">${used.length ? `<b>${esc(SYS_NAMES[sys])}: this button was ${esc(used.join(", "))}. The game no longer gets it while it is the talk button.</b> ` : ""}Pick the same button you set under Discord, User Settings, Voice &amp; Video, Push to Talk. Holding the talk button holds that button on this PC, and it also acts on whatever is under the mouse pointer.</div>
+    </div>`;
+  }
+  function pttWire(prof) {
+    const own = () => DATA.profiles[prof];
+    $("rp-ptt-btn").onclick = () => startListen("ptt");
+    $("rp-ptt-clear").onclick = () => { delete own().ptt; save(); render(); };
+    $("rp-ptt-test").onclick = () => {
+      pttTestOut = (own().ptt && own().ptt.out) || $("rp-ptt-out").value;
+      if (pttTestOut === "key") return;
+      pttTestUntil = Date.now() + 3000;
+      toast("Holding it for 3 seconds: Discord should show you talking");
+    };
+    $("rp-ptt-out").onchange = e => {
+      if (e.target.value === "key") { pttKeyWait = true; toast("Press the key Discord uses"); return; }
+      pttKeyWait = false;
+      own().ptt = Object.assign({}, own().ptt, { out: e.target.value });
+      save(); render();
+    };
+    pttKey = e => {
+      if (!pttKeyWait) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      pttKeyWait = false;
+      own().ptt = Object.assign({}, own().ptt, { out: "vk:" + e.keyCode, keyName: e.key === " " ? "Space" : e.key });
+      save(); render();
+    };
+  }
+  let pttKey = null;
+  window.addEventListener("keydown", e => { if (pttKey) pttKey(e); }, true);
+  function pttSend() {
+    if (pttBusy) return;
+    const now = Date.now();
+    if (pttWant === pttSent && (!pttWant || now - pttAt < 400)) return;
+    pttBusy = true; pttSent = pttWant; pttAt = now;
+    fetch("/retro/api/ptt", { method: "POST", body: JSON.stringify({ out: pttWant }) })
+      .then(r => {
+        if (r.ok || pttTold) return;
+        pttTold = true;
+        toast(r.status === 403 ? "Discord push to talk only works on the PC running Philibert" : r.status === 404 ? "Restart Philibert to use Discord push to talk" : "Windows didn't accept the push-to-talk press", true);
+      })
+      .catch(() => {})
+      .finally(() => { pttBusy = false; pttSend(); });
+  }
+  function pttPoll() {
+    let out = "";
+    if (!listening) {
+      for (const gp of pads()) {
+        const p = pttOf(gp);
+        if (p && !String(p.out).startsWith("key") && amount(gp, p.button) > 0) { out = p.out; break; }
+      }
+    }
+    if (!out && Date.now() < pttTestUntil) out = pttTestOut;
+    if (out !== pttWant) {
+      pttWant = out;
+      let chip = $("rv-talking");
+      if (!chip && out) { chip = document.createElement("div"); chip.id = "rv-talking"; chip.textContent = "🎙 Talking"; document.body.appendChild(chip); }
+      if (chip) chip.style.display = out ? "block" : "none";
+    }
+    pttSend();
+  }
+  setInterval(pttPoll, 30);
+  window.addEventListener("pagehide", () => { if (pttSent) fetch("/retro/api/ptt", { method: "POST", body: '{"out":""}', keepalive: true }).catch(() => {}); });
+  [window, window.parent, window.top].filter((w, i, all) => all.indexOf(w) === i).forEach(w => {
+    try {
+      ["mousedown", "mouseup", "auxclick"].forEach(t => w.addEventListener(t, e => {
+        if (e.button === 3 || e.button === 4) e.preventDefault();      // never leaves the page
+      }, true));
+    } catch (e) { /* another site's page */ }
+  });
+
   window.RVPads = {
-    readPad, mapFor, TABLES, defaults, labelName,
+    readPad, mapFor, pttButton, TABLES, defaults, labelName,
     open() {
       const g = activeGameIdx >= 0 ? LIBRARY[activeGameIdx] : null;
       if (g && TABLES[padSystem(g)]) sys = padSystem(g);

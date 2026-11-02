@@ -18610,7 +18610,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": False, "msg": "refused"}, 403)
                 return
             import nd_retro_vault
-            res = nd_retro_vault.handle_post(retro_vault(), urllib.parse.urlparse(self.path).path, raw)
+            if urllib.parse.urlparse(self.path).path == "/retro/api/ptt":
+                # presses a mouse button or key on this PC: never for a browser on another machine
+                if not self.is_local():
+                    self.send_json({"ok": False, "msg": "this computer only"}, 403)
+                    return
+                res = nd_retro_vault.handle_ptt(raw)
+            else:
+                res = nd_retro_vault.handle_post(retro_vault(), urllib.parse.urlparse(self.path).path, raw)
             if res is None:
                 self.send_json({"error": "not found"}, 404)
                 return
