@@ -1362,7 +1362,14 @@ async function getRomBlob(g){
   return new Blob([await romEntry.async("arraybuffer")],{type:"application/octet-stream"});
 }
 
+// The Sega shelf is named after what is on it: mostly Genesis .bin files = Genesis
+function nameSegaShelf(){
+  const sega=LIBRARY.filter(g=>g.system==="SMS"), gen=sega.filter(g=>padSystem(g)==="Genesis").length;
+  SYS_MAP.SMS.label = gen*2>sega.length && !LIBRARY.some(g=>g.system==="Genesis") ? "Genesis" : "Master System";
+}
+const sysTag = g => padSystem(g)==="Genesis" ? "Genesis" : g.system;
 function buildSidebar(){
+  nameSegaShelf();
   const counts={All:LIBRARY.length};
   LIBRARY.forEach(g=>{counts[g.system]=(counts[g.system]||0)+1;});
   let html=`<div class="sys-nav-item${activeSystem==="All"?" active":""}" data-sys="All"><span class="sys-dot" style="background:var(--accent2)"></span>All Systems<span class="sys-count-badge">${counts.All}</span></div>`;
@@ -1412,7 +1419,7 @@ function renderGames(){
             ?`<img src="${g.coverBox||g.coverCart||g._svgPlaceholder||''}" loading="lazy" onload="this.classList.add('loaded')" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.opacity='1')" alt="">`
             :''}
           <span style="position:absolute;opacity:${(g.coverBox||g.coverCart)?'0':'1'};transition:opacity .2s;font-size:3rem">${g.emoji||sys.emoji||'🎮'}</span>
-          <span class="sys-badge" style="background:${sys.color||'#7c5cbf'}">${g.system}</span>
+          <span class="sys-badge" style="background:${sys.color||'#7c5cbf'}">${sysTag(g)}</span>
           <div class="play-overlay"><div class="play-circle"><svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg></div></div>
         </div>
         <div class="card-info">
@@ -1434,7 +1441,7 @@ function renderGames(){
       return`<div class="list-row" data-idx="${idx}" tabindex="0" role="button">
         <span class="list-num">${i+1}</span>
         <span class="list-title">${g.title}${g.isZip&&CFG.showZipBadge?' <span style="font-size:.6rem;color:var(--dim)">[Z]</span>':""}</span>
-        <span class="list-sys" style="background:${sys.color||"#7c5cbf"}">${g.system}</span>
+        <span class="list-sys" style="background:${sys.color||"#7c5cbf"}">${sysTag(g)}</span>
         <span class="list-genre">${g.genre||"—"}</span>
         <span class="list-year">${g.year||"—"}</span>
         <button class="list-play" aria-label="Play ${g.title}"><svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg></button>
@@ -1457,7 +1464,7 @@ function openDetail(idx){
   document.getElementById("detail-file").textContent=g.filename||"";
   const cv=document.getElementById("detail-cover");
   cv.innerHTML=g.cover?`<img src="${g.cover}" alt="${g.title}" style="width:100%;height:100%;object-fit:cover;">`:`<span style="font-size:3rem">${g.emoji||sys.emoji||"🎮"}</span>`;
-  document.getElementById("detail-tags").innerHTML=`<span class="dtag" style="background:${sys.color||"var(--accent)"};color:#fff">${g.system}</span>${g.genre&&g.genre!=="Unknown"?`<span class="dtag" style="background:var(--surface3);color:var(--muted);border:1px solid var(--border2)">${g.genre}</span>`:""}${g.isZip?`<span class="dtag" style="background:var(--surface3);color:var(--dim);border:1px solid var(--border)">ZIP</span>`:""}`;
+  document.getElementById("detail-tags").innerHTML=`<span class="dtag" style="background:${sys.color||"var(--accent)"};color:#fff">${sysTag(g)}</span>${g.genre&&g.genre!=="Unknown"?`<span class="dtag" style="background:var(--surface3);color:var(--muted);border:1px solid var(--border2)">${g.genre}</span>`:""}${g.isZip?`<span class="dtag" style="background:var(--surface3);color:var(--dim);border:1px solid var(--border)">ZIP</span>`:""}`;
   const dd=document.getElementById("detail-desc");
   if(g.description){dd.textContent=g.description;dd.style.display="block";}else dd.style.display="none";
   if(CFG.autoStart){launchGame(idx);return;}
@@ -1472,7 +1479,7 @@ async function launchGame(idx){
 
   document.getElementById("emu-title").textContent=g.title;
   const badge=document.getElementById("emu-sys-badge");
-  badge.textContent=g.system; badge.style.background=sys.color||"var(--accent)";
+  badge.textContent=sysTag(g); badge.style.background=sys.color||"var(--accent)";
 
   // Reset iframe
   const iframe=document.getElementById("emu-iframe");
@@ -2066,7 +2073,7 @@ function buildSysFolderRows(){
     return '<div class="sys-row">'
       +'<div class="sys-icon syi-'+s.id+'" style="background:'+(s.color||"var(--accent)")+'">'+label+'</div>'
       +'<div class="sys-row-info" style="flex:1;min-width:0;">'
-      +'<div class="sys-row-name">'+esc(s.label)+(c.count?' <span style="color:var(--dim);font-weight:400">· '+c.count+' game'+(c.count!==1?'s':'')+'</span>':'')+'</div>'
+      +'<div class="sys-row-name">'+esc(s.id==="SMS"?"Master System":s.label)+(c.count?' <span style="color:var(--dim);font-weight:400">· '+c.count+' game'+(c.count!==1?'s':'')+'</span>':'')+'</div>'
       +'<div class="sys-row-path" title="'+esc(from.join("\n"))+'">'+state+'</div>'
       +'<div class="rf-line">'
       +'<input type="text" class="rf-input" id="syspath-input-'+s.id+'" placeholder="its own folder, e.g. D:\\Games\\'+esc(s.id)+'" value="'+esc(c.override||"")+'" spellcheck="false">'
