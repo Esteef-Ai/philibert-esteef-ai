@@ -24,6 +24,7 @@ import json
 import os
 import re
 import shutil
+import secrets
 import subprocess
 import sys
 import threading
@@ -1052,6 +1053,21 @@ def handle_post(v, path, raw):
         except ValueError:
             d = {}
         return 200, "application/json", json.dumps(v.describe(d.get("games"))).encode()
+    if rel == "api/freeze-report":                  # a game stopped: a small log to send on (the newest 30 stay)
+        try:
+            d = json.loads(raw or b"")
+        except ValueError:
+            d = None
+        if not isinstance(d, dict) or len(raw) > 200_000:
+            return 400, "application/json", b'{"ok":false}'
+        folder = v.saves / "freeze-reports"
+        folder.mkdir(parents=True, exist_ok=True)
+        kind = re.sub(r"[^a-z_]", "", str(d.get("kind", "")))[:30] or "report"
+        p = folder / f"freeze-{time.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(2)}-{kind}.json"
+        p.write_text(json.dumps(d, indent=1), encoding="utf-8")
+        for old in sorted(folder.glob("freeze-*.json"))[:-30]:
+            old.unlink(missing_ok=True)
+        return 200, "application/json", b'{"ok":true}'
     if rel == "api/cheats-on":                      # the codes in use for one game
         try:
             d = json.loads(raw or b"")
