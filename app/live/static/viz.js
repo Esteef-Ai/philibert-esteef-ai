@@ -889,6 +889,17 @@
       out[f] = { x: cx, y: cy, n: g.n, spread: g.n ? sp / g.n : 0,
                  col: groupColour[f] || VAULT_PALETTE[0], label: folderLabel(f) };
     }
+    // Two folders with the same last name would read the same, so name the
+    // shared ones by their parent: "ALPHA / TASKS". A folder nobody shares a
+    // name with stays short: "SONGS".
+    var labelCount = {};
+    for (var lf in out) labelCount[out[lf].label] = (labelCount[out[lf].label] || 0) + 1;
+    for (var ld in out) {
+      var grp = out[ld];
+      if (labelCount[grp.label] > 1 && ld.indexOf("/") > 0) {
+        grp.label = folderLabel(ld.substr(0, ld.lastIndexOf("/"))) + " / " + grp.label;
+      }
+    }
     vaultGroups = out;
   }
 
@@ -1669,10 +1680,12 @@
   function setState(state) {
     lastState = state;
 
-    // first real data: hide the waiting overlay
-    if (!gotState) {
-      gotState = true;
-      if (boardOverlay) boardOverlay.style.display = "none";
+    if (!gotState) { gotState = true; }
+
+    // hide the waiting overlay on every good reading
+    if (boardOverlay) {
+      boardOverlay.style.display = "none";
+      boardOverlay.classList.remove("visible");
     }
 
     // connectivity pills
@@ -1804,9 +1817,12 @@
   var lastGoodPoll = 0;   // performance.now() of the last successful poll
   function markDead() {
     if (performance.now() - lastGoodPoll < POLL_MS * 3) return; // grace: 1 tick
-    if (boardOverlay) boardOverlay.classList.add("visible");
-    if (overlayBig) overlayBig.textContent = "Waiting for telemetry";
-    if (overlaySmall) overlaySmall.textContent = "Polling /api/state once it answers.";
+    if (boardOverlay) {
+      boardOverlay.style.display = "";
+      boardOverlay.classList.add("visible");
+    }
+    if (overlayBig) overlayBig.textContent = "Waiting for this computer";
+    if (overlaySmall) overlaySmall.textContent = "This appears as soon as it answers.";
     if (pillNd) pillNd.className = "pill down";
     if (pillOllama) pillOllama.className = "pill down";
   }
@@ -1873,6 +1889,11 @@
           x0 = Math.min(x0, n.x); x1 = Math.max(x1, n.x); y0 = Math.min(y0, n.y); y1 = Math.max(y1, n.y);
         }
         return vaultNotes.length ? [Math.round(x1 - x0), Math.round(y1 - y0)] : null;
+      })(),
+      vaultLabels: (function () {
+        var m = {};
+        for (var k in vaultGroups) m[k] = vaultGroups[k].label;
+        return m;
       })(),
       vaultAlpha: +sim.alpha.toFixed(4)
     };

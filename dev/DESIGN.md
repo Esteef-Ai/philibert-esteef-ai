@@ -203,7 +203,7 @@ correct tool calls and correct data in `band.db`, not on prose.
 
 ## 15. Planned for later (noted 2026-10-21)
 
-1. **Port the Elena Live visuals into Philibert's default view.** They live in
+1. **DONE (2026-10-21/22; finished 2026-11-02).** Port the Elena Live visuals into Philibert's default view. They live in
    Elena Live's static/viz.js (+ index.html), not in ND3's elena_ui.html that
    dev/sync_app.py copies today:
    - the interactive vault constellation (folder clusters with nebulae and names,

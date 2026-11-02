@@ -49,22 +49,58 @@
 
   /* ---------- the live board, scaled into its panel ---------- */
   var stage = document.getElementById("mini-stage"), board = document.getElementById("board-wrap");
+  var miniPanel = document.querySelector("section.mini-board"), expandBtn = document.getElementById("board-expand");
   var BW = 760, BH = 470;
   function fit() {
     var w = stage.clientWidth, h = stage.clientHeight;
     if (!w || !h) return;
+    if (miniPanel && miniPanel.classList.contains("expanded")) {
+      board.style.width = w + "px";
+      board.style.height = h + "px";
+      board.style.transform = "none";
+      return;
+    }
+    board.style.width = BW + "px";
+    board.style.height = BH + "px";
     var k = Math.min(w / BW, h / BH);
     board.style.transform = "translate(" + ((w - BW * k) / 2) + "px," + ((h - BH * k) / 2) + "px) scale(" + k + ")";
   }
+  function setBoardExpanded(on) {
+    if (!miniPanel || !expandBtn) return;
+    miniPanel.classList.toggle("expanded", !!on);
+    expandBtn.setAttribute("aria-pressed", on ? "true" : "false");
+    fit();
+    requestAnimationFrame(function () { window.dispatchEvent(new Event("resize")); });
+  }
+  if (expandBtn) expandBtn.addEventListener("click", function () { setBoardExpanded(!miniPanel.classList.contains("expanded")); });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && miniPanel && miniPanel.classList.contains("expanded")) setBoardExpanded(false);
+  });
   if (window.ResizeObserver) new ResizeObserver(fit).observe(stage);
   window.addEventListener("resize", fit);
   fit();
 
   /* ---------- the brand spark follows the task ---------- */
   var spark = document.getElementById("brand-spark");
+  var taskEl = document.getElementById("system-task");
   window.addEventListener("viz-state", function (ev) {
     var st = ev.detail || null;
     var kind = (st && st.task && st.task.kind) || "idle";
     if (spark) spark.className = "spark" + (kind === "idle" ? "" : " " + kind);
+    if (taskEl) {
+      var text;
+      if (kind === "idle") {
+        text = "idle";
+      } else {
+        var label = (st && st.task && st.task.label) || kind;
+        text = label;
+        if (st && st.model && st.model.name) {
+          text += " · " + String(st.model.name).split("/").pop();
+        }
+      }
+      taskEl.textContent = text;
+      taskEl.title = text;
+      taskEl.classList.toggle("busy", kind !== "idle");
+    }
   });
 })();
