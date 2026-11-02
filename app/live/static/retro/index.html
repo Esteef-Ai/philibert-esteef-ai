@@ -1625,7 +1625,7 @@ async function launchGame(idx){
   _dl.push("  quickSave:{visible:true,callback:function(){window._doSave();}},");
   _dl.push("  quickLoad:{visible:true,callback:function(){window._doLoad();}},");
   _dl.push("  volume:true,screenshot:true,screenRecord:false,cheat:false};");
-  _dl.push("EJS_onGameStart=function(){ window._ejsReady=true; window._sramLoad(); window.parent.postMessage({type:'ejs_started'},'*'); };");
+  _dl.push("EJS_onGameStart=function(){ window._ejsReady=true; window._sramLoad(); window._quickToDrive(); window.parent.postMessage({type:'ejs_started'},'*'); };");
   _dl.push("EJS_onSaveState=function(){ window.parent.postMessage({type:'ejs_saved'},'*'); };");
   _dl.push("EJS_onLoadState=function(){ window.parent.postMessage({type:'ejs_loaded'},'*'); };");
   _dl.push("window._ejsReady=false; window._slot=1; window._stateKey='"+stateKey+"';");
@@ -1656,28 +1656,34 @@ async function launchGame(idx){
   _dl.push("window._sramFlush=function(){var x=window._sramGrab(); if(x)fetch(x.url,{method:'POST',body:x.data,keepalive:x.data.length<60000}).catch(function(){window._sramLast='';});};");
   _dl.push("document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')window._sramFlush();});");
   _dl.push("window.addEventListener('pagehide',window._sramFlush);");
-  _dl.push("window._doSave=function(){");
-  _dl.push("  if(!window._ejsReady||!window.EJS_emulator||!window.EJS_emulator.gameManager)return;");
+  // The emulator's own Quick Save (right-click menu, its hotkeys) only writes to memory, gone
+  // when the game closes: it uses the same files on the drive as the Save button
+  _dl.push("window._quickToDrive=function(){ var gm=window.EJS_emulator.gameManager;");
+  _dl.push("  gm.quickSave=function(s){ window._doSave(parseInt(s)||1); return true; };");
+  _dl.push("  gm.quickLoad=function(s){ window._doLoad(parseInt(s)||1); };");
+  _dl.push("};");
+  _dl.push("window._doSave=function(s){ var slot=typeof s==='number'?s:window._slot;");
+  _dl.push("  if(!window._ejsReady||!window.EJS_emulator||!window.EJS_emulator.gameManager){window.parent.postMessage({type:'ejs_save_err',slot:slot,msg:'the game is still starting'},'*');return;}");
   _dl.push("  try{");
   _dl.push("    var d=window.EJS_emulator.gameManager.getState();");
-  _dl.push("    if(!d||!d.length){window.parent.postMessage({type:'ejs_save_err',msg:'No data'},'*');return;}");
-  _dl.push("    var k=window._stateKey+'_'+window._slot;");
+  _dl.push("    if(!d||!d.length){window.parent.postMessage({type:'ejs_save_err',slot:slot,msg:'No data'},'*');return;}");
+  _dl.push("    var k=window._stateKey+'_'+slot;");
   _dl.push("    fetch('/retro/state/'+encodeURIComponent(k),{method:'POST',body:d}).then(function(r){");
   _dl.push("      if(!r.ok)throw new Error('drive said '+r.status);");
-  _dl.push("      window.parent.postMessage({type:'ejs_saved',slot:window._slot},'*');");
+  _dl.push("      window.parent.postMessage({type:'ejs_saved',slot:slot},'*');");
   _dl.push("    }).catch(function(err){window.parent.postMessage({type:'ejs_save_err',msg:String(err)},'*');});");
   _dl.push("  }catch(err){window.parent.postMessage({type:'ejs_save_err',msg:String(err)},'*');}");
   _dl.push("};");
   // arcade: the 5 key inserts a coin (the usual arcade key), on top of Select
   if(isArcade) _dl.push("document.addEventListener('keydown',function(e){ if(e.key==='5'&&!e.repeat&&parent.insertCoin) parent.insertCoin(); });");
-  _dl.push("window._doLoad=function(){ if(window._netplay){window.parent.postMessage({type:'ejs_load_err',msg:'not during an online match'},'*');return;}");
+  _dl.push("window._doLoad=function(s){ var slot=typeof s==='number'?s:window._slot; if(window._netplay){window.parent.postMessage({type:'ejs_load_err',msg:'not during an online match'},'*');return;}");
   _dl.push("  if(!window._ejsReady||!window.EJS_emulator||!window.EJS_emulator.gameManager)return;");
-  _dl.push("  var k=window._stateKey+'_'+window._slot;");
+  _dl.push("  var k=window._stateKey+'_'+slot;");
   _dl.push("  fetch('/retro/state/'+encodeURIComponent(k)).then(function(r){return r.ok?r.arrayBuffer():null;}).then(function(buf){");
   _dl.push("      var data=buf?new Uint8Array(buf):null;");
-  _dl.push("      if(!data||!data.length){window.parent.postMessage({type:'ejs_load_empty',slot:window._slot},'*');return;}");
+  _dl.push("      if(!data||!data.length){window.parent.postMessage({type:'ejs_load_empty',slot:slot},'*');return;}");
   _dl.push("      try{window.EJS_emulator.gameManager.loadState(data);");
-  _dl.push("        window.parent.postMessage({type:'ejs_loaded',slot:window._slot},'*');}");
+  _dl.push("        window.parent.postMessage({type:'ejs_loaded',slot:slot},'*');}");
   _dl.push("      catch(err){window.parent.postMessage({type:'ejs_load_err',msg:String(err)},'*');}});");
   _dl.push("};");
   _dl.push("window.addEventListener('message',function(e){");
@@ -1823,12 +1829,10 @@ function sendEmuCmd(cmd){
   var slot=activeSlot();
   try{
     var iw=iframe.contentWindow;
-    iw.postMessage({type:"retrovault_cmd",cmd:cmd,slot:slot},"*");
-    if(cmd==="save"||cmd==="load"){
-      // Also try direct call if available
-      if(cmd==="save" && typeof iw._doSave==="function") iw._doSave();
-      else if(cmd==="load" && typeof iw._doLoad==="function") iw._doLoad();
-    }
+    // once, in the selected slot (a message AND a direct call saved twice, the first in the old slot)
+    if(cmd==="save" && typeof iw._doSave==="function") iw._doSave(slot);
+    else if(cmd==="load" && typeof iw._doLoad==="function") iw._doLoad(slot);
+    else iw.postMessage({type:"retrovault_cmd",cmd:cmd,slot:slot},"*");
   }catch(err){ toast("Emulator error: "+err.message,true); }
 }
 // Legacy alias used elsewhere
