@@ -108,6 +108,24 @@ ALSO = {"SMS": ["Sega - Mega Drive - Genesis", "Sega - Game Gear", "Sega - 32X"]
         "GB": ["Nintendo - Game Boy Color"]}
 
 
+CHEAT_API = "https://api.github.com/repos/libretro/libretro-database"
+CHEAT_RAW = "https://raw.githubusercontent.com/libretro/libretro-database/master/cht/"
+
+
+def parse_cht(text):
+    """A RetroArch .cht file -> [{c: code, d: what it does}], without repeats."""
+    desc, code = {}, {}
+    for m in re.finditer(r'^cheat(\d+)_(desc|code)\s*=\s*"(.*)"\s*$', text, flags=re.M):
+        (desc if m.group(2) == "desc" else code)[int(m.group(1))] = m.group(3).strip()
+    out, seen = [], set()
+    for i in sorted(code):
+        c = code[i]
+        if c and c not in seen:
+            seen.add(c)
+            out.append({"c": c[:200], "d": (desc.get(i) or "Unnamed code")[:300]})
+    return out[:5000]
+
+
 def thumb_repo(sys_id):
     return LIBRETRO.get(sys_id, sys_id).replace(" ", "_")
 
@@ -716,6 +734,74 @@ class Vault:
     def profile_path(self, uid):
         return self.saves / "profiles" / (uid + ".json") if _PROFILE_ID.match(uid or "") else None
 
+    # --- the code book: libretro-database's cheat files (CC BY-SA 4.0), kept on the drive ---
+    def _cheat_names(self, db):
+        """The cheat files of one system, {name: size}: a list from GitHub, kept for INDEX_DAYS."""
+        f = self.root / "cheats" / db / "index.json"
+        fresh = f.is_file() and (time.time() - f.stat().st_mtime < INDEX_DAYS * 86400 or not self.online())
+        if fresh:
+            return json.loads(f.read_text(encoding="utf-8"))
+        if not self.online():
+            return None
+
+        def get(url):
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as r:
+                return json.loads(r.read().decode("utf-8"))
+        top = get(CHEAT_API + "/contents/cht")
+        sha = next(e["sha"] for e in top if e["name"] == db)
+        names = {e["path"][:-4]: e.get("size", 0) for e in get(CHEAT_API + "/git/trees/" + sha).get("tree", [])
+                 if e["path"].endswith(".cht")}
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(names), encoding="utf-8")
+        return names
+
+    def cheat_book(self, sys_id, shelf, rom):
+        """-> {ok, game, codes: [{c, d}]} for a ROM, matched by name like the box art."""
+        repos = art_repos(sys_id) + ([LIBRETRO[shelf]] if shelf in LIBRETRO and shelf != sys_id else [])
+        key = art_key(rom)
+        offline = False
+        for db in repos:
+            try:
+                names = self._cheat_names(db)
+            except Exception as e:
+                self.log(f"Retro Vault: no list of codes for {db} ({e})")
+                names = None
+            if names is None:
+                offline = True
+                continue
+            same = [n for n in names if art_key(n) == key]
+            if not same:
+                continue
+            # the fullest list of the western versions: one version often has 6 codes, another 700
+            west = [n for n in same if any(r in n for r in REGION_PREF[:5])] or same
+            name = max(west, key=lambda n: names[n])
+            f = self.root / "cheats" / db / (name + ".cht")
+            if not f.is_file():
+                if not self.online():
+                    offline = True
+                    continue
+                try:
+                    url = CHEAT_RAW + urllib.parse.quote(db + "/" + name + ".cht")
+                    with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as r:
+                        data = r.read()
+                    f.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = f.with_name(f.name + ".part")
+                    tmp.write_bytes(data)
+                    os.replace(tmp, f)
+                except Exception as e:
+                    self.log(f"Retro Vault: could not fetch the codes for {name} ({e})")
+                    return {"ok": False, "codes": [], "msg": "The codes couldn't be downloaded. Try again in a moment."}
+            return {"ok": True, "game": re.sub(r"\s*\([^)]*\)", "", name), "codes": parse_cht(f.read_text(encoding="utf-8", errors="replace"))}
+        if offline:
+            return {"ok": False, "codes": [], "msg": "This game's codes aren't on the drive yet. Turn the Internet switch on and open the book again."}
+        return {"ok": False, "codes": [], "msg": "This book has no codes for this game."}
+
+    def cheats_on_path(self, key):
+        key = urllib.parse.unquote(key or "")
+        if not _STATE_KEY.match(key) or ".." in key:
+            return None
+        return self.saves / "cheats" / (key + ".json")
+
     # --- descriptions from Philibert's own model --------------------------------------
     def describe(self, games):
         if not self.ask_json:
@@ -863,6 +949,14 @@ def handle_get(v, path, query):
     if rel == "api/controllers":
         p = v.saves / "controllers.json"
         return (200, "application/json", p) if p.is_file() else (200, "application/json", b"{}")
+    if rel == "api/cheats":
+        q = lambda n: (query.get(n) or [""])[0]
+        if q("system") not in LIBRETRO:
+            return 400, "application/json", b'{"ok":false,"codes":[]}'
+        return 200, "application/json", json.dumps(v.cheat_book(q("system"), q("shelf"), q("file"))).encode()
+    if rel == "api/cheats-on":
+        p = v.cheats_on_path((query.get("key") or [""])[0])
+        return (200, "application/json", p) if p and p.is_file() else (200, "application/json", b'{"active":[]}')
     if rel.startswith("state/"):
         p = v.state_path(rel[6:])
         return (200, "application/octet-stream", p) if p and p.is_file() else (404, "text/plain", b"")
@@ -958,6 +1052,19 @@ def handle_post(v, path, raw):
         except ValueError:
             d = {}
         return 200, "application/json", json.dumps(v.describe(d.get("games"))).encode()
+    if rel == "api/cheats-on":                      # the codes in use for one game
+        try:
+            d = json.loads(raw or b"")
+        except ValueError:
+            d = {}
+        p = v.cheats_on_path(str(d.get("key", ""))) if isinstance(d, dict) else None
+        if not p or not isinstance(d.get("active"), list) or len(raw) > 200_000:
+            return 400, "application/json", b'{"ok":false}'
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".saving")
+        tmp.write_text(json.dumps({"active": d["active"]}), encoding="utf-8")
+        os.replace(tmp, p)
+        return 200, "application/json", b'{"ok":true}'
     if rel == "api/controllers":                    # controller setups, on the drive so they travel with it
         try:
             d = json.loads(raw or b"")
