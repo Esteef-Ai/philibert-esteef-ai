@@ -18127,14 +18127,14 @@ def _wait_portable_browser_closed(exe, profile, t0, rc):
             "trying another window", "warn")
         return False
     # Chromium can stay running with no window left (one had since 2026-10-30), and Philibert then never closed
-    import nd_cleanup
+    import nd_philibert
     seen, none = False, 0
     while True:
         try:
             pids = browser_pids()
             if not pids:
                 break
-            windows = nd_cleanup.open_windows(pids)
+            windows = nd_philibert.open_windows(pids)
             if windows:
                 seen, none = True, 0
             elif windows == 0 and (seen or time.time() - t0 > 60):
@@ -20099,7 +20099,7 @@ def close_everything():
     for step in (lambda: "nd_retro_vault" in sys.modules and sys.modules["nd_retro_vault"].ptt_hold(""),
                  lambda: "nd_imagegen" in sys.modules and sys.modules["nd_imagegen"].stop(),
                  stop_own_ollama,
-                 lambda: __import__("nd_cleanup").stop_drive_processes(_CONFIG_DIR.parent / "runtime")):
+                 lambda: __import__("nd_philibert").stop_drive_processes(_CONFIG_DIR.parent / "runtime")):
         try:
             step()
         except Exception as e:      # the next step still has to run
@@ -20110,9 +20110,9 @@ def clear_old_processes():
     """A new start: what an earlier copy left behind (a crash, a forced close) still holds the graphics card.
     The model server setup has just started stays; without its number no model server is touched."""
     try:
-        import nd_cleanup
+        import nd_philibert
         own = os.environ.get("ND_OLLAMA_PID", "")
-        gone = nd_cleanup.stop_drive_processes(_CONFIG_DIR.parent / "runtime", keep_pids=[int(own)] if own.isdigit() else [],
+        gone = nd_philibert.stop_drive_processes(_CONFIG_DIR.parent / "runtime", keep_pids=[int(own)] if own.isdigit() else [],
                                                keep_names=() if own.isdigit() else ("ollama", "ollama.exe"))
         if gone:
             log(f"Closed what an earlier start left running: {', '.join(sorted(set(gone)))}", "info")

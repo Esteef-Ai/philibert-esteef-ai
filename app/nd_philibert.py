@@ -567,6 +567,65 @@ def update(log=None):
 
 
 # ── HTTP ─────────────────────────────────────────────────────────────────────
+def stop_drive_processes(runtime, keep_pids=(), keep_names=()):
+    """End every process running from this drive's runtime folder: its browser, model server and image
+    server, whoever started them, and nothing from anywhere else. Never this process or what started it, nor
+    keep_pids and their children, nor programs named in keep_names. -> the names of what was stopped."""
+    import psutil
+    root = os.path.normcase(str(Path(runtime).resolve())) + os.sep
+    me = psutil.Process()
+    keep = {me.pid} | {p.pid for p in me.parents()}
+    for pid in keep_pids:
+        try:
+            k = psutil.Process(pid)
+            keep |= {k.pid} | {c.pid for c in k.children(recursive=True)}
+        except psutil.Error:
+            pass
+    found = []
+    for p in psutil.process_iter():
+        try:
+            if p.pid not in keep and os.path.normcase(p.exe()).startswith(root) and p.name().lower() not in keep_names:
+                found.append(p)
+        except psutil.Error:
+            continue
+    names = []
+    for p in found:
+        try:
+            names.append(p.name())
+            p.terminate()
+        except psutil.Error:
+            pass
+    _, left = psutil.wait_procs(found, timeout=4)
+    for p in left:
+        try:
+            p.kill()
+        except psutil.Error:
+            pass
+    return names
+
+
+def open_windows(pids):
+    """How many visible windows these processes have, or None where that can't be told (not Windows)."""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+    from ctypes import wintypes as w
+    u = ctypes.WinDLL("user32")
+    u.GetWindowTextLengthW.argtypes = (w.HWND,)
+    u.IsWindowVisible.argtypes = (w.HWND,)
+    u.GetWindowThreadProcessId.argtypes = (w.HWND, ctypes.POINTER(w.DWORD))
+    pids, count = set(pids), [0]
+
+    def each(h, _):
+        owner = w.DWORD()
+        u.GetWindowThreadProcessId(h, ctypes.byref(owner))
+        if owner.value in pids and u.IsWindowVisible(h) and u.GetWindowTextLengthW(h) > 0:
+            count[0] += 1
+        return True
+    u.EnumWindows(ctypes.WINFUNCTYPE(w.BOOL, w.HWND, w.LPARAM)(each), 0)
+    return count[0]
+
+
 def handle(path, body, log=None):
     name = path.rsplit("/", 1)[-1]
     if name == "models":
