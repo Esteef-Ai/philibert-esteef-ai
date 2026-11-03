@@ -121,6 +121,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
 .modal-overlay.open{display:flex;}
 /* minimized game: still laid out, or the browser stops drawing it and an online match stalls */
 .modal-overlay.emu-bg:not(.open){display:flex;visibility:hidden;pointer-events:none;}
+/* a game on screen: the shelves leave the page, or thousands of box covers behind it unsettle its frame pacing */
+body:has(#emu-modal.open) .app{display:none;}
 .modal{background:var(--surface);border:1px solid var(--border2);border-radius:14px;display:flex;flex-direction:column;max-height:96vh;overflow:hidden;position:relative;}
 .modal-hdr{padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.75rem;flex-shrink:0;}
 .modal-hdr h2{font-family:'Press Start 2P',monospace;font-size:.55rem;letter-spacing:.1em;color:var(--accent2);flex:1;}

@@ -8461,7 +8461,50 @@ def design_reviewer():
     return _design_reviewer or None
 
 
-def tool_design_review(a):
+def start_review_server(workspace, wait=12):
+    """The project's own web server, running, so a page can be judged as served.
+    (process, base url), or (None, "") when there is none or it will not answer."""
+    if not workspace or not _config.get("design_review_serve", True):
+        return None, ""
+    here = Path(__file__).resolve()
+    srv = find_web_server(workspace)
+    # ND reviewing its own pages must not boot a second ND.
+    if not srv or Path(workspace).resolve() == here.parent or srv.name == here.name:
+        return None, ""
+    try:
+        src = srv.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None, ""
+    # Ports that answer before the app starts belong to something else (serve_check).
+    named = {int(x) for x in re.findall(r"\b(\d{4,5})\b", src) if 1024 < int(x) < 65536}
+    taken = {x for x in named if _http_get(f"http://127.0.0.1:{x}/", timeout=1)[0] is not None}
+    s_ = socket.socket(); s_.bind(("127.0.0.1", 0)); port = s_.getsockname()[1]; s_.close()
+    env = dict(os.environ, PORT=str(port), VIZ_PORT=str(port), APP_PORT=str(port),
+               SERVER_PORT=str(port), HTTP_PORT=str(port), PYTHONUNBUFFERED="1")
+    proc = subprocess.Popen([_project_python(workspace), str(srv.resolve())], cwd=str(workspace),
+                            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    ports = [port] + sorted(named - taken - {port})[:4]
+    t0 = time.time()
+    while time.time() - t0 < wait and proc.poll() is None:
+        for pt in ports:
+            if _http_get(f"http://127.0.0.1:{pt}/", timeout=2)[0] is not None:
+                return proc, f"http://127.0.0.1:{pt}"
+        time.sleep(0.5)
+    log(f"design_review: {srv.name} did not answer, so the page is not judged as it serves it", "warn")
+    stop_review_server(proc)
+    return None, ""
+
+
+def stop_review_server(proc):
+    if proc:
+        try:
+            proc.kill(); proc.wait(timeout=10)
+        except Exception:
+            pass
+
+
+def tool_design_review(a, workspace=None):
     """Render an HTML file and tell the model what it ACTUALLY looks like.
 
     The agent has always written UI blind: emit HTML, never look, declare
@@ -8517,7 +8560,12 @@ def tool_design_review(a):
         # parked on the thread. Handing it to the reviewer is what turns
         # "needs more hover states" into "this is not the app any more".
         source = str(a.get("source") or "") or getattr(_job_ctx, "reskin_src", "")
-        res = dr.review(path, brief=brief, vision_fn=_vision, source_path=source or None)
+        _srv_proc, _srv_url = start_review_server(workspace)
+        try:
+            res = dr.review(path, brief=brief, vision_fn=_vision, source_path=source or None,
+                            server_url=_srv_url)
+        finally:
+            stop_review_server(_srv_proc)
         # Publish the contrast verdict for the iteration gate. It is measured in
         # a real browser and cannot be re-derived from the file, so if it does
         # not travel from here it is lost -- and the loop would go on finishing
@@ -13615,7 +13663,7 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                     log("design_review refused - tests are failing", "warn")
                     return ("[FIX TESTS FIRST] " + _tests_failing["v"] + " Design review waits "
                             "until they pass. Edit the code under test, then run the tests again.")
-                return tool_design_review(a)
+                return tool_design_review(a, workspace)
             if name == "web_fetch":    return "[WEB] " + web_fetch(a.get("url",""))
             if name == "web_search":   return "[WEB] " + web_search(a.get("query",""))
             if name == "update_plan":  return tool_update_plan(session_id, a.get("steps"))

@@ -31,14 +31,21 @@ gracefully when it is not.
 
 from __future__ import annotations
 
+import contextlib
 import html as html_lib
 import json
+import mimetypes
 import os
 import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -369,15 +376,8 @@ _ASSET_RE = re.compile(
     r"""<(?:link[^>]+href|script[^>]+src|img[^>]+src)\s*=\s*["']([^"']+)["']""", re.I)
 
 
-def dead_assets(html: str, base_dir: Path) -> list[dict]:
-    """Local stylesheets, scripts and images referenced but not present on disk.
-
-    This is the check that would have caught the worst failure this tool was
-    built for: a page whose <link rel=stylesheet> pointed at a CSS file that was
-    never written. It rendered as unstyled Times New Roman on white -- and both
-    a text model reading the HTML and a vision model looking at the screenshot
-    called it fine. The HTML was perfect. The stylesheet simply was not there.
-    """
+def _local_refs(html: str) -> list[str]:
+    """The stylesheets, scripts and images a page names on its own host."""
     # Scan only real markup. A <script> block full of template literals like
     # `<img src="${game.image}">` is code that BUILDS markup at runtime, not a
     # reference to a file on disk -- reporting it as a dead asset sends the
@@ -394,6 +394,196 @@ def dead_assets(html: str, base_dir: Path) -> list[dict]:
         # Any remaining templating syntax is resolved at runtime, not by us.
         if "${" in r or "{{" in r or "<%" in r or r.startswith("{"):
             continue
+        out.append(r)
+    return out
+
+
+# ─── Judging a page as it is served ───────────────────────────────────────────
+# A path like /live/viz.js means "from the root of whatever serves this page".
+# Over file:// it means the root of the DRIVE, so the page came up without its
+# scripts and every one of them was reported dead. Measured 2026-11-02 on the
+# Philibert page: a worker called those findings false positives and refused to
+# act; a later one believed them and rewrote the paths to relative, which 404 on
+# a Slim drive, where the launcher serves that same page at "/".
+
+_BODY_ROOT_RE = re.compile(
+    r"""url\(\s*["']?/(?!/)|\bfrom\s*["']/(?!/)|\bimport\s*\(?\s*["']/(?!/)|\bfetch\(\s*["'`]/(?!/)""")
+_WORKSPACE_MARKERS = (".git", ".foreman", "package.json", "pyproject.toml", "requirements.txt")
+# Windows answers guess_type() from the registry, which can call a .js file
+# text/plain, and a browser refuses to run a module sent as that.
+_SERVED_TYPES = {".html": "text/html; charset=utf-8", ".htm": "text/html; charset=utf-8",
+                 ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
+                 ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".woff2": "font/woff2",
+                 ".woff": "font/woff", ".json": "application/json; charset=utf-8", ".png": "image/png"}
+_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".avif", ".bmp"}
+# What a render can only say about the page if its stylesheets and scripts loaded.
+_RENDER_CODES = {"blank-render", "empty-dom", "styles-not-applied", "contrast-fail",
+                 "contrast-regression", "layout-regression"}
+
+
+def needs_server(html: str) -> bool:
+    """Does this page name anything from the server's root?"""
+    return (any(r.startswith("/") for r in _local_refs(html))
+            or bool(_BODY_ROOT_RE.search(html)))
+
+
+def _workspace_root(base_dir: Path) -> Path:
+    """The project a page lives in. Just its own folder when no marker says more:
+    this bounds what the stand-in server will read, so it must never reach a drive
+    root by accident."""
+    base = Path(base_dir).resolve()
+    for d in [base] + list(base.parents)[:4]:
+        if any((d / m).exists() for m in _WORKSPACE_MARKERS):
+            return d
+    return base
+
+
+def _resolve_served(url_path: str, base_dir: Path) -> Optional[Path]:
+    """The file a root path most likely names, or None.
+
+    Nothing here knows the real server's routes, and the prefix is what differs:
+    the launcher serves live/static as /live, so /live/fonts/fonts.css is the file
+    fonts/fonts.css beside the page. So try the path whole, then with its leading
+    folders dropped, from the page's folder up to the workspace root.
+    """
+    path = urllib.parse.unquote(url_path.split("?")[0].split("#")[0])
+    parts = [x for x in path.split("/") if x and x != "."]
+    if not parts or ".." in parts:
+        return None
+    base = Path(base_dir).resolve()
+    root = _workspace_root(base)
+    dirs = [base] + ([] if root == base else list(base.parents)[:base.parents.index(root) + 1])
+    for n in range(len(parts)):
+        for d in dirs:
+            f = d.joinpath(*parts[n:])
+            try:
+                if f.is_file() and f.resolve().is_relative_to(root):
+                    return f.resolve()
+            except OSError:
+                continue
+    return None
+
+
+def _http_get(url: str, timeout: float = 5) -> tuple:
+    """(status, body bytes). Status None when nothing answered."""
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            return r.status, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, b""
+    except Exception:
+        return None, b""
+
+
+def _same_page(served: str, source: str) -> bool:
+    """Is this response the file? Lines rather than bytes: a server may rewrite a
+    title (the launcher does), and a catch-all 404 page must not count."""
+    a = {x.strip() for x in served.splitlines() if x.strip()}
+    b = {x.strip() for x in source.splitlines() if x.strip()}
+    return bool(a and b) and len(a & b) / len(a | b) >= 0.8
+
+
+def _inject(html: str, script: str) -> str:
+    idx = html.lower().rfind("</body>")
+    return (html[:idx] + script + html[idx:]) if idx > 0 else html + script
+
+
+class _PageHandler(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def _send(self, code, body, ctype):
+        self.send_response(code)
+        # A server that names no type stays that way: inventing one makes the
+        # browser refuse a stylesheet the real server would have had applied.
+        if ctype:
+            self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _forward(self):
+        s = self.server
+        data = self.rfile.read(int(self.headers.get("Content-Length") or 0)) or None
+        headers = {"Content-Type": self.headers["Content-Type"]} if self.headers.get("Content-Type") else {}
+        req = urllib.request.Request(s.upstream.rstrip("/") + self.path, data=data,
+                                     headers=headers, method=self.command)
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                self._send(r.status, r.read(), r.headers.get("Content-Type", ""))
+        except urllib.error.HTTPError as e:
+            self._send(e.code, e.read(), e.headers.get("Content-Type", ""))
+        except OSError:
+            self._send(502, b"", "text/plain")
+
+    def do_GET(self):
+        s = self.server
+        path = urllib.parse.urlsplit(self.path).path
+        if path == s.route:
+            self._send(200, s.body, "text/html; charset=utf-8")
+        elif s.upstream:
+            self._forward()
+        else:
+            f = _resolve_served(path, s.base_dir)
+            if f:
+                self._send(200, f.read_bytes(), _SERVED_TYPES.get(f.suffix.lower())
+                           or mimetypes.guess_type(f.name)[0] or "application/octet-stream")
+            else:
+                self._send(404, b"", "text/plain")
+
+    def do_POST(self):
+        if self.server.upstream:
+            self._forward()
+        else:
+            self._send(404, b"", "text/plain")
+
+
+class _PageServer(ThreadingHTTPServer):
+    """One page at one route, for one browser launch, on loopback only.
+
+    It always sits in front, even of a project's real server: the audits have to
+    put a script in the page, and only this can do that without touching the file
+    or the project. With no real server it reads the workspace instead.
+    """
+    daemon_threads = True
+
+    def __init__(self, route, body, base_dir, upstream=""):
+        super().__init__(("127.0.0.1", 0), _PageHandler)
+        self.route, self.body, self.base_dir, self.upstream = route, body, base_dir, upstream
+
+    def handle_error(self, request, client_address):
+        pass           # the browser hanging up mid-response is not worth a traceback
+
+
+def dead_assets(html: str, base_dir: Path, served_url: str = "") -> list[dict]:
+    """Local stylesheets, scripts and images referenced but not present on disk.
+
+    This is the check that would have caught the worst failure this tool was
+    built for: a page whose <link rel=stylesheet> pointed at a CSS file that was
+    never written. It rendered as unstyled Times New Roman on white -- and both
+    a text model reading the HTML and a vision model looking at the screenshot
+    called it fine. The HTML was perfect. The stylesheet simply was not there.
+
+    `served_url` is where the project's real server has this page. Then the server
+    is the authority, and a 404 from it is a fact about relative paths too. Without
+    one, a root path is only broken if someone can say so, and nobody here can.
+    """
+    out = []
+    unchecked = []
+    for r in _local_refs(html):
+        if served_url:
+            code, _ = _http_get(urllib.parse.urljoin(served_url, r))
+            if code not in (None, 200):
+                out.append({"level": "error", "code": "dead-asset",
+                            "msg": (f"{r} answers {code} when the page is served at "
+                                    f"{urllib.parse.urlsplit(served_url).path}. Point it at a "
+                                    "path the server answers, or add the route.")})
+            continue
+        if r.startswith("/"):
+            if not _resolve_served(r, base_dir):
+                unchecked.append(r)
+            continue
         target = (base_dir / r.split("?")[0].split("#")[0]).resolve()
         if target.exists():
             continue
@@ -408,6 +598,12 @@ def dead_assets(html: str, base_dir: Path) -> list[dict]:
             why = "It will render as a broken-image placeholder."
         out.append({"level": "error", "code": "dead-asset",
                     "msg": f"Referenced file does not exist: {r}. {why}"})
+    if unchecked:
+        out.append({"level": "warn", "code": "asset-unchecked", "refs": unchecked,
+                    "msg": (f"Not checked: {', '.join(unchecked[:6])}. These paths start from "
+                            "the root of whatever serves the page, no server is available here, "
+                            "and no file in this workspace matches them. That is not a fault in "
+                            "the page: leave these paths as they are.")})
     return out
 
 
@@ -454,7 +650,7 @@ def looks_unstyled(html: str, palette: list) -> Optional[dict]:
         return {"level": "error", "code": "styles-not-applied",
                 "msg": ("A stylesheet is linked but the render is "
                         f"{int(palette[0][1]*100)}% plain white — the CSS is not being applied. "
-                        "Check the href resolves relative to this file.")}
+                        "Check the href points at a file that exists.")}
     return None
 
 
@@ -609,10 +805,77 @@ class DesignReview:
         self.last_error = ""
         # Keyed by (kind, path, mtime, size) -- see _audit_cached().
         self._audit_cache = {}
+        # This job's server. Per thread: the launcher shares one reviewer.
+        self._job = threading.local()
 
     # -- rendering ---------------------------------------------------------
     def available(self) -> bool:
         return bool(self.browser)
+
+    def _route_on_server(self, p: Path) -> str:
+        """The route where this job's server has this file, or "". Asked, not
+        assumed: a project's server may serve a page at "/" or under a prefix."""
+        server = getattr(self._job, "server_url", "")
+        if not server:
+            return ""
+        routes = self._job.routes
+        key = str(p)
+        if key not in routes:
+            source = p.read_text(encoding="utf-8", errors="replace")
+            parts = p.parts[-4:]
+            tries = ["/" + "/".join(parts[i:]) for i in range(len(parts))]
+            if p.stem.lower() == "index":
+                tries += ["/" + "/".join(parts[i:-1]) + "/" for i in range(len(parts) - 1)] + ["/"]
+            routes[key] = ""
+            for route in tries:
+                code, body = _http_get(server.rstrip("/") + route)
+                if code == 200 and _same_page(body.decode("utf-8", "replace"), source):
+                    routes[key] = route
+                    break
+        return routes[key]
+
+    @contextlib.contextmanager
+    def _page_url(self, html_path, script="", tag="probe"):
+        """The URL to open this page at, with `script` in it, and never in the file.
+
+        The project's server if it has this page; a stand-in reading the workspace
+        if the page names paths from a server's root; otherwise the plain file.
+        """
+        p = Path(str(html_path)).resolve()
+        html = p.read_text(encoding="utf-8", errors="replace")
+        route = self._route_on_server(p)
+        upstream = ""
+        if route:
+            upstream = self._job.server_url
+            code, body = _http_get(upstream.rstrip("/") + route)
+            if code == 200:
+                html = body.decode("utf-8", "replace")
+        elif needs_server(html):
+            route = "/" + urllib.parse.quote(p.name)
+        else:
+            if not script:
+                yield p.as_uri()
+                return
+            # A throwaway copy in the SAME directory -- relative assets
+            # (stylesheets, fonts, images) have to keep resolving -- and a copy
+            # because reviewing a file must never modify it.
+            probe = p.with_name(f".nd-{tag}-{os.getpid()}-{p.name}")
+            try:
+                probe.write_text(_inject(html, script), encoding="utf-8")
+                yield probe.as_uri()
+            finally:
+                try:
+                    probe.unlink()
+                except OSError:
+                    pass
+            return
+        srv = _PageServer(route, _inject(html, script).encode("utf-8"), p.parent, upstream)
+        threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.1}, daemon=True).start()
+        try:
+            yield f"http://127.0.0.1:{srv.server_address[1]}{route}"
+        finally:
+            srv.shutdown()
+            srv.server_close()
 
     def render(self, html_path, viewports=None) -> list[dict]:
         """Screenshot the file at each viewport. Returns [{label, w, h, png, ok}]."""
@@ -625,37 +888,37 @@ class DesignReview:
                                "neuraldock_config.json to a chrome.exe or msedge.exe path")
             return []
         self.out_dir.mkdir(parents=True, exist_ok=True)
-        url = p.resolve().as_uri()
         shots = []
-        for label, w, h in (viewports or DEFAULT_VIEWPORTS):
-            png = self.out_dir / f"{p.stem}-{label}-{int(time.time())}.png"
-            # A throwaway profile per run: without it a running Chrome instance
-            # hijacks the invocation and the screenshot silently never appears.
-            with tempfile.TemporaryDirectory(prefix="nd-shot-") as profile:
-                cmd = [
-                    self.browser,
-                    "--headless=new", "--disable-gpu", "--hide-scrollbars",
-                    "--no-first-run", "--no-default-browser-check",
-                    "--disable-extensions", "--mute-audio",
-                    f"--user-data-dir={profile}",
-                    f"--window-size={w},{h}",
-                    # let webfonts, images and any entry script actually finish
-                    "--virtual-time-budget=6000",
-                    f"--screenshot={png}",
-                    url,
-                ]
-                try:
-                    r = subprocess.run(cmd, capture_output=True, timeout=self.timeout)
-                    err = (r.stderr or b"").decode("utf-8", "replace")
-                except subprocess.TimeoutExpired:
-                    err = f"render timed out after {self.timeout}s"
-                except Exception as e:
-                    err = str(e)
-            ok = png.exists() and png.stat().st_size > 0
-            shots.append({"label": label, "w": w, "h": h, "png": str(png),
-                          "ok": ok, "err": "" if ok else err[:400]})
-            self.log(f"design_review: {label} {w}x{h} -> {'ok' if ok else 'FAILED'}",
-                     "ok" if ok else "warn")
+        with self._page_url(p) as url:
+            for label, w, h in (viewports or DEFAULT_VIEWPORTS):
+                png = self.out_dir / f"{p.stem}-{label}-{int(time.time())}.png"
+                # A throwaway profile per run: without it a running Chrome instance
+                # hijacks the invocation and the screenshot silently never appears.
+                with tempfile.TemporaryDirectory(prefix="nd-shot-") as profile:
+                    cmd = [
+                        self.browser,
+                        "--headless=new", "--disable-gpu", "--hide-scrollbars",
+                        "--no-first-run", "--no-default-browser-check",
+                        "--disable-extensions", "--mute-audio",
+                        f"--user-data-dir={profile}",
+                        f"--window-size={w},{h}",
+                        # let webfonts, images and any entry script actually finish
+                        "--virtual-time-budget=6000",
+                        f"--screenshot={png}",
+                        url,
+                    ]
+                    try:
+                        r = subprocess.run(cmd, capture_output=True, timeout=self.timeout)
+                        err = (r.stderr or b"").decode("utf-8", "replace")
+                    except subprocess.TimeoutExpired:
+                        err = f"render timed out after {self.timeout}s"
+                    except Exception as e:
+                        err = str(e)
+                ok = png.exists() and png.stat().st_size > 0
+                shots.append({"label": label, "w": w, "h": h, "png": str(png),
+                              "ok": ok, "err": "" if ok else err[:400]})
+                self.log(f"design_review: {label} {w}x{h} -> {'ok' if ok else 'FAILED'}",
+                         "ok" if ok else "warn")
         return shots
 
     def dump_dom(self, html_path) -> str:
@@ -665,11 +928,12 @@ class DesignReview:
             return ""
         p = Path(str(html_path))
         with tempfile.TemporaryDirectory(prefix="nd-dom-") as profile:
-            cmd = [self.browser, "--headless=new", "--disable-gpu", "--no-first-run",
-                   f"--user-data-dir={profile}", "--virtual-time-budget=6000",
-                   "--dump-dom", p.resolve().as_uri()]
             try:
-                r = subprocess.run(cmd, capture_output=True, timeout=self.timeout)
+                with self._page_url(p) as url:
+                    cmd = [self.browser, "--headless=new", "--disable-gpu", "--no-first-run",
+                           f"--user-data-dir={profile}", "--virtual-time-budget=6000",
+                           "--dump-dom", url]
+                    r = subprocess.run(cmd, capture_output=True, timeout=self.timeout)
                 return (r.stdout or b"").decode("utf-8", "replace")
             except Exception:
                 return ""
@@ -769,24 +1033,16 @@ class DesignReview:
             return None, "no browser"
         if not p.is_file():
             return None, "file not found"
-        # The script must run INSIDE the page, so append it to a throwaway copy
-        # in the SAME directory -- relative assets (stylesheets, fonts, images)
-        # have to keep resolving -- and a copy because reviewing a file must
-        # never modify it.
-        probe = p.with_name(f".nd-{marker.strip('_')}-{os.getpid()}-{p.name}")
+        # The script must run INSIDE the page; _page_url puts it there.
         try:
-            html = p.read_text(encoding="utf-8", errors="replace")
-            idx = html.lower().rfind("</body>")
-            probe.write_text(
-                (html[:idx] + script + html[idx:]) if idx > 0 else html + script,
-                encoding="utf-8")
             with tempfile.TemporaryDirectory(prefix="nd-audit-") as profile:
-                cmd = [self.browser, "--headless=new", "--disable-gpu",
-                       "--no-first-run", f"--user-data-dir={profile}",
-                       f"--window-size={int(width)},{int(height)}",
-                       "--virtual-time-budget=6000",
-                       "--dump-dom", probe.resolve().as_uri()]
-                r = subprocess.run(cmd, capture_output=True, timeout=self.timeout)
+                with self._page_url(p, script, marker.strip("_")) as url:
+                    cmd = [self.browser, "--headless=new", "--disable-gpu",
+                           "--no-first-run", f"--user-data-dir={profile}",
+                           f"--window-size={int(width)},{int(height)}",
+                           "--virtual-time-budget=6000",
+                           "--dump-dom", url]
+                    r = subprocess.run(cmd, capture_output=True, timeout=self.timeout)
                 dom = (r.stdout or b"").decode("utf-8", "replace")
             # Anchor on the DIV, not the bare id. The script's own source is
             # serialised into the dump too and contains the literal
@@ -800,15 +1056,10 @@ class DesignReview:
             return json.loads(html_lib.unescape(ms[-1].group(1))), ""
         except Exception as e:
             return None, f"{type(e).__name__}: {e}"
-        finally:
-            try:
-                probe.unlink()
-            except OSError:
-                pass
 
     # -- the full pass -----------------------------------------------------
     def review(self, html_path, brief: str = "", vision_fn: Optional[Callable] = None,
-               viewports=None, source_path=None) -> dict:
+               viewports=None, source_path=None, server_url: str = "") -> dict:
         """Render, check, critique. `vision_fn(b64_png, prompt) -> str` is injected
         so this module never needs to know how ND talks to Ollama.
 
@@ -816,7 +1067,16 @@ class DesignReview:
         the output is compared against it before anything else is judged --
         because a page that no longer contains the application is not a design
         problem, and every aesthetic finding below it is beside the point.
+
+        `server_url` is the project's own server, already running, when it has one.
         """
+        self._job.server_url, self._job.routes = server_url, {}
+        try:
+            return self._review(html_path, brief, vision_fn, viewports, source_path)
+        finally:
+            self._job.server_url, self._job.routes = "", {}
+
+    def _review(self, html_path, brief, vision_fn, viewports, source_path) -> dict:
         import base64
 
         p = Path(str(html_path))
@@ -828,9 +1088,13 @@ class DesignReview:
 
         html = p.read_text(encoding="utf-8", errors="replace")
         dom = self.dump_dom(p)
+        route = self._route_on_server(p.resolve())
+        served_url = self._job.server_url.rstrip("/") + route if route else ""
+        result["served"] = (f"by the project's server, at {route}" if route else
+                            "by a stand-in reading this workspace" if needs_server(html) else "")
         # Dead assets first: a missing stylesheet explains every other symptom,
         # and nothing below is worth reading until it is fixed.
-        result["findings"] = (dead_assets(html, p.resolve().parent)
+        result["findings"] = (dead_assets(html, p.resolve().parent, served_url)
                               + static_checks(html, dom)
                               + state_checks(html, dom))
         result["states"] = state_summary(html, dom)
@@ -1035,6 +1299,19 @@ class DesignReview:
             result["findings"].remove(_pres)
             result["findings"].insert(0, _pres)
 
+        # A stylesheet or script nobody could load explains these, so they cannot
+        # stand as facts about the page. The code changes too, or the iteration
+        # gate would go on holding the turn open over them.
+        _absent = [r for f in result["findings"] if f.get("code") == "asset-unchecked"
+                   for r in f["refs"]
+                   if Path(r.split("?")[0].split("#")[0]).suffix.lower() not in _IMAGE_EXTS]
+        if _absent:
+            for f in result["findings"]:
+                if f["code"] in _RENDER_CODES:
+                    f.update(level="warn", code="unverified-" + f["code"],
+                             msg=(f"{f['msg']} (Unverified: this render ran without "
+                                  f"{', '.join(_absent[:3])}, which only a server can supply.)"))
+
         if vision_fn:
             pal_str = ", ".join(f"{h} ({int(s*100)}%)" for h, s in palette) or "not measured"
             brief_block = (BRIEF_BLOCK.format(brief=brief.strip(), palette=pal_str)
@@ -1059,6 +1336,8 @@ class DesignReview:
         if not result.get("ok"):
             return f"[design_review failed: {result.get('error', 'unknown error')}]"
         lines = [f"[DESIGN REVIEW of {Path(result['file']).name}]"]
+        if result.get("served"):
+            lines.append("Opened as served, " + result["served"] + ".")
 
         shots = [s for s in result.get("shots", []) if s["ok"]]
         if shots:
