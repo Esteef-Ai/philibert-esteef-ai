@@ -21,7 +21,8 @@
       const seen = list(() => w.navigator.getGamepads());
       if (seen.length > pads.length) pads = seen;
     }
-    for (const g of pads) {
+    for (let g of pads) {
+      if (window.RVHat) g = RVHat.fix(g);       // the page around us may hand over a pad as the browser reports it
       // the Discord talk button belongs to Discord: the game doesn't see it
       let talk = -1;
       try { talk = window.parent.RVPads.pttButton(g); } catch (e) { /* not set up */ }

@@ -83,8 +83,16 @@
     if (/057e|pro controller|joy-?con/.test(id)) return "nin";
     return "xbox";
   }
+  const DPAD_BTN = ["DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT"];
+  const hatOf = padId => (window.RVHat && RVHat.known[padId]) || null;      // its D-pad is a hat (rvhat.js)
+  // this button on the drawing of your controller
+  function drawn(i, gp) {
+    const h = gp && hatOf(gp.id);
+    return h && i >= h.base && i < h.base + 4 ? 12 + i - h.base : i;
+  }
   function buttonName(i, gp) {
-    const f = family(gp);
+    const f = family(gp), h = gp && hatOf(gp.id);
+    if (h && i >= h.base && i < h.base + 4) return ["D-pad up", "D-pad down", "D-pad left", "D-pad right"][i - h.base];
     return f === "raw" ? "Button " + i : (NAMES[f][i] || "Button " + i);
   }
   function labelIndex(label) {
@@ -169,8 +177,15 @@
     return n && DATA.profiles[n] ? n : DEFAULT;
   };
   function mapFor(padId, sys) {
-    const own = DATA.profiles[profileOf(padId)].maps[sys];
-    return Object.assign(defaults(sys), own || {});
+    const own = DATA.profiles[profileOf(padId)].maps[sys], base = defaults(sys), h = hatOf(padId);
+    if (h && h.base !== 12) Object.keys(base).forEach(id => {
+      const k = DPAD_BTN.indexOf(base[id]);
+      if (k >= 0) base[id] = btnLabel(h.base + k);
+    });
+    const out = Object.assign({}, base, own || {});
+    // a mapping saved from the old one-axis D-pad goes back to the D-pad
+    if (h) Object.keys(out).forEach(id => { const a = parseAxis(out[id]); if (a && a.axis === h.axis) out[id] = base[id] || ""; });
+    return out;
   }
 
   // ── into the emulator ──────────────────────────────────────────────────────────
@@ -358,7 +373,7 @@ body:has(#ctrl-modal.open) #emu-restore-bar{left:1rem!important;right:auto!impor
       document.querySelectorAll(".rp-y.hover,.rp-c.hover").forEach(x => x.classList.remove("hover"));
       const el = e.target.closest("[data-id]"); if (!el) return;
       document.querySelectorAll(`.rp-c[data-id="${el.dataset.id}"]`).forEach(x => x.classList.add("hover"));
-      const m = mapFor(padIdOf(curPad()), sys)[el.dataset.id], i = labelIndex(m);
+      const m = mapFor(padIdOf(curPad()), sys)[el.dataset.id], i = drawn(labelIndex(m), curPad());
       const a = parseAxis(m), b = i >= 0 ? i : a && a.axis < 4 ? (a.axis < 2 ? 10 : 11) : -1;
       if (b >= 0) document.querySelectorAll(`.rp-y[data-b="${b}"]`).forEach(x => x.classList.add("hover"));
     };
@@ -440,7 +455,7 @@ body:has(#ctrl-modal.open) #emu-restore-bar{left:1rem!important;right:auto!impor
     const map = mapFor(padIdOf(gp), sys), said = [];
     gp.buttons.forEach((b, i) => {
       if (!(b.pressed || b.value > PRESS)) return;
-      document.querySelectorAll(`.rp-y[data-b="${i}"]`).forEach(x => x.classList.add("on"));
+      document.querySelectorAll(`.rp-y[data-b="${drawn(i, gp)}"]`).forEach(x => x.classList.add("on"));
       said.push(buttonName(i, gp) + (family(gp) === "raw" ? "" : ` (button ${i})`));
     });
     gp.axes.forEach((v, i) => {
