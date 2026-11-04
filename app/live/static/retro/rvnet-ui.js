@@ -133,10 +133,10 @@
           <option value="lockstep"${stream ? "" : " selected"}>Everyone runs it (in sync)</option>
           <option value="stream"${stream ? " selected" : ""}>Host streams it</option></select>
           <span class="ol-dim">${R.game && STREAM_ONLY.includes(R.game.system) ? "N64 is always streamed" : ""}</span></div>
-        <div class="ol-row" style="margin-top:10px"><span class="ol-dim">Input delay</span>
+        <div class="ol-row" style="margin-top:10px">${stream ? "" : `<span class="ol-dim">Input delay</span>
           <select id="ol-delay" title="How far ahead each press is played. Too small for the slowest player's lag and the game keeps pausing.">
             <option value="auto"${R.auto ? " selected" : ""}>Auto - ${R.autoDelay || R.delay} frames (${Math.round((R.autoDelay || R.delay) * 16.7)} ms)</option>
-            ${[2, 3, 4, 5, 6, 8, 10, 12, 15].map(n => `<option value="${n}"${!R.auto && n === R.delay ? " selected" : ""}>${n} frames (${Math.round(n * 16.7)} ms)</option>`).join("")}</select>
+            ${[2, 3, 4, 5, 6, 8, 10, 12, 15].map(n => `<option value="${n}"${!R.auto && n === R.delay ? " selected" : ""}>${n} frames (${Math.round(n * 16.7)} ms)</option>`).join("")}</select>`}
           <button class="btn-primary" id="ol-start" style="margin-left:auto"${allOk ? "" : " disabled"}>Start match</button></div>
         ${R.auto && !stream ? `<div class="ol-row"><span class="ol-dim">Feel</span>
           <select id="ol-feel" title="Auto delay plus 0, 1 or 2 frames: a little more delay means fewer pauses when the connection hiccups">

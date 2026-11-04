@@ -85,6 +85,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
    so box art never appeared (the original Retro Vault too). Laid out, invisible, faded in. */
 .game-art img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .25s;border-radius:8px;z-index:1;}
 .game-art img.loaded{opacity:1;}
+.fav-badge{position:absolute;top:6px;right:6px;z-index:1;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#000c;color:#ffd54a;font-size:15px;line-height:1;pointer-events:none;}
+.fav-inline{margin-left:.4rem;color:#ffd54a;}
+#detail-fav-btn.on{color:#ffd54a;border-color:rgba(255,213,74,.55);}
 .mp-badge{position:absolute;bottom:8px;left:8px;z-index:1;padding:5px 11px;border-radius:7px;background:#ffd54a;border:2px solid #000;color:#000;font-size:1.3rem;font-weight:900;line-height:1;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.75);}
 .mp-inline{margin-left:.5rem;padding:1px 7px;border-radius:5px;background:#ffd54a;color:#000;font-size:.82rem;font-weight:900;white-space:nowrap;}
 .sys-badge{position:absolute;top:6px;left:6px;font-family:'Press Start 2P',monospace;font-size:.38rem;padding:2px 5px;border-radius:3px;letter-spacing:.04em;color:#fff;}
@@ -711,6 +714,7 @@ body:has(#emu-modal.open) .app{display:none;}
       <div class="detail-desc" id="detail-desc" style="display:none"></div>
     </div>
     <div class="modal-footer">
+      <button class="btn-ghost" id="detail-fav-btn"></button>
       <button class="btn-ghost" id="detail-hide-btn" title="Take it out of the library. Toolbar → Hidden &amp; Trash shows it again.">Hide</button>
       <button class="btn-ghost" id="detail-trash-btn" style="color:#ff7070;border-color:rgba(255,80,80,.35)" title="Move the ROM file to the Trash (restore it later from Hidden &amp; Trash)">Delete</button>
       <button class="btn-ghost" data-close="detail-modal" style="margin-left:auto">Close</button>
@@ -1037,6 +1041,7 @@ const SYS_MAP=Object.fromEntries(SYSTEMS.map(s=>[s.id,s]));
 function padSystem(g){ return g&&g.system==="SMS"&&!/\.(sms|gg|sg)(\.zip)?$/i.test(g.filename||"") ? "Genesis" : (g&&g.system); }
 
 let LIBRARY=[],folderHandles={},activeSystem="All",viewMode="grid",sortKey="name",searchQ="",detailIdx=-1,activeGameIdx=-1;
+let FAVS=new Set();   // favorite games, as "system/filename"
 let CFG={port:8088,hostOverride:"",romBaseUrl:"/retro/roms",netplayPort:3000,autoMeta:true,showZipBadge:true,autoStart:false,ejsUrl:"/retro/emulator/",artMode:"box"};
 let VCFG={filter:"none",aspect:"4/3",brightness:100,contrast:100,saturation:100};
 const DEF_CTRL={Up:"ArrowUp",Down:"ArrowDown",Left:"ArrowLeft",Right:"ArrowRight",A:"z",B:"x",X:"a",Y:"s",L:"q",R:"w",Start:"Enter",Select:"Shift",GP_A:"button_0",GP_B:"button_1",GP_X:"button_2",GP_Y:"button_3",GP_L:"button_4",GP_R:"button_5",GP_Start:"button_9",GP_Select:"button_8"};
@@ -1378,6 +1383,7 @@ function buildSidebar(){
   const counts={All:LIBRARY.length};
   LIBRARY.forEach(g=>{counts[g.system]=(counts[g.system]||0)+1;});
   let html=`<div class="sys-nav-item${activeSystem==="All"?" active":""}" data-sys="All"><span class="sys-dot" style="background:var(--accent2)"></span>All Systems<span class="sys-count-badge">${counts.All}</span></div>`;
+  html+=`<div class="sys-nav-item${activeSystem==="Favorites"?" active":""}" data-sys="Favorites"><span style="width:8px;text-align:center;color:#ffd54a;line-height:1">★</span>Favorites<span class="sys-count-badge">${LIBRARY.filter(isFav).length}</span></div>`;
   SYSTEMS.forEach(s=>{
     if(!counts[s.id])return;
     html+=`<div class="sys-nav-item${activeSystem===s.id?" active":""}" data-sys="${s.id}"><span class="sys-dot" style="background:${s.color}"></span>${s.label}<span class="sys-count-badge">${counts[s.id]}</span></div>`;
@@ -1386,11 +1392,39 @@ function buildSidebar(){
   document.querySelectorAll(".sys-nav-item").forEach(el=>{
     el.addEventListener("click",()=>{
       activeSystem=el.dataset.sys;
-      document.getElementById("content-title").textContent=activeSystem==="All"?"ALL GAMES":(SYS_MAP[activeSystem]?.label||activeSystem).toUpperCase();
+      document.getElementById("content-title").textContent=activeSystem==="All"?"ALL GAMES":activeSystem==="Favorites"?"FAVORITES":(SYS_MAP[activeSystem]?.label||activeSystem).toUpperCase();
       buildSidebar();renderGames();
     });
   });
 }
+
+// Favorites: on the drive, so they travel with it (this computer's copy if the server can't save them yet)
+const favKey=g=>g.system+"/"+g.filename;
+const isFav=g=>FAVS.has(favKey(g));
+function loadFavs(){
+  return fetch("/retro/api/favorites").then(r=>r.ok?r.json():null).catch(()=>null).then(d=>{
+    if(!d||!Array.isArray(d.games)){ try{ d=JSON.parse(localStorage.getItem("rv_favorites")); }catch(e){ d=null; } }
+    if(d&&Array.isArray(d.games)){ FAVS=new Set(d.games); buildSidebar(); renderGames(); if(detailIdx>=0) showFav(); }
+  });
+}
+function saveFavs(){
+  const body=JSON.stringify({games:[...FAVS]});
+  try{ localStorage.setItem("rv_favorites",body); }catch(e){ /* the drive has it */ }
+  fetch("/retro/api/favorites",{method:"POST",body}).then(r=>{ if(!r.ok) throw new Error(r.status); })
+    .catch(()=>toast("Saved on this computer only: restart Philibert to save favorites to the drive",true));
+}
+function showFav(){
+  const g=LIBRARY[detailIdx], btn=document.getElementById("detail-fav-btn"), on=!!g&&isFav(g);
+  btn.textContent=on?"★ Favorite":"☆ Favorite";
+  btn.classList.toggle("on",on);
+  btn.setAttribute("aria-pressed",on);
+  btn.title=on?"In your favorites. Click to take it out.":"Add to your favorites. Favorites in the sidebar shows them all.";
+}
+document.getElementById("detail-fav-btn").onclick=()=>{
+  const g=LIBRARY[detailIdx]; if(!g) return;
+  if(isFav(g)) FAVS.delete(favKey(g)); else FAVS.add(favKey(g));
+  saveFavs(); showFav(); buildSidebar(); renderGames();
+};
 
 // Multiplayer games: the player counts of each shelf, asked for once per visit
 const PLAYERS={};
@@ -1408,7 +1442,7 @@ function renderGames(){
   const gridEl=document.getElementById("game-grid"),listEl=document.getElementById("game-list");
   const emptyEl=document.getElementById("empty-state"),noResEl=document.getElementById("no-results");
   let games=LIBRARY.filter(g=>{
-    const ms=activeSystem==="All"||g.system===activeSystem;
+    const ms=activeSystem==="All"||g.system===activeSystem||(activeSystem==="Favorites"&&isFav(g));
     const mq=!searchQ||g.title.toLowerCase().includes(searchQ)||(g.genre||"").toLowerCase().includes(searchQ)||g.system.toLowerCase().includes(searchQ)||String(g.year||"").includes(searchQ);
     return ms&&mq;
   });
@@ -1422,6 +1456,7 @@ function renderGames(){
   const isEmpty=LIBRARY.length===0,noMatch=!isEmpty&&games.length===0;
   emptyEl.classList.toggle("show",isEmpty);
   noResEl.style.display=noMatch?"flex":"none";
+  noResEl.querySelector(".empty-px").textContent=activeSystem==="Favorites"&&!searchQ?"NO FAVORITES YET - OPEN A GAME AND PRESS FAVORITE":"NO RESULTS FOUND";
   document.getElementById("content-count").textContent=isEmpty?"":(games.length===LIBRARY.length?`${games.length} games`:`${games.length} of ${LIBRARY.length}`);
   if(isEmpty||noMatch){gridEl.style.display="none";listEl.style.display="none";return;}
   if(viewMode==="grid"){
@@ -1438,6 +1473,7 @@ function renderGames(){
           <span style="position:absolute;opacity:${(g.coverBox||g.coverCart)?'0':'1'};transition:opacity .2s;font-size:3rem">${g.emoji||sys.emoji||'🎮'}</span>
           <span class="sys-badge" style="background:${sys.color||'#7c5cbf'}">${sysTag(g)}</span>
           ${playersOf(g)?`<span class="mp-badge" title="Up to ${playersOf(g)} players">${playersOf(g)}P</span>`:''}
+          ${isFav(g)?'<span class="fav-badge" title="Favorite">★</span>':''}
           <div class="play-overlay"><div class="play-circle"><svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg></div></div>
         </div>
         <div class="card-info">
@@ -1458,7 +1494,7 @@ function renderGames(){
       const idx=LIBRARY.indexOf(g),sys=SYS_MAP[g.system]||{};
       return`<div class="list-row" data-idx="${idx}" tabindex="0" role="button">
         <span class="list-num">${i+1}</span>
-        <span class="list-title">${g.title}${g.isZip&&CFG.showZipBadge?' <span style="font-size:.6rem;color:var(--dim)">[Z]</span>':""}${playersOf(g)?`<span class="mp-inline" title="Up to ${playersOf(g)} players">${playersOf(g)}P</span>`:""}</span>
+        <span class="list-title">${g.title}${g.isZip&&CFG.showZipBadge?' <span style="font-size:.6rem;color:var(--dim)">[Z]</span>':""}${playersOf(g)?`<span class="mp-inline" title="Up to ${playersOf(g)} players">${playersOf(g)}P</span>`:""}${isFav(g)?'<span class="fav-inline" title="Favorite">★</span>':""}</span>
         <span class="list-sys" style="background:${sys.color||"#7c5cbf"}">${sysTag(g)}</span>
         <span class="list-genre">${g.genre||"—"}</span>
         <span class="list-year">${g.year||"—"}</span>
@@ -1485,6 +1521,7 @@ function openDetail(idx){
   document.getElementById("detail-tags").innerHTML=`<span class="dtag" style="background:${sys.color||"var(--accent)"};color:#fff">${sysTag(g)}</span>${g.genre&&g.genre!=="Unknown"?`<span class="dtag" style="background:var(--surface3);color:var(--muted);border:1px solid var(--border2)">${g.genre}</span>`:""}${g.isZip?`<span class="dtag" style="background:var(--surface3);color:var(--dim);border:1px solid var(--border)">ZIP</span>`:""}`;
   const dd=document.getElementById("detail-desc");
   if(g.description){dd.textContent=g.description;dd.style.display="block";}else dd.style.display="none";
+  showFav();
   if(CFG.autoStart){launchGame(idx);return;}
   openModal("detail-modal");
 }
@@ -3614,6 +3651,7 @@ async function serverAutoLoad(){
     console.warn("[RV] serverAutoLoad error:",e.message);
   }
 }
+loadFavs();
 serverAutoLoad();
 
 // Box art: what is on the drive shows at once (one request, works offline); while the
