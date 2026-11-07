@@ -65,6 +65,8 @@
     if (has("band")) list.push({ id: "band", name: "Band Manager", icon: "band", url: "/band?embed=1", w: 1180, h: 760, title: "Philibert Band Manager" });
     if (has("yoteach")) list.push({ id: "yoteach", name: "Yo Teach", icon: "yoteach", url: "/yoteach?embed=1", w: 1240, h: 800, title: "Philibert Yo Teach" });
     if (has("board")) list.push({ id: "board", name: "Group Board", icon: "board", url: "/board", w: 1100, h: 760, title: "Group Board" });
+    if (has("boof")) list.push({ id: "boof", name: "Boof Launcher", icon: "app", img: "/live/desktop/boof-launcher.svg",
+                                 action: function () { api("/api/desktop", { op: "open_boof" }); } });
     if (has("feedback")) list.push({ id: "feedback", name: "Feedback Shooter", icon: "feedback", url: "/feedback", w: 900, h: 720, title: "Feedback Shooter" });
     var sh = THEMES[st.settings.theme] ? THEMES[st.settings.theme].shell : "taskbar";
     if (sh === "phone" || sh === "c64")          // no Start menu there: shutting down is an app

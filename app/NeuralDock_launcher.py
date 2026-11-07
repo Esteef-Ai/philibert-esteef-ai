@@ -18791,6 +18791,12 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json({"ok": True, "user_name": str(_config.get("user_name") or "")[:40],
                                     "online": internet_on()})
                     return
+                if body.get("op") == "open_boof":      # Boof Launcher: the person's own browser, not this window;
+                    # ?philibert=1 tells the launcher this browser has Philibert, so it shows its tile
+                    base = str(_config.get("boof_launcher_url") or "https://netvault.tail1801f7.ts.net:8443").rstrip("/")
+                    webbrowser.open(base + "/launcher?philibert=1")
+                    self.send_json({"ok": True})
+                    return
                 if body.get("op") in ("icons", "icon_set"):   # Control Panel > Icon
                     import nd_app_icon
                     self.send_json(nd_app_icon.handle(body, _drive_root()))

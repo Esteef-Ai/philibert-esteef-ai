@@ -6,6 +6,10 @@ data/install.json as "icon". Setup picks one; Control Panel > Icon changes it.
 
 Only the Windows desktop shortcut (Desktop\\Philibert.lnk) shows it. A shortcut that
 starts a Philibert on a different drive or folder is left alone.
+
+With the shortcut comes a philibert:// link (HKCU, this user only), so a web page can
+start Philibert - the Boof Launcher's Philibert tile uses it. It goes and comes with the
+shortcut: whoever made one asked for Philibert on this computer.
 """
 import base64
 import json
@@ -122,7 +126,32 @@ def shortcut(root, icon_id=None, create=False):
     line = out[-1] if out else (r.stderr or "").strip()[:300]
     word, _, rest = line.partition(" ")
     state = {"OK": "ok", "NONE": "none", "OTHER": "other", "MISSING": "missing"}.get(word, "error")
+    if state == "ok" and icon_id:
+        register_protocol(root)          # the philibert:// link follows the shortcut (and its icon)
     return {"state": state, "detail": rest if state != "error" else line}
+
+
+PROTOCOL_KEY = r"Software\Classes\philibert"
+
+
+def register_protocol(root, key=None):
+    """philibert:// starts this drive's Philibert (what the desktop shortcut starts)."""
+    if not IS_WIN:
+        return False
+    import winreg
+    root = Path(root).resolve()
+    key = key or os.environ.get("PH_PROTOCOL_KEY") or PROTOCOL_KEY       # tests use their own key
+    try:
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key) as k:
+            winreg.SetValueEx(k, "", 0, winreg.REG_SZ, "URL:Philibert")
+            winreg.SetValueEx(k, "URL Protocol", 0, winreg.REG_SZ, "")
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key + r"\DefaultIcon") as k:
+            winreg.SetValueEx(k, "", 0, winreg.REG_SZ, str(ico_path(root, current(root))) + ",0")
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key + r"\shell\open\command") as k:
+            winreg.SetValueEx(k, "", 0, winreg.REG_SZ, '"' + str(root / "Start-Windows.bat") + '"')
+        return True
+    except OSError:
+        return False
 
 
 def handle(body, root):

@@ -53,6 +53,8 @@ STORE = [
      "more), with saves kept on the drive."},
     {"id": "board", "name": "Group Board", "about": "A message board for your band or any group: posts, replies, polls and "
      "attachments, shared between everyone's Philibert, with alerts on your phone (ntfy) and here on the desktop."},
+    {"id": "boof", "name": "Boof Launcher", "about": "The Boof Squad's apps in your web browser: BoofBot, the big "
+     "soundboard, and BoofClips, the sound editor. Opening it from here adds a Philibert tile there too."},
     {"id": "feedback", "name": "Feedback Shooter", "about": "Send the maker an idea, a problem or a change you'd like. "
      "It goes to Philibert's page on GitHub, where you can see the answer."},
 ]
