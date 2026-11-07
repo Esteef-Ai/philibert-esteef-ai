@@ -1,4 +1,4 @@
-"""Guitar Tab: a solo guitar recording (.wav / .mp3 / .flac / .ogg) to tablature.
+"""TabCrafter: a solo guitar recording (.wav / .mp3 / .flac / .ogg) to tablature.
 
   runtime/<plat>/guitartab/site-py<ver>   its packages (Basic Pitch, librosa, onnxruntime - about
                                          500 MB), set up on first use; the app's own Python runs them
@@ -146,12 +146,12 @@ def install(root, say=lambda line, frac=-1: print(line, flush=True)):
         raise RuntimeError("The note finder installed but does not start: " + r.get("msg", ""))
     (site / ".philibert-ready").write_text(json.dumps({"packages": PACKAGES + NO_DEPS, "when": time.strftime("%Y-%m-%d %H:%M")}),
                                            encoding="utf-8")
-    say("Guitar Tab is ready.", 1.0)
+    say("TabCrafter is ready.", 1.0)
 
 
 def install_async(root, internet=True):
     if not internet:
-        return {"ok": False, "msg": "Setting up Guitar Tab downloads about 150 MB (500 MB on the drive): turn the INTERNET switch on first."}
+        return {"ok": False, "msg": "Setting up TabCrafter downloads about 150 MB (500 MB on the drive): turn the INTERNET switch on first."}
     with _lock:
         if _install["state"] == "running":
             return {"ok": True}
@@ -245,7 +245,7 @@ def listing(data_dir):
 def create(data_dir, name, ext, data_b64):
     ext = "." + str(ext or "").lower().lstrip(".")
     if ext not in AUDIO:
-        return {"ok": False, "msg": "Guitar Tab reads .wav, .mp3, .flac and .ogg recordings."}
+        return {"ok": False, "msg": "TabCrafter reads .wav, .mp3, .flac and .ogg recordings."}
     try:
         data = base64.b64decode(data_b64 or "", validate=True)
     except ValueError:
@@ -270,7 +270,7 @@ def transcribe(root, data_dir, tid, settings):
     if not d:
         return {"ok": False, "msg": "That recording is gone."}
     if not installed(root):
-        return {"ok": False, "msg": "Guitar Tab isn't set up on this computer yet."}
+        return {"ok": False, "msg": "TabCrafter isn't set up on this computer yet."}
     tuning = parse_tuning(str(settings.get("tuning") or ""))
     if not tuning:
         return {"ok": False, "msg": "That tuning can't be read: give 4 to 9 notes, low string first, e.g. D A D G B E."}
@@ -286,7 +286,7 @@ def transcribe(root, data_dir, tid, settings):
     except (TypeError, ValueError, IndexError):
         num, den = 4, 4
     if not (1 <= num <= 12 and den in (2, 4, 8)):
-        return {"ok": False, "msg": "That time signature isn't one Guitar Tab writes (try 4/4, 3/4 or 6/8)."}
+        return {"ok": False, "msg": "That time signature isn't one TabCrafter writes (try 4/4, 3/4 or 6/8)."}
     with _lock:
         if any(j["state"] == "running" for j in _jobs.values()):
             return {"ok": False, "msg": "Another tab is being written - this one can start when it's done."}
@@ -364,7 +364,7 @@ def handle(body, root, data_dir, internet=True):
         return {"ok": True, "item": _public(d), "tab": tab}
     if op == "estimate":
         if not installed(root):
-            return {"ok": False, "msg": "Guitar Tab isn't set up on this computer yet."}
+            return {"ok": False, "msg": "TabCrafter isn't set up on this computer yet."}
         r = _engine(root, "estimate", {"audio": str(audio_file(data_dir, tid))}, timeout=180)
         return r if r.get("ok") else {"ok": False, "msg": "Couldn't hear a steady beat - tap the tempo instead."}
     if op == "transcribe":

@@ -52,7 +52,7 @@
       p("M3.5 10.5 15 5.5l11.5 5L15 15.5z", K, K) + p("M8.5 12.5v4c0 1 3 2.5 6.5 2.5s6.5-1.5 6.5-2.5v-4L15 15.5z", DG, K) +
       p("M25.5 11v6", "none", YL) + r(24.5, 16.5, 2, 3, YL, K) +
       '<circle cx="28" cy="27" r="3" fill="' + RD + '" stroke="' + K + '"/>' + p("M28 24v-2", "none", GR),
-    // Guitar Tab: a sunburst guitar across a strip of tablature
+    // TabCrafter: a sunburst guitar across a strip of tablature
     guitartab:
       r(1.5, 26.5, 29, 4, W, K) + p("M2 28h28M2 29.5h28", "none", DG) + r(6, 27, 2, 3, K) + r(15, 27, 2, 3, K) + r(24, 27, 2, 3, K) +
       p("M14 16 24.5 5.5l2 2L16 18z", OL, K) + p("M24 4.5l3-3 3.5 3.5-3 3z", K, K) +

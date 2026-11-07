@@ -1,4 +1,4 @@
-/* Philibert Guitar Tab: a solo guitar recording -> tablature (nd_guitartab.py does the work).
+/* Philibert TabCrafter: a solo guitar recording -> tablature (nd_guitartab.py does the work).
  * The page: your tabs on the left; a drop zone for a new recording; the strings, tuning and
  * tempo (typed, tapped or listened for); the tab, drawn here so edits are instant; a player
  * for the recording (the tab follows it) and for the tab itself; click a fret to fix it. */
@@ -52,7 +52,7 @@
     var v = $("view");
     if (!st.installed) return drawSetup();
     if (!st.cur) {
-      v.innerHTML = '<h1>Guitar Tab</h1><p class="lead">Give it a recording of a guitar on its own - a DI track, a stem, '
+      v.innerHTML = '<h1>TabCrafter</h1><p class="lead">Give it a recording of a guitar on its own - a DI track, a stem, '
         + "or you playing into a microphone - and it writes the tab: notes, rhythm, and a string and fret for each note the way "
         + "a hand would play it. You check it against the recording and fix what it got wrong.</p>"
         + '<div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose a recording">'
@@ -70,14 +70,14 @@
   function drawSetup() {
     var i = st.install || {};
     var running = i.state === "running";
-    $("view").innerHTML = '<div class="setup"><h1>Set up Guitar Tab</h1>'
-      + '<p class="lead">Guitar Tab needs its note finder on this computer first. It is about 150 MB to download and 500 MB on the drive, and it is '
+    $("view").innerHTML = '<div class="setup"><h1>Set up TabCrafter</h1>'
+      + '<p class="lead">TabCrafter needs its note finder on this computer first. It is about 150 MB to download and 500 MB on the drive, and it is '
       + "only needed once per computer the drive is used on.</p>"
       + '<div class="card"><h2>What it does</h2><ul><li>Finds every note in a solo guitar recording</li>'
       + "<li>Follows the beat from the tempo you give it (typed, or tapped along)</li>"
       + "<li>Picks a string and fret for each note, for 6, 7 or 8 strings in any tuning</li>"
       + "<li>Plays the recording with the tab following along, and lets you fix any note</li></ul>"
-      + '<div class="go"><button class="btn primary" id="setup" type="button"' + (running ? " disabled" : "") + ">" + (running ? "SETTING UP…" : "SET UP GUITAR TAB") + "</button>"
+      + '<div class="go"><button class="btn primary" id="setup" type="button"' + (running ? " disabled" : "") + ">" + (running ? "SETTING UP…" : "SET UP TABCRAFTER") + "</button>"
       + (running ? '<div class="bar"><i style="width:' + Math.round((i.progress || 0) * 100) + '%"></i></div><span class="note">' + esc(i.line) + "</span>" : "")
       + (!st.internet && !running ? '<span class="note">Turn the INTERNET switch on first - setting up downloads the note finder.</span>' : "")
       + "</div>" + (i.state === "error" ? '<p class="err">' + esc(i.error) + " Try again when the connection is back.</p>" : "") + "</div></div>";
@@ -97,7 +97,7 @@
       if (!st.cur || !st.installed) drawView();
       drawNav();
       if (d.install && d.install.state === "running") st.poll = setTimeout(pollStatus, 1000);
-      else if (st.installed) { toast("Guitar Tab is ready - drop a recording to start."); loadList(); }
+      else if (st.installed) { toast("TabCrafter is ready - drop a recording to start."); loadList(); }
     });
   }
 
@@ -107,7 +107,7 @@
   function add(file) {
     var m = /\.([a-z0-9]+)$/i.exec(file.name);
     var ext = m ? m[1].toLowerCase() : "";
-    if (["wav", "mp3", "flac", "ogg"].indexOf(ext) < 0) return toast("Guitar Tab reads .wav, .mp3, .flac and .ogg recordings.");
+    if (["wav", "mp3", "flac", "ogg"].indexOf(ext) < 0) return toast("TabCrafter reads .wav, .mp3, .flac and .ogg recordings.");
     if (file.size > 200 * 1048576) return toast("That recording is over 200 MB - trim it or save it as an .mp3 first.");
     status("Adding " + file.name + "…");
     var r = new FileReader();
@@ -172,7 +172,7 @@
       + '<label class="f2"' + (s.tuning === "custom" ? "" : " hidden") + ' id="customwrap">Your tuning<input type="text" id="custom" placeholder="e.g. C G C F A D" value="' + esc(s.custom) + '"><span class="hint" id="customhint"></span></label>'
       + '<label class="f2">Tempo (BPM)<div class="bpm"><input type="number" id="bpm" min="30" max="300" step="0.1" value="' + esc(s.bpm) + '" placeholder="?">'
       + '<button class="btn tap" id="tap" type="button" title="Tap along to the recording (or press T)">TAP</button>'
-      + '<button class="btn" id="listen" type="button" title="Let Guitar Tab guess the tempo">GUESS</button></div><span class="hint" id="taphint">Tap along with the beat, or type it</span></label>'
+      + '<button class="btn" id="listen" type="button" title="Let TabCrafter guess the tempo">GUESS</button></div><span class="hint" id="taphint">Tap along with the beat, or type it</span></label>'
       + '<label class="f2">Time<select id="time">' + TIMES.map(function (t) { var k = t.join("/"); return '<option' + (k === s.time.join("/") ? " selected" : "") + ">" + k + "</option>"; }).join("") + "</select></label>"
       + '<label class="check"><input type="checkbox" id="steady"' + (s.steady ? " checked" : "") + "> Played to a click (a steady tempo)</label>"
       + "</div>"
@@ -646,7 +646,7 @@
       out.push(rh.replace(/\s+$/, ""), "");
     });
     out.push("Rhythm: w whole, h half, q quarter, e 8th, s 16th, t 32nd; . dotted; 3 triplet; r rest; ~ held over.");
-    out.push("Written with Philibert Guitar Tab.");
+    out.push("Written with Philibert TabCrafter.");
     return out.join("\r\n") + "\r\n";
   }
   function download() {
@@ -660,7 +660,7 @@
   /* ================= start ================= */
   $("new").onclick = pick;
   api("status").then(function (d) {
-    if (!d.ok) { status("Couldn't reach Philibert"); $("view").innerHTML = '<p class="err">Guitar Tab couldn\'t reach Philibert (' + esc(d.msg) + "). Close this window and open it again.</p>"; return; }
+    if (!d.ok) { status("Couldn't reach Philibert"); $("view").innerHTML = '<p class="err">TabCrafter couldn\'t reach Philibert (' + esc(d.msg) + "). Close this window and open it again.</p>"; return; }
     st.installed = d.installed; st.install = d.install; st.internet = d.internet; st.tunings = d.tunings || [];
     if (d.install && d.install.state === "running") pollStatus();
     var hash = location.hash.slice(1);                 // guitartab#<id> opens that one

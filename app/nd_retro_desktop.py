@@ -49,7 +49,7 @@ STORE = [
     {"id": "band", "name": "Band Manager", "about": "For people who play in a band: gigs, tours, setlists, merch, money and bills."},
     {"id": "yoteach", "name": "Yo Teach", "about": "For teachers: classes, attendance and notes taken live in class, class summaries, "
      "and lessons, worksheets and teacher copies made as Word and PDF files."},
-    {"id": "guitartab", "name": "Guitar Tab", "about": "For guitar players: give it a recording of a guitar on its own, "
+    {"id": "guitartab", "name": "TabCrafter", "about": "For guitar players: give it a recording of a guitar on its own, "
      "the strings and tuning and the tempo (typed or tapped), and it writes the tab - with a player that follows "
      "along and a click-to-fix review. Sets itself up the first time (about 500 MB)."},
     {"id": "vault", "name": "Retro Vault", "about": "Play your own classic games from the drive (NES, SNES, Genesis, GBA, N64 and "

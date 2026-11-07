@@ -18563,7 +18563,7 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(data)
             return
         if bare_path == "/api/guitartab/audio":
-            # Guitar Tab: a transcription's recording, for the page's player (ranges, so it can seek)
+            # TabCrafter: a transcription's recording, for the page's player (ranges, so it can seek)
             import nd_guitartab
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             f = nd_guitartab.audio_file(_CONFIG_DIR, (q.get("id") or [""])[0]) if self.authed() else None
