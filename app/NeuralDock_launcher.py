@@ -18461,6 +18461,8 @@ class Handler(BaseHTTPRequestHandler):
             bare_path = "/live/band.html"
         elif bare_path == "/yoteach":
             bare_path = "/live/yoteach.html"
+        elif bare_path == "/guitartab":
+            bare_path = "/live/guitartab.html"
         elif bare_path == "/images":
             bare_path = "/live/images.html"
         elif bare_path == "/files":
@@ -18559,6 +18561,42 @@ class Handler(BaseHTTPRequestHandler):
                              + '; filename="' + fname.replace('"', "") + '"')
             self.end_headers()
             self.wfile.write(data)
+            return
+        if bare_path == "/api/guitartab/audio":
+            # Guitar Tab: a transcription's recording, for the page's player (ranges, so it can seek)
+            import nd_guitartab
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            f = nd_guitartab.audio_file(_CONFIG_DIR, (q.get("id") or [""])[0]) if self.authed() else None
+            if not f:
+                self.send_json({"error": "not found"}, 404)
+                return
+            size = f.stat().st_size
+            start, end = 0, size - 1
+            m = re.match(r"bytes=(\d*)-(\d*)$", self.headers.get("Range") or "")
+            if m and (m.group(1) or m.group(2)):
+                if m.group(1):
+                    start = int(m.group(1))
+                    end = min(size - 1, int(m.group(2))) if m.group(2) else size - 1
+                else:
+                    start = max(0, size - int(m.group(2)))
+            if start > end:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.end_headers()
+                return
+            with open(f, "rb") as fh:
+                fh.seek(start)
+                data = fh.read(end - start + 1)
+            self.send_response(206 if m and (m.group(1) or m.group(2)) else 200)
+            self.send_header("Content-Type", {".mp3": "audio/mpeg", ".wav": "audio/wav", ".flac": "audio/flac",
+                                              ".ogg": "audio/ogg"}.get(f.suffix.lower(), "application/octet-stream"))
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Length", str(len(data)))
+            if m and (m.group(1) or m.group(2)):
+                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(data)
             return
         if bare_path == "/api/images/file":
             # Image Generation's gallery: a picture by name, never a path from outside
@@ -18714,7 +18752,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error":"unauthorized","hint":"Send X-ND-Token. Pair in Setup > Devices."}, 401)
             return
 
-        if path in ("/api/notes", "/api/chats", "/api/desktop", "/api/band", "/api/images", "/api/files", "/api/feedback", "/api/board", "/api/yoteach", "/api/modelshare"):
+        if path in ("/api/notes", "/api/chats", "/api/desktop", "/api/band", "/api/images", "/api/files", "/api/feedback", "/api/board", "/api/yoteach", "/api/modelshare", "/api/guitartab"):
             # The Notes app (nd_notes.py) and saved chats (nd_chats.py). They
             # write files, so a page from another site in the user's own browser
             # must not be able to drive them.
@@ -18764,6 +18802,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/modelshare":
                 self.send_json(modelshare_handle(body))
+                return
+            if path == "/api/guitartab":
+                import nd_guitartab
+                self.send_json(nd_guitartab.handle(body, _drive_root(), _CONFIG_DIR, internet_on()))
                 return
             if path == "/api/yoteach":
                 import nd_yoteach

@@ -52,6 +52,14 @@
       p("M3.5 10.5 15 5.5l11.5 5L15 15.5z", K, K) + p("M8.5 12.5v4c0 1 3 2.5 6.5 2.5s6.5-1.5 6.5-2.5v-4L15 15.5z", DG, K) +
       p("M25.5 11v6", "none", YL) + r(24.5, 16.5, 2, 3, YL, K) +
       '<circle cx="28" cy="27" r="3" fill="' + RD + '" stroke="' + K + '"/>' + p("M28 24v-2", "none", GR),
+    // Guitar Tab: a sunburst guitar across a strip of tablature
+    guitartab:
+      r(1.5, 26.5, 29, 4, W, K) + p("M2 28h28M2 29.5h28", "none", DG) + r(6, 27, 2, 3, K) + r(15, 27, 2, 3, K) + r(24, 27, 2, 3, K) +
+      p("M14 16 24.5 5.5l2 2L16 18z", OL, K) + p("M24 4.5l3-3 3.5 3.5-3 3z", K, K) +
+      '<circle cx="9.5" cy="20" r="6" fill="' + MR + '" stroke="' + K + '"/>' +
+      '<circle cx="14" cy="15.5" r="4.5" fill="' + MR + '" stroke="' + K + '"/>' +
+      '<circle cx="10.5" cy="19" r="3.5" fill="' + RD + '"/>' +
+      '<circle cx="12" cy="17.5" r="1.6" fill="' + K + '"/>' + r(6, 21, 4, 1.5, K) + p("M8 22 26 6", "none", LG),
     // Image Generation: a painter's palette with a brush across it
     images:
       p("M16 4.5c7 0 12.5 4.5 12.5 10 0 3-2.5 4-4.5 3.5s-3.5 1-2.5 3c1 2.5-1 5-5.5 5C9 26 3.5 21 3.5 15S9 4.5 16 4.5z", "#c08040", K) +
@@ -154,6 +162,7 @@
     band: "M4 6h16v14H4zM4 9.5h16M12 15m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0M7 7.8h.01M10 7.8h.01",
     yoteach: "M2.5 9.5 12 5l9.5 4.5L12 14zM6.5 11.5v4.5c0 1.4 2.5 3 5.5 3s5.5-1.6 5.5-3v-4.5M21.5 9.5v6",
     images: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15.5 9.5m-1.5 0a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0",
+    guitartab: "M13.5 10.5 19 5M17.5 3.5l3 3M12.5 9.5c-1.6-.8-3.4-.2-4.3 1.3-2 .1-4.2 1.9-4.2 4.4 0 2.6 2.1 4.8 4.8 4.8 2.5 0 4.3-2.2 4.4-4.2 1.5-.9 2.1-2.7 1.3-4.3zM9 15m-1 0a1 1 0 1 0 2 0a1 1 0 1 0-2 0",
     control: "M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4",
     store: "M5 8h14l-1 12H6zM9 8V6a3 3 0 0 1 6 0v2M10.5 11.5h3.5M10.5 11.5v5.5h3.5M10.5 14.2h3",
     feedback: "M3 11l18-7-6 17-3-7zM12 14l9-10",
@@ -174,7 +183,7 @@
   };
   var TINT = {
     chat: ["#22d3ee", "#0369a1"], notes: ["#fcd34d", "#d97706"], suite: ["#a78bfa", "#5b21b6"], vault: ["#fb7185", "#be123c"],
-    band: ["#fdba74", "#c2410c"], yoteach: ["#86efac", "#15803d"], images: ["#f472b6", "#7e22ce"], control: ["#9ca3af", "#374151"], store: ["#2dd4bf", "#0f766e"], feedback: ["#fde047", "#ea580c"], board: ["#fbbf24", "#b45309"],
+    band: ["#fdba74", "#c2410c"], yoteach: ["#86efac", "#15803d"], guitartab: ["#fb923c", "#7c2d12"], images: ["#f472b6", "#7e22ce"], control: ["#9ca3af", "#374151"], store: ["#2dd4bf", "#0f766e"], feedback: ["#fde047", "#ea580c"], board: ["#fbbf24", "#b45309"],
     files: ["#fcd34d", "#ca8a04"], models: ["#67e8f9", "#0e7490"], trash: ["#d1d5db", "#4b5563"],
     trash_full: ["#d1d5db", "#4b5563"], app: ["#60a5fa", "#1d4ed8"], programs: ["#60a5fa", "#1d4ed8"], folder: ["#fcd34d", "#ca8a04"],
     help: ["#34d399", "#047857"], find: ["#60a5fa", "#1e40af"], docs: ["#93c5fd", "#1d4ed8"], gpu: ["#4ade80", "#15803d"],

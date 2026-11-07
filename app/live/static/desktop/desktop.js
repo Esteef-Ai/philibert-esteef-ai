@@ -64,6 +64,7 @@
                                               url: "/retro/", w: 1240, h: 800, max: true });
     if (has("band")) list.push({ id: "band", name: "Band Manager", icon: "band", url: "/band?embed=1", w: 1180, h: 760, title: "Philibert Band Manager" });
     if (has("yoteach")) list.push({ id: "yoteach", name: "Yo Teach", icon: "yoteach", url: "/yoteach?embed=1", w: 1240, h: 800, title: "Philibert Yo Teach" });
+    if (has("guitartab")) list.push({ id: "guitartab", name: "Guitar Tab", icon: "guitartab", url: "/guitartab", w: 1240, h: 800, title: "Philibert Guitar Tab" });
     if (has("board")) list.push({ id: "board", name: "Group Board", icon: "board", url: "/board", w: 1100, h: 760, title: "Group Board" });
     if (has("boof")) list.push({ id: "boof", name: "Boof Launcher", icon: "app", img: "/live/desktop/boof-launcher.svg",
                                  action: function () { api("/api/desktop", { op: "open_boof" }); } });
