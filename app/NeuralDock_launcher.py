@@ -18791,6 +18791,10 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json({"ok": True, "user_name": str(_config.get("user_name") or "")[:40],
                                     "online": internet_on()})
                     return
+                if body.get("op") in ("icons", "icon_set"):   # Control Panel > Icon
+                    import nd_app_icon
+                    self.send_json(nd_app_icon.handle(body, _drive_root()))
+                    return
                 import nd_retro_desktop
                 self.send_json(nd_retro_desktop.handle(body, _CONFIG_DIR, APPS_DIR,
                                                        _close_portable_browser if PORTABLE else None))

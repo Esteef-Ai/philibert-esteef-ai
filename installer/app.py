@@ -41,6 +41,7 @@ _trust_more_roots()
 
 REPO = Path(__file__).resolve().parent.parent          # when run from source
 BUNDLED = HERE / "bundle"                               # models.json + philibert.json in a build
+sys.path.append(str(REPO / "app"))                      # from source: nd_imagegen, nd_app_icon
 
 
 def _bundle_file(name):
@@ -154,6 +155,12 @@ class Api:
             return nd_imagegen.rating()
         except Exception as e:
             return {"rating": "red", "backend": None, "why": f"Could not check this computer ({e})."}
+
+    def icons(self):
+        """The pictures the desktop shortcut can wear, with previews, in order."""
+        import nd_app_icon
+        folder = BUNDLED / "icons" if (BUNDLED / "icons").is_dir() else REPO / "setup" / "assets" / "icons"
+        return nd_app_icon.with_pictures(nd_app_icon.icons(None, folder), folder)
 
     def check_place(self, dest, pcs):
         dest = str(dest)

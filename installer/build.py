@@ -39,6 +39,8 @@ def main():
     shutil.copy2(REPO / "models.json", bundle / "models.json")
     info = json.loads((REPO / "philibert.json").read_text(encoding="utf-8"))
     (bundle / "philibert.json").write_text(json.dumps(info), encoding="utf-8")
+    # the icons Setup offers for the desktop shortcut (the drive gets its own copy in setup/)
+    shutil.copytree(REPO / "setup" / "assets" / "icons", bundle / "icons")
     if dev:
         # a test build installs from this folder: nothing is pushed or uploaded
         (bundle / "source.json").write_text(json.dumps({"local": str(REPO)}), encoding="utf-8")
@@ -51,7 +53,7 @@ def main():
             "--specpath", str(HERE / "build"),
             "--add-data", f"{HERE / 'ui'}{sep}ui", "--add-data", f"{bundle}{sep}bundle",
             "--hidden-import", "core", "--hidden-import", "engine", "--hidden-import", "github_auth", "--hidden-import", "certifi",
-            "--hidden-import", "nd_imagegen",           # this computer's Image Generation rating
+            "--hidden-import", "nd_imagegen", "--hidden-import", "nd_app_icon",           # this computer's Image Generation rating
             "--paths", str(HERE), "--paths", str(REPO / "app"), str(HERE / "app.py")]
     subprocess.run(args, check=True, cwd=str(HERE))
     out = HERE / "dist" / (name + (".exe" if IS_WIN else ".app"))

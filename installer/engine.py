@@ -363,7 +363,8 @@ class Installer:
             desk.write_text(json.dumps(fresh), encoding="utf-8")
         info = {"version": 1, "installed": datetime.now().isoformat(timespec="seconds"),
                 "edition": self.plan.get("edition", "slim"), "pcs": self.pcs,
-                "full": self.plan.get("full") or {}, "models": self.plan.get("models") or []}
+                "full": self.plan.get("full") or {}, "models": self.plan.get("models") or [],
+                "icon": self.plan.get("icon") or "classic"}
         if self.retro_only:
             info["retro_only"] = True          # the start scripts skip Ollama; the desktop hides Chat
         (data / "install.json").write_text(json.dumps(info, indent=2), encoding="utf-8")
@@ -485,21 +486,11 @@ class Installer:
     def step_shortcut(self):
         if not self.plan.get("shortcut") or not IS_WIN:
             return
-        # The REAL desktop: %USERPROFILE%\Desktop is wrong when OneDrive (or a policy) moved
-        # it - the shortcut then went into a folder nobody sees and nothing said so.
-        target = self.dest / "Start-Windows.bat"
-        icon = self.dest / "setup" / "assets" / "philibert.ico"
-        q = lambda p: "'" + str(p).replace("'", "''") + "'"        # PowerShell single-quoted literal
-        ps = ("$d=[Environment]::GetFolderPath('Desktop');$l=Join-Path $d 'Philibert.lnk';"
-              "$s=(New-Object -ComObject WScript.Shell).CreateShortcut($l);$s.TargetPath=" + q(target) + ";"
-              "$s.WorkingDirectory=" + q(self.dest) + ";$s.WindowStyle=7;$s.Description='Philibert';"
-              + ("$s.IconLocation=" + q(str(icon) + ",0") + ";" if icon.exists() else "")
-              + "$s.Save();if(Test-Path $l){'OK '+$l}else{'MISSING '+$l}")
-        r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
-                           capture_output=True, text=True, creationflags=_NO_WINDOW)
-        out = (r.stdout or "").strip()
-        self.log(f"desktop shortcut: {out or (r.stderr or '').strip()[:300]}")
-        if not out.startswith("OK"):
+        # The picture chosen in Setup (Control Panel > Icon changes it later)
+        import nd_app_icon
+        r = nd_app_icon.shortcut(self.dest, self.plan.get("icon") or nd_app_icon.DEFAULT, create=True)
+        self.log(f"desktop shortcut: {r['state']} {r['detail']}")
+        if r["state"] != "ok":
             self.state["warnings"].append("Couldn't put a Philibert shortcut on the desktop - start it with "
                                           "Start-Windows.bat in the Philibert folder.")
 

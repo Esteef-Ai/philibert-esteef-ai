@@ -1,0 +1,68 @@
+[
+ {
+  "id": "classic",
+  "name": "Philibert (classic)",
+  "ico": "../philibert.ico",
+  "png": "classic.png"
+ },
+ {
+  "id": "robot-gentleman",
+  "name": "Robot Gentleman",
+  "ico": "robot-gentleman.ico",
+  "png": "robot-gentleman.png"
+ },
+ {
+  "id": "neon-owl",
+  "name": "Neon Owl",
+  "ico": "neon-owl.ico",
+  "png": "neon-owl.png"
+ },
+ {
+  "id": "cyber-fox",
+  "name": "Cyber Fox",
+  "ico": "cyber-fox.ico",
+  "png": "cyber-fox.png"
+ },
+ {
+  "id": "philibert-monogram",
+  "name": "Philibert Monogram",
+  "ico": "philibert-monogram.ico",
+  "png": "philibert-monogram.png"
+ },
+ {
+  "id": "ai-wizard",
+  "name": "AI Wizard",
+  "ico": "ai-wizard.ico",
+  "png": "ai-wizard.png"
+ },
+ {
+  "id": "neural-core",
+  "name": "Neural Core",
+  "ico": "neural-core.ico",
+  "png": "neural-core.png"
+ },
+ {
+  "id": "retro-terminal",
+  "name": "Retro Terminal",
+  "ico": "retro-terminal.ico",
+  "png": "retro-terminal.png"
+ },
+ {
+  "id": "obsidian-raven",
+  "name": "Obsidian Raven",
+  "ico": "obsidian-raven.ico",
+  "png": "obsidian-raven.png"
+ },
+ {
+  "id": "brain-chip",
+  "name": "Brain Chip",
+  "ico": "brain-chip.ico",
+  "png": "brain-chip.png"
+ },
+ {
+  "id": "cosmic-octopus",
+  "name": "Cosmic Octopus",
+  "ico": "cosmic-octopus.ico",
+  "png": "cosmic-octopus.png"
+ }
+]

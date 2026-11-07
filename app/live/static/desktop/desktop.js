@@ -69,7 +69,7 @@
     var sh = THEMES[st.settings.theme] ? THEMES[st.settings.theme].shell : "taskbar";
     if (sh === "phone" || sh === "c64")          // no Start menu there: shutting down is an app
       list.push({ id: "power", name: "Shut Down", icon: "shutdown", action: function () { shutdownDialog(); } });
-    list.push({ id: "control", name: "Control Panel", icon: "control", internal: controlPanel, w: 420, h: 470, fixed: true },
+    list.push({ id: "control", name: "Control Panel", icon: "control", internal: controlPanel, w: 460, h: 470, fixed: true },
               { id: "trash", name: "Trash", icon: "trash", internal: trashWin, w: 560, h: 380 });
     return list;
   }
@@ -823,7 +823,7 @@
   }
 
   function controlPanel(body, el, opts) {
-    var tabs = [["themes", "Themes"], ["wallpaper", "Wallpaper"], ["you", "You"], ["saver", "Screen Saver"], ["sounds", "Sounds"], ["about", "About"]];
+    var tabs = [["themes", "Themes"], ["wallpaper", "Wallpaper"], ["you", "You"], ["icon", "Icon"], ["saver", "Screen Saver"], ["sounds", "Sounds"], ["about", "About"]];
     var cur = opts.tab || "themes", draft = Object.assign({}, st.settings);
     // You: the name Philibert calls you, the Internet switch, and the band's currency and
     // measurements. They live with the app (config) and in the band file, not desktop.json.
@@ -836,6 +836,13 @@
       youWas = JSON.stringify(you);
       if (cur === "you") draw();
     });
+    // Icon: the picture Philibert's desktop shortcut wears (setup/assets/icons on the drive)
+    var ico = null, icoPick = null, icoMake = false, icoMsg = "";
+    api("/api/desktop", { op: "icons" }).then(function (d) {
+      ico = d && d.icons ? d : { icons: [], current: "classic", shortcut: "error", windows: false };
+      icoPick = ico.current;
+      if (cur === "icon") draw();
+    }).catch(function () { ico = { icons: [], current: "classic", shortcut: "error", windows: false }; if (cur === "icon") draw(); });
     body.innerHTML = '<div style="display:flex;flex-direction:column;height:100%"><div class="tabs">' +
       tabs.map(function (t) { return '<button class="tab' + (t[0] === cur ? " on" : "") + '" data-tab="' + t[0] + '">' + t[1] + "</button>"; }).join("") +
       '</div><div class="tabpanel" id="cp-panel"></div><div class="dlg-foot"><button class="btn" data-ok>OK</button>' +
@@ -875,6 +882,22 @@
           '<div class="field"><label>Measurements: <select data-you="units">' + Object.keys(UNITS).map(function (u) {
             return '<option value="' + u + '"' + (u === you.units ? " selected" : "") + ">" + UNITS[u] + "</option>"; }).join("") + "</select></label></div>" +
           '<div class="field">The Band Manager and the chat use these.</div>';
+      } else if (cur === "icon") {
+        if (!ico) { panel.innerHTML = "<div>Loading...</div>"; return; }
+        var sc = ico.shortcut, picked = ico.icons.filter(function (x) { return x.id === icoPick; })[0];
+        panel.innerHTML = "<div>Philibert's icon: <b>" + esc(picked ? picked.name : "") + "</b></div>" +
+          '<div class="listbox well" style="height:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(66px,1fr));gap:2px;padding:2px">' +
+          ico.icons.map(function (x) {
+            return '<div data-ico="' + esc(x.id) + '" title="' + esc(x.name) + '" class="' + (x.id === icoPick ? "on" : "") +
+                   '" style="flex-direction:column;justify-content:flex-start;padding:4px 2px;gap:2px;text-align:center;font-size:10px;line-height:1.15">' +
+                   '<img alt="" src="' + x.img + '" style="width:40px;height:40px">' + esc(x.name.replace(/ \(classic\)/, "")) + "</div>";
+          }).join("") + "</div>" +
+          '<div class="field" style="margin-top:8px">' + (!ico.windows ? "The icon is used by the Philibert shortcut on a Windows desktop."
+            : sc === "ok" ? "The Philibert shortcut on this computer's desktop changes when you click Apply or OK."
+            : sc === "other" ? "The Philibert shortcut on this desktop starts a different drive, so it stays as it is. The choice is saved for this drive."
+            : sc === "none" ? '<label><input type="checkbox" data-icomake' + (icoMake ? " checked" : "") + "> Put a Philibert shortcut on this computer's desktop</label>"
+            : "Couldn't check this computer's desktop shortcut. The choice is still saved for this drive.") + "</div>" +
+          (icoMsg ? '<div class="field"><b>' + esc(icoMsg) + "</b></div>" : "");
       } else if (cur === "saver") {
         panel.innerHTML = '<div class="field"><b>Philibert Constellation</b> - your notes drawn as stars.</div>' +
           '<div class="field"><label><input type="checkbox" data-k="screensaver"' + (draft.screensaver ? " checked" : "") + "> Use the screen saver</label></div>" +
@@ -914,6 +937,9 @@
       }
       var wp = ev.target.closest("[data-wp]");
       if (wp && !wp.classList.contains("off")) { draft.wallpaper = wp.dataset.wp; draw(); }
+      var ic = ev.target.closest("[data-ico]");
+      if (ic) { icoPick = ic.dataset.ico; icoMsg = ""; draw(); }
+      if (ev.target.closest("[data-icomake]")) icoMake = ev.target.checked;
       var tr = ev.target.closest("[data-try]");
       if (tr) { var was = S.enabled; S.enabled = true; S.play(tr.dataset.try); S.enabled = was; }
       if (ev.target.closest("[data-preview]")) startSaver();
@@ -946,6 +972,13 @@
         jobs.push(api("/api/set_config", { user_name: String(you.user_name || "").trim().slice(0, 40), online: !!you.online }));
         jobs.push(api("/api/band", { op: "settings_save", settings: { currency: you.currency, units: you.units } }));
         youWas = JSON.stringify(you);
+      }
+      if (ico && icoPick && (icoPick !== ico.current || icoMake)) {
+        jobs.push(api("/api/desktop", { op: "icon_set", id: icoPick, create: icoMake }).then(function (r) {
+          if (r && r.ok) { ico.current = r.current; ico.shortcut = r.shortcut; icoMake = false; }
+          icoMsg = (r && r.message) || "";
+          if (cur === "icon") draw();
+        }));
       }
       Promise.all(jobs).then(function () {
         if (newTheme) location.reload();       // a new theme boots like the real thing

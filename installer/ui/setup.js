@@ -21,7 +21,7 @@
   var state = {
     page: 0, info: null, places: [], catalog: [], pcs: "both", edition: "slim",
     themes: {}, retro: true, imagegen: false, igrating: null, dest: "", place: null, verdict: null, speed: null,
-    models: {}, checklist: [], checks: {}, installing: false, result: null
+    models: {}, checklist: [], checks: {}, installing: false, result: null, icons: [], icon: "classic"
   };
   THEMES.forEach(function (t) { state.themes[t.id] = { on: true, sounds: true, wallpapers: true }; });
 
@@ -68,6 +68,13 @@
       return [
         { id: "gpu", title: "Graphics driver", detail: "Example GeForce RTX - its driver is installed. Nothing to do.", kind: "info" },
         { id: "shortcut", title: "A Philibert shortcut on this computer's desktop", detail: "Optional. The only thing Setup would put on this computer.", kind: "optional", value: false }];
+    },
+    icons: function () {
+      return ["classic", "robot-gentleman", "neon-owl", "cyber-fox", "philibert-monogram", "ai-wizard", "neural-core",
+              "retro-terminal", "obsidian-raven", "brain-chip", "cosmic-octopus"].map(function (id) {
+        return { id: id, name: id.replace(/-/g, " ").replace(/\w/g, function (c) { return c.toUpperCase(); }),
+                 img: "../../setup/assets/icons/" + id + ".png" };
+      });
     },
     start_install: function (plan) { mock._t0 = Date.now(); mock._plan = plan; return true; },
     progress: function () {
@@ -377,7 +384,28 @@
     }).join("");
     $("checkall").checked = req.length > 0 && req.every(function (c) { return state.checks[c.id]; });
     $("checkall").disabled = req.length === 0;
+    renderIcons();
   }
+  // the desktop shortcut's picture (Windows only: the checklist offers the shortcut there)
+  function iconName() {
+    var i = state.icons.filter(function (x) { return x.id === state.icon; })[0];
+    return i ? i.name : "Philibert (classic)";
+  }
+  function renderIcons() {
+    var has = state.icons.length && state.checklist.some(function (c) { return c.id === "shortcut"; });
+    $("iconbox").classList.toggle("hide", !has);
+    if (!has) return;
+    $("icons").classList.toggle("off", !state.checks.shortcut);
+    $("iconname").textContent = state.checks.shortcut ? iconName() : "tick the shortcut to choose";
+    $("icons").innerHTML = state.icons.map(function (x) {
+      return '<button type="button" data-icon="' + esc(x.id) + '" class="' + (x.id === state.icon ? "on" : "") + '" title="' + esc(x.name) + '">' +
+        '<img alt="" src="' + esc(x.img) + '">' + esc(x.name.replace(/ \(classic\)/, "")) + "</button>";
+    }).join("");
+  }
+  $("icons").addEventListener("click", function (ev) {
+    var b = ev.target.closest("[data-icon]"); if (!b) return;
+    state.icon = b.getAttribute("data-icon"); renderIcons();
+  });
   $("checklist").addEventListener("change", function (ev) {
     if (!ev.target.getAttribute("data-id")) return;
     state.checks[ev.target.getAttribute("data-id")] = ev.target.checked;
@@ -392,14 +420,14 @@
   function plan() {
     var themes = {};
     THEMES.forEach(function (t) { if (state.themes[t.id].on) themes[t.id] = { sounds: state.themes[t.id].sounds, wallpapers: state.themes[t.id].wallpapers }; });
-    if (noAi()) return { dest: state.dest, pcs: pcsList(), edition: "retro", models: [], shortcut: !!state.checks.shortcut,
+    if (noAi()) return { dest: state.dest, pcs: pcsList(), edition: "retro", models: [], shortcut: !!state.checks.shortcut, icon: state.icon,
                          full: { themes: { win95: { sounds: true, wallpapers: true } }, retro_vault: true, image_gen: false,
                                  default_theme: "win95", themes_offered: THEMES.map(function (t) { return t.id; }) } };
     return { dest: state.dest, pcs: pcsList(), edition: state.edition,
              full: state.edition === "full" ? { themes: themes, retro_vault: state.retro, image_gen: state.imagegen, default_theme: "win95",
                                               themes_offered: THEMES.map(function (t) { return t.id; }) } : {},
              models: state.catalog.filter(function (m) { return state.models[m.tag] && offered(m); }).map(function (m) { return m.tag; }),
-             shortcut: !!state.checks.shortcut };
+             shortcut: !!state.checks.shortcut, icon: state.icon };
   }
   function renderReview() {
     var p = plan(), names = state.catalog.filter(function (m) { return state.models[m.tag]; }).map(function (m) { return m.label; });
@@ -409,7 +437,7 @@
       "<dt>Edition</dt><dd>" + (p.edition === "retro" ? "Retro Vault only - no AI" : p.edition === "full" ? "Full - " + Object.keys(p.full.themes).length + " themes" + (p.full.retro_vault ? ", Retro Vault" : "") + (p.full.image_gen ? ", Image Generation" : "") : "Slim") + "</dd>" +
       "<dt>Models</dt><dd>" + (p.edition === "retro" ? "none" : esc(names.join(", "))) + "</dd>" +
       "<dt>Download</dt><dd>about " + gb(needGB()) + "</dd>" +
-      "<dt>On this computer</dt><dd>" + (p.shortcut ? "a desktop shortcut" : "nothing") + "</dd>";
+      "<dt>On this computer</dt><dd>" + (p.shortcut ? "a desktop shortcut (" + esc(iconName()) + " icon)" : "nothing") + "</dd>";
   }
 
   /* installing */
@@ -488,6 +516,7 @@
       state.catalog.forEach(function (m) { state.models[m.tag] = !!(m.locked || m.tag === r[3]); });
       state.checklist.forEach(function (c) { if (c.kind === "optional") state.checks[c.id] = !!c.value; });
       var first = state.places.filter(function (p) { return p.external; })[0];
+      api("icons").then(function (l) { state.icons = l || []; renderIcons(); }).catch(function () {});
       if (first) choose(first.path.replace(/[\\/]$/, "") + "\\Philibert", first);
       var m = /[?&]page=(\d+)/.exec(location.search);
       show(m ? +m[1] : 0);
