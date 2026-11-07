@@ -353,9 +353,11 @@ class Installer:
             (self.dest / "Entertainment" / "Cartridges").mkdir(parents=True, exist_ok=True)
         desk = data / "desktop.json"
         if self.plan.get("edition") == "full" and not desk.exists():
-            # A fresh desktop: Philibert Chat, the App Store, Control Panel and Trash. The rest
-            # is added from the App Store (Retro Vault when Setup fetched its game players).
-            first = ["vault"] if (self.plan.get("full") or {}).get("retro_vault") else []
+            # A fresh desktop: Philibert Chat, the App Store, Control Panel and Trash (always there),
+            # Notes and File Manager, Retro Vault when Setup fetched its game players and Image
+            # Generation when it was picked. Every other app is added from the App Store.
+            first = [] if self.retro_only else ["notes", "files"]     # Retro Vault only stays games-only
+            first += ["vault"] if (self.plan.get("full") or {}).get("retro_vault") else []
             first += ["images"] if (self.plan.get("full") or {}).get("image_gen") else []
             fresh = {"installed": first}
             if (self.plan.get("full") or {}).get("default_theme"):     # desktop.json wins over install.json's
