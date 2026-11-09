@@ -11,6 +11,8 @@ The work is done by nd_guitartab_engine.py in its own process (written and score
 in the GuitarTab project): it finds the notes, follows the beat from the BPM the person gives
 (typed or tapped), and picks a string and fret for every note the way a hand would play it.
 
+The Audio File Splitter on the same page is nd_audiosplit.py (its ops start with split_).
+
 Entry points: handle(body, root, data_dir, internet) for /api/guitartab;
 audio_file(data_dir, id) for the page's player.
 """
@@ -339,6 +341,9 @@ def _clean_items(items, n_strings):
 
 def handle(body, root, data_dir, internet=True):
     op = str(body.get("op") or "")
+    if op.startswith("split_"):              # the Audio File Splitter (needs none of the note finder)
+        import nd_audiosplit
+        return nd_audiosplit.handle(body, data_dir)
     if op == "status":
         return {"ok": True, "installed": installed(root), "install": dict(_install), "internet": bool(internet),
                 "tunings": [{"id": i, "label": label, "notes": parse_tuning(t)} for i, label, t in TUNINGS]}

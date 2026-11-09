@@ -1,12 +1,14 @@
 /* Philibert TabCrafter: a solo guitar recording -> tablature (nd_guitartab.py does the work).
  * The page: your tabs on the left; a drop zone for a new recording; the strings, tuning and
  * tempo (typed, tapped or listened for); the tab, drawn here so edits are instant; a player
- * for the recording (the tab follows it) and for the tab itself; click a fret to fix it. */
+ * for the recording (the tab follows it) and for the tab itself; click a fret to fix it.
+ * Also the Audio File Splitter (#split, nd_audiosplit.py): a long audiobook cut into parts. */
 (function () {
   "use strict";
   var $ = function (id) { return document.getElementById(id); };
   var st = { installed: false, install: null, internet: true, tunings: [], items: [], cur: null, item: null, tab: null,
-             orig: null, undo: [], settings: null, saveT: null, poll: null, sel: null, play: null, speed: 1 };
+             orig: null, undo: [], settings: null, saveT: null, poll: null, sel: null, play: null, speed: 1,
+             mode: null, split: null };
   var NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
   var TIMES = [[4, 4], [3, 4], [2, 4], [6, 8], [12, 8], [5, 4], [7, 8]];
 
@@ -33,6 +35,8 @@
   function drawNav() {
     var n = $("nav");
     var h = '<button class="btn primary" id="new2" type="button"' + (st.installed ? "" : " disabled") + '>+ NEW TAB</button>';
+    h += '<button class="item tool' + (st.mode === "split" ? " on" : "") + '" type="button" id="splitNav"><b>✂ Audio File Splitter</b>'
+       + "<small>long audio → parts</small></button>";
     if (!st.items.length) h += '<p class="navempty">Your tabs show up here. Drop a recording on the right to make the first one.</p>';
     st.items.forEach(function (it) {
       var sub = it.job && it.job.state === "running" ? '<small class="busy">writing the tab…</small>'
@@ -42,7 +46,8 @@
     });
     n.innerHTML = h;
     $("new2").onclick = pick;
-    n.querySelectorAll(".item").forEach(function (b) { b.onclick = function () { open(b.dataset.id); }; });
+    $("splitNav").onclick = openSplit;
+    n.querySelectorAll(".item[data-id]").forEach(function (b) { b.onclick = function () { open(b.dataset.id); }; });
     $("new").disabled = !st.installed;
   }
 
@@ -50,6 +55,7 @@
   function drawView() {
     stop();
     var v = $("view");
+    if (st.mode === "split") return drawSplit();
     if (!st.installed) return drawSetup();
     if (!st.cur) {
       v.innerHTML = '<h1>TabCrafter</h1><p class="lead">Give it a recording of a guitar on its own - a DI track, a stem, '
@@ -102,7 +108,11 @@
   }
 
   /* ================= a new recording ================= */
-  function pick() { if (st.installed) $("file").click(); }
+  function pick() {
+    if (!st.installed) return;
+    if (st.mode === "split") { st.mode = null; history.replaceState(null, "", "#"); drawNav(); drawView(); }
+    $("file").click();
+  }
   $("file").onchange = function () { if (this.files[0]) add(this.files[0]); this.value = ""; };
   function add(file) {
     var m = /\.([a-z0-9]+)$/i.exec(file.name);
@@ -127,14 +137,15 @@
     e.preventDefault();
     var d = $("drop"); if (d) d.classList.remove("over");
     var f = e.dataTransfer && e.dataTransfer.files[0];
-    if (f && st.installed) add(f);
+    if (f && st.mode === "split") splitUpload(f);
+    else if (f && st.installed) add(f);
   });
 
   /* ================= one recording ================= */
   function open(id) {
     flushSave();
     stop();
-    st.cur = id; st.sel = null; st.undo = [];
+    st.cur = id; st.sel = null; st.undo = []; st.mode = null;
     history.replaceState(null, "", "#" + id);
     drawNav();
     $("view").innerHTML = '<div class="skel" style="width:40%"></div><div class="skel"></div><div class="skel" style="width:70%"></div>';
@@ -611,6 +622,154 @@
     else if (e.key === "Escape") closePop();
   });
 
+  /* ================= the Audio File Splitter ================= */
+  // A long file (an audiobook) cut into parts without re-encoding: Browse reads it where it is and
+  // puts the parts beside it; a dropped file is copied to Philibert first (the browser can't say where
+  // it lives), so its parts go to Downloads unless another folder is chosen. The original is only read.
+  function openSplit() {
+    flushSave(); stop(); closePop();
+    st.cur = null; st.item = null; st.tab = null; st.mode = "split";
+    if (!st.split) st.split = { file: null, by: "max", parts: 4, minutes: 60, folder: "", preview: null, job: null, busy: "" };
+    history.replaceState(null, "", "#split");
+    drawNav(); drawSplit();
+  }
+  function size(b) { return b >= 1073741824 ? (b / 1073741824).toFixed(2) + " GB" : (b / 1048576).toFixed(1) + " MB"; }
+  function fact(k, v) { return "<div><small>" + k + "</small><b>" + esc(v) + "</b></div>"; }
+  function clockS(sec) { sec = Math.round(sec); return Math.floor(sec / 3600) + ":" + pad(Math.floor(sec / 60) % 60, 2, "0", true) + ":" + pad(sec % 60, 2, "0", true); }
+  function drawSplit() {
+    var S = st.split, f = S.file, j = S.job, v = $("view"), pv = S.preview;
+    var h = '<h1>Audio File Splitter</h1><p class="lead">Cut a long audiobook or podcast into smaller files, so they are easier to queue up '
+      + "on a playlist and to keep your place in. The parts are exact copies of the audio - nothing is re-encoded - and they keep the "
+      + "book's tags and cover. Your original file is never changed.</p>";
+    if (j && j.state === "running") {
+      h += '<div class="card"><h2>Splitting ' + esc(j.name || "") + '</h2><div class="go"><div class="bar"><i style="width:' + Math.round((j.progress || 0) * 100)
+        + '%"></i></div><span class="note">Part ' + (j.part || 1) + " of " + j.total + "</span></div></div>";
+    } else if (j && j.state === "done") {
+      h += '<div class="card"><h2>Done: ' + j.files.length + ' parts <span class="right"><button class="btn primary" id="spShow" type="button">SHOW IN FOLDER</button>'
+        + '<button class="btn" id="spAgain" type="button">SPLIT ANOTHER</button></span></h2><p class="spfolder">' + esc(j.folder) + '</p><ol class="parts">'
+        + j.files.map(function (p) { return "<li><b>" + esc(p.name) + "</b><span>" + esc(p.length) + "</span></li>"; }).join("") + "</ol>"
+        + '<p class="note" style="margin-top:10px">' + esc(j.name) + " is still there, untouched.</p></div>";
+    } else if (!f) {
+      h += '<div class="drop" id="spDrop" tabindex="0" role="button" aria-label="Choose an audio file to split">'
+        + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></svg>'
+        + "<b>" + (S.busy ? esc(S.busy) : "Drop a long audio file here") + "</b><span>" + (S.busy ? "" : "or click to browse - .mp3, .m4b, .m4a, .flac, .ogg, .opus, .wav")
+        + "</span></div>";
+      if (j && j.state === "error") h += '<p class="err">' + esc(j.error) + "</p>";
+    } else {
+      h += '<div class="card"><h2>The file <span class="right"><button class="btn" id="spOther" type="button">CHOOSE ANOTHER</button></span></h2><div class="facts">'
+        + fact("File", f.name) + fact("Length", f.length) + fact("Size", size(f.size))
+        + fact("Format", f.codec.toUpperCase() + (f.kbps ? " · " + f.kbps + " kbps" : "") + (f.channels ? " · " + (f.channels === 1 ? "mono" : "stereo") : ""))
+        + (f.title ? fact("Title", f.title) : "") + (f.artist ? fact("Author", f.artist) : "") + fact("Cover", f.cover ? "yes - copied to every part" : "none")
+        + (f.dropped ? "" : fact("Where", f.folder)) + "</div></div>"
+        + '<div class="card"><h2>How to cut it</h2><div class="settings">'
+        + '<label class="f2">Cut by<select id="spBy"><option value="max"' + (S.by === "max" ? " selected" : "") + ">Longest a part may be</option>"
+        + '<option value="parts"' + (S.by === "parts" ? " selected" : "") + ">Number of parts</option></select></label>"
+        + (S.by === "parts"
+          ? '<label class="f2">Parts<input type="number" id="spParts" min="2" max="500" value="' + S.parts + '"><span class="hint">each about ' + clockS(f.duration / Math.max(1, S.parts)) + "</span></label>"
+          : '<label class="f2">Minutes per part, at most<input type="number" id="spMin" min="1" max="1440" value="' + S.minutes + '">'
+            + '<span class="hint"><a href="#" data-m="30">30 min</a> · <a href="#" data-m="60">1 h</a> · <a href="#" data-m="120">2 h</a> · <a href="#" data-m="180">3 h</a></span></label>')
+        + '</div><p class="note" style="margin-top:12px">The parts are all the same length' + (S.by === "max" ? ": as few as fit under that limit" : "") + ".</p></div>"
+        + '<div class="card"><h2>The parts <span class="right"><button class="btn" id="spFolder" type="button">CHANGE FOLDER</button></span></h2>'
+        + '<p class="spfolder">Saved in ' + esc(pv && pv.folder ? pv.folder : (S.folder || f.folder)) + "</p>"
+        + (pv && pv.ok
+          ? '<ol class="parts">' + pv.parts.map(function (p) {
+              return "<li><b>" + esc(p.name) + "</b><span>" + p.start + " – " + p.end + (p.exists ? " <em>already there</em>" : "") + "</span></li>"; }).join("") + "</ol>"
+          : '<p class="err">' + esc(pv ? pv.msg : "") + "</p>")
+        + '<div class="go"><button class="btn primary" id="spGo" type="button"' + (pv && pv.ok ? "" : " disabled") + ">SPLIT INTO "
+        + (pv && pv.ok ? pv.parts.length + " PARTS" : "PARTS") + "</button>"
+        + (j && j.state === "error" ? '<span class="err" style="margin:0">' + esc(j.error) + "</span>" : "") + "</div></div>";
+    }
+    v.innerHTML = h;
+    var d = $("spDrop");
+    if (d) { d.onclick = splitBrowse; d.onkeydown = function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); splitBrowse(); } }; }
+    if ($("spOther")) $("spOther").onclick = function () { S.file = null; S.preview = null; S.job = null; splitBrowse(); };
+    if ($("spAgain")) $("spAgain").onclick = function () { S.file = null; S.preview = null; S.job = null; drawSplit(); };
+    if ($("spShow")) $("spShow").onclick = function () { api("split_show", { folder: j.folder }).then(function (r) { if (!r.ok) toast(r.msg); }); };
+    if ($("spBy")) $("spBy").onchange = function () { S.by = this.value; splitPreview(); };
+    if ($("spParts")) $("spParts").oninput = function () { S.parts = Math.max(2, Math.min(500, parseInt(this.value, 10) || 2)); splitPreview(true); };
+    if ($("spMin")) $("spMin").oninput = function () { S.minutes = Math.max(1, parseFloat(this.value) || 1); splitPreview(true); };
+    v.querySelectorAll("a[data-m]").forEach(function (a) { a.onclick = function (e) { e.preventDefault(); S.minutes = +a.dataset.m; splitPreview(); }; });
+    if ($("spFolder")) $("spFolder").onclick = function () {
+      api("split_pick_folder", { start: pv && pv.folder ? pv.folder : "" }).then(function (r) { if (r.ok) { S.folder = r.path; splitPreview(); } });
+    };
+    if ($("spGo")) $("spGo").onclick = function () { splitStart(false); };
+    status(j && j.state === "running" ? "Splitting…" : f ? f.name + " · " + f.length : "Audio File Splitter", "ok");
+  }
+  function cutArgs() {
+    var S = st.split;
+    return { path: S.file.path, out_dir: S.folder || "", parts: S.by === "parts" ? S.parts : null, max_minutes: S.by === "max" ? S.minutes : null };
+  }
+  function splitPreview(typing) {
+    var S = st.split;
+    clearTimeout(S.pt);
+    S.pt = setTimeout(function () {
+      api("split_preview", cutArgs()).then(function (r) {
+        S.preview = r;
+        if (st.mode !== "split" || !S.file) return;
+        var el = typing && document.activeElement, id = el && el.id, pos = el && el.value.length;   // keep the box being typed in
+        drawSplit();
+        if (id && $(id)) { $(id).focus(); try { $(id).setSelectionRange(pos, pos); } catch (e) { /* number boxes have no caret */ } }
+      });
+    }, typing ? 300 : 0);
+  }
+  function splitChosen(r) {
+    var S = st.split;
+    S.busy = "";
+    if (!r.ok) { drawSplit(); if (!r.cancelled) toast(r.msg); return; }
+    S.file = r; S.job = null; S.folder = ""; S.preview = null;
+    if (S.by === "max" && r.duration < S.minutes * 60 * 2) S.by = "parts";      // under two parts' worth: count them instead
+    splitPreview();
+  }
+  function splitBrowse() {
+    var S = st.split;
+    if (S.busy) return;
+    S.busy = "Choose the file in the window that opened…"; drawSplit();
+    api("split_pick").then(splitChosen);
+  }
+  function splitUpload(file) {
+    var S = st.split, PIECE = 6 * 1048576, i = 0, token = "";
+    if (S.busy || (S.job && S.job.state === "running")) return;
+    S.file = null; S.job = null; S.preview = null;
+    function next() {
+      S.busy = "Reading " + file.name + "… " + Math.round(100 * Math.min(1, i * PIECE / Math.max(1, file.size))) + "%";
+      drawSplit();
+      var r = new FileReader();
+      r.onload = function () {
+        api("split_upload", { name: file.name, size: file.size, i: i, token: token, data: String(r.result).split(",")[1] || "" }).then(function (d) {
+          if (!d.ok) return splitChosen(d);
+          token = d.token; i++;
+          if (d.path) return splitChosen(d);
+          next();
+        });
+      };
+      r.onerror = function () { splitChosen({ ok: false, msg: "That file couldn't be read." }); };
+      r.readAsDataURL(file.slice(i * PIECE, (i + 1) * PIECE));
+    }
+    next();
+  }
+  function splitStart(replace) {
+    var S = st.split;
+    api("split_start", Object.assign(cutArgs(), { replace: replace })).then(function (r) {
+      if (!r.ok && r.exists) {
+        if (confirm(r.msg + "\n\nReplace them with the new parts? Your original file is not touched.")) splitStart(true);
+        return;
+      }
+      if (!r.ok) return toast(r.msg);
+      S.job = { state: "running", progress: 0, part: 1, total: r.total, name: S.file.name };
+      drawSplit(); splitPoll();
+    });
+  }
+  function splitPoll() {
+    api("split_status").then(function (j) {
+      var S = st.split;
+      if (!j.ok) return;
+      S.job = j;
+      if (st.mode === "split") drawSplit();
+      if (j.state === "running") setTimeout(splitPoll, 400);
+      else if (j.state === "done") toast("Split into " + j.files.length + " parts.");
+    });
+  }
+
   /* ================= the text file ================= */
   function tabText() {
     var tab = st.tab, S = tab.tuning.length, lab = labels(tab.tuning), lw = Math.max.apply(null, lab.map(function (l) { return l.length; }));
@@ -659,11 +818,13 @@
 
   /* ================= start ================= */
   $("new").onclick = pick;
+  $("split").onclick = openSplit;
   api("status").then(function (d) {
     if (!d.ok) { status("Couldn't reach Philibert"); $("view").innerHTML = '<p class="err">TabCrafter couldn\'t reach Philibert (' + esc(d.msg) + "). Close this window and open it again.</p>"; return; }
     st.installed = d.installed; st.install = d.install; st.internet = d.internet; st.tunings = d.tunings || [];
     if (d.install && d.install.state === "running") pollStatus();
     var hash = location.hash.slice(1);                 // guitartab#<id> opens that one
-    loadList(/^[a-f0-9]{12}$/.test(hash) ? hash : null);
+    if (hash === "split") { loadList(); openSplit(); }
+    else loadList(/^[a-f0-9]{12}$/.test(hash) ? hash : null);
   });
 })();
