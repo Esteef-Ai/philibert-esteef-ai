@@ -81,10 +81,12 @@ def philibert_problem(root):
 def hardware_verdict(info, need):
     """-> (ok, plain-words message). Philibert Code warns; the user may go on anyway."""
     vram, ram = float(info.get("fast_gb") or 0), float(info.get("ram_gb") or 0)
+    # A "16 GB" card reports 15.9 GB (16,303 MiB) and "32 GB" of memory about 31.8: allow half a gigabyte.
+    slack = 0.5
     short = []
-    if vram < need["vram_gb"]:
+    if vram < need["vram_gb"] - slack:
         short.append(f"{vram:g} GB of graphics memory (it wants {need['vram_gb']} GB)")
-    if ram < need["ram_gb"]:
+    if ram < need["ram_gb"] - slack:
         short.append(f"{ram:g} GB of memory (it wants {need['ram_gb']} GB)")
     if not short:
         return True, f"This computer is ready for coding jobs: {vram:g} GB graphics memory, {ram:g} GB memory."

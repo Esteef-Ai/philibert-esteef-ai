@@ -52,6 +52,10 @@ check("versions compare as numbers", V("0.40.15") > V("0.40.4") and V("ollama ve
       and V("Warning: client version is 0.40.4") == (0, 40, 4) and V("") == (0, 0, 0))
 ok, msg = ce.hardware_verdict({"fast_gb": 16, "ram_gb": 64}, PINS["hardware"])
 check("16 GB card + 64 GB memory: ready", ok and "ready" in msg, msg)
+ok, msg = ce.hardware_verdict({"fast_gb": 15.9, "ram_gb": 31.8}, PINS["hardware"])
+check("a 16 GB card that reports 15.9 GB and 32 GB that reports 31.8: ready (seen on an RTX 5070 Ti)", ok, msg)
+ok, msg = ce.hardware_verdict({"fast_gb": 15.2, "ram_gb": 64}, PINS["hardware"])
+check("15.2 GB of graphics memory is still short", not ok, msg)
 ok, msg = ce.hardware_verdict({"fast_gb": 8, "ram_gb": 16}, PINS["hardware"])
 check("8 GB card + 16 GB memory: a plain warning naming both", not ok and "8 GB of graphics memory" in msg
       and "16 GB of memory" in msg and "anyway" in msg, msg)
