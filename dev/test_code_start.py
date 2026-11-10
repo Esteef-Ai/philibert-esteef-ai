@@ -136,6 +136,13 @@ def main():
             except urllib.error.HTTPError as e:
                 refused = e.code == 403
             check("phase 3: another website cannot read the chats", refused)
+            run = root / "data" / "code" / "run.json"
+            rj = json.loads(run.read_text(encoding="utf-8-sig")) if run.is_file() else {}
+            check("phase 5: run.json says where it runs", rj.get("url") == base, rj)
+            again = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                                    str(root / "code" / "start.ps1"), "-Headless"], capture_output=True, text=True, timeout=60)
+            check("phase 5: a second start does not start a second copy", again.returncode == 0
+                  and "already running" in again.stdout, again.stdout[-200:] + again.stderr[-200:])
             check("its own data goes to data\\code", (root / "data" / "code" / "logs" / "philibert-code.log").is_file())
             check("Philibert's data is not written to", sorted(x.name for x in (root / "data").iterdir()) == ["chats", "code", "vault"],
                   sorted(x.name for x in (root / "data").iterdir()))
@@ -147,6 +154,7 @@ def main():
             p.kill()
         check("closing it stops the Ollama it started", ollama is not None and not up(f"http://127.0.0.1:{ollama}/api/version"),
               (ollama, out.read_text(errors="replace")[-200:]))
+        check("phase 5: closing it removes run.json", not (root / "data" / "code" / "run.json").exists())
     finally:
         stop_launcher(root)
         # The junctions point at a REAL install. Remove each link itself (os.rmdir never follows it);

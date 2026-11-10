@@ -85,26 +85,27 @@ def addons(app=None):
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(text.encode("utf-8"))
     problems = []
-    marker = "chatref"                      # every CHATREF edit adds this word to the file it edits
-    by_file = {}
-    for rule in patching.CHATREF_BOTH:
-        by_file.setdefault(rule[0], []).append(rule)
-    for rel, rules in by_file.items():
-        p = app / rel
-        if not p.is_file():
-            problems.append(f"edit: {rel} is not in app/")
-            continue
-        raw = p.read_bytes().decode("utf-8")
-        if marker in raw:
-            continue
-        crlf = "\r\n" in raw
-        texts = {rel: raw.replace("\r\n", "\n")}
-        bad = patching.apply(texts, rules)
-        if bad:
-            problems += bad
-            continue
-        out = texts[rel].replace("\n", "\r\n") if crlf else texts[rel]
-        p.write_bytes(out.encode("utf-8"))
+    import re as _re
+    for ruleset, marker in patching.APP_ADDONS:   # each set's edits leave its marker word in the file
+        by_file = {}
+        for rule in ruleset:
+            by_file.setdefault(rule[0], []).append(rule)
+        for rel, rules in by_file.items():
+            p = app / rel
+            if not p.is_file():
+                problems.append(f"edit: {rel} is not in app/")
+                continue
+            raw = p.read_bytes().decode("utf-8")
+            if _re.search(marker, raw):
+                continue
+            crlf = "\r\n" in raw
+            texts = {rel: raw.replace("\r\n", "\n")}
+            bad = patching.apply(texts, rules)
+            if bad:
+                problems += bad
+                continue
+            out = texts[rel].replace("\n", "\r\n") if crlf else texts[rel]
+            p.write_bytes(out.encode("utf-8"))
     return problems
 
 

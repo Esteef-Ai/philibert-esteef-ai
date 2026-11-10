@@ -34,7 +34,8 @@ from engine import IS_WIN, _NO_WINDOW, Installer, free_port
 
 PLAT = "win-x64"
 # What an install gets from the repo's code\ folder
-CODE_SHIP = ["app", "start.ps1", "Start-Philibert-Code.bat", "requirements.txt", "pins.json"]
+CODE_SHIP = ["app", "start.ps1", "Start-Philibert-Code.bat", "requirements.txt", "pins.json", "philibert-code.ico",
+             "update.py", "Update-Philibert-Code.bat"]
 SITECUSTOMIZE = (
     "# Philibert Code: make code\\pylib a real site dir, so pywin32.pth runs (adds win32 paths and\n"
     "# registers its DLL folder). Written by Setup; PYTHONPATH=code\\pylib makes Python import it.\n"
@@ -322,6 +323,34 @@ class CodeInstaller(Installer):
             return False
         return bool(re.search(rf"(?m)^num_ctx\s+{num_ctx}\b", str(info.get("parameters") or "")))
 
+    # -- the optional desktop shortcut (the only thing Setup would put on this computer) -------------
+    _SHORTCUT_PS = r"""
+$d=[Environment]::GetFolderPath('Desktop'); if ($env:PC_DESKTOP) { $d=$env:PC_DESKTOP }   # tests
+$l=Join-Path $d 'Philibert Code.lnk'
+$w=New-Object -ComObject WScript.Shell
+$s=$w.CreateShortcut($l); $s.TargetPath=$env:PC_TARGET; $s.WorkingDirectory=$env:PC_DIR
+$s.WindowStyle=7; $s.Description='Philibert Code'; $s.IconLocation=$env:PC_ICO + ',0'; $s.Save()
+if (Test-Path -LiteralPath $l) { 'OK ' + $l } else { 'MISSING ' + $l }
+"""
+
+    def step_shortcut(self):
+        """Desktop\\Philibert Code.lnk -> code\\Start-Philibert-Code.bat, with Philibert Code's icon. Values go in
+        through the environment, never pasted into the script. The real desktop (OneDrive may have moved it)."""
+        if not self.plan.get("shortcut") or not IS_WIN:
+            return
+        env = {**os.environ, "PC_TARGET": str(self.code / "Start-Philibert-Code.bat"), "PC_DIR": str(self.code),
+               "PC_ICO": str(self.code / "philibert-code.ico")}
+        try:
+            r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", self._SHORTCUT_PS],
+                               capture_output=True, text=True, env=env, timeout=60, creationflags=_NO_WINDOW)
+            line = ((r.stdout or "").strip().splitlines() or [(r.stderr or "").strip()[:200]])[-1]
+        except (OSError, subprocess.SubprocessError) as e:
+            line = f"ERROR {e}"
+        self.log(f"desktop shortcut: {line}")
+        if not line.startswith("OK "):
+            self.state["warnings"].append("Couldn't put a Philibert Code shortcut on the desktop - start it with "
+                                          "code\\Start-Philibert-Code.bat in the Philibert folder.")
+
     # -- finish ------------------------------------------------------------------------------------
     def step_finish(self):
         rec = {"product": "Philibert Code", "installed": datetime.now().isoformat(timespec="seconds"),
@@ -340,6 +369,8 @@ class CodeInstaller(Installer):
         if self.plan.get("model", True):
             steps.append(("model", "Getting the coding model", 80, self.step_model))
         steps.append(("finish", "Finishing", 1, self.step_finish))
+        if self.plan.get("shortcut"):
+            steps.insert(-1, ("shortcut", "Putting a shortcut on the desktop", 1, self.step_shortcut))
         self.state["steps"] = [{"id": i, "title": t, "weight": w} for i, t, w, _ in steps]
         self.log(f"---- Philibert Code into {self.code} ----")
         try:

@@ -69,6 +69,8 @@
     if (has("boof")) list.push({ id: "boof", name: "Boof Launcher", icon: "app", img: "/live/desktop/boof-launcher.svg",
                                  action: function () { api("/api/desktop", { op: "open_boof" }); } });
     if (has("feedback")) list.push({ id: "feedback", name: "Feedback Shooter", icon: "feedback", url: "/feedback", w: 900, h: 720, title: "Feedback Shooter" });
+    if (st.code) list.push({ id: "code", name: "Philibert Code", icon: "app", img: "/live/desktop/philibert-code.svg",
+                             action: openCode });
     var sh = THEMES[st.settings.theme] ? THEMES[st.settings.theme].shell : "taskbar";
     if (sh === "phone" || sh === "c64")          // no Start menu there: shutting down is an app
       list.push({ id: "power", name: "Shut Down", icon: "shutdown", action: function () { shutdownDialog(); } });
@@ -1485,5 +1487,15 @@
     boot(false);
   });
 
+  /* Philibert Code, an add-on (open_code: shared/nd_codelaunch.py): its icon shows only when it is installed */
+  function openCode() {
+    notify("Philibert Code", "Opening Philibert Code - its own window appears in a moment.");
+    api("/api/desktop", { op: "open_code" }).then(function (r) {
+      if (!r || !r.ok) msgbox("Philibert Code", (r && r.msg) || "Philibert Code did not open.", "error");
+    }).catch(function () { msgbox("Philibert Code", "Philibert Code did not open.", "error"); });
+  }
+  api("/api/desktop", { op: "code_status" }).then(function (r) {
+    if (r && r.installed && !st.code) { st.code = true; renderIcons(); }
+  }).catch(function () {});
   window.PhilDesktop = { open: open, close: close, msgbox: msgbox, startSaver: startSaver };
 })();

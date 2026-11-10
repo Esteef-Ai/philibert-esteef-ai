@@ -134,7 +134,14 @@ Windows first. Mac later: OpenCode and Ollama run there, but the worker's proces
    Tests: `installer/tests/test_code_engine.py`. Philibert's Ollama pin was bumped 0.40.4 -> 0.40.15
    (2026-11-09, setup/pins.json + windows.ps1 + mac.sh) so the coding model runs on Philibert's Ollama;
    a drive picks it up on its first start after an update (the version stamp differs).
-5. Update channel, desktop/Start icon (and a Philibert Code icon on Philibert's retro desktop when installed).
+5. **Done 2026-11-10.** Update: `code\Update-Philibert-Code.bat` -> `code\update.py` (refuses while
+   Philibert Code runs; gets Philibert's repo - GitHub device sign-in if private, never saved - and runs
+   the repo's `installer/code_setup.py` over the install; keeps the model choice; data\code untouched).
+   One copy at a time: `start.ps1` writes `data\code\run.json`; a second start opens the running one.
+   Philibert's retro desktop shows a Philibert Code icon (`shared/philibert-code.svg`) only when it is
+   installed (`code\install.json`); opening it starts it or opens a window on it (`shared/nd_codelaunch.py`,
+   CODEICON_APP edits). Setup offers an optional desktop shortcut (`Philibert Code.lnk`, `code\philibert-code.ico`).
+   Tests: `dev/test_codelaunch.py` + additions to `test_code_engine.py` and `test_code_start.py`.
 6. Mac.
 
 ## 10. Decided

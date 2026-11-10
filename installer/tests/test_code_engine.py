@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
@@ -194,6 +195,44 @@ if (REAL / "runtime" / "win-x64" / "python" / "python.exe").is_file():
         check("run again: it updates the program and keeps the tools and packages", st.get("done")
               and not any("OpenCode 1" in str(d) and "MB" in str(d) for d in seen) and not any("pip" in str(d).lower() for d in seen), seen[-6:])
         check("run again: data\\code is untouched", (root / "data" / "code" / "chats" / "keep.json").read_text() == "{}")
+        # the optional desktop shortcut (to a scratch desktop, never the real one)
+        desk = Path(tempfile.mkdtemp(prefix="pc_desk_"))
+        os.environ["PC_DESKTOP"] = str(desk)
+        try:
+            st = Installer({"philibert": str(root), "source": {"local": str(REPO)}, "accept_slow": True, "model": False,
+                            "shortcut": True}, lambda s: None).run()
+            lnk = desk / "Philibert Code.lnk"
+            info = subprocess.run(["powershell", "-NoProfile", "-Command",
+                                   "$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:L); $s.TargetPath; $s.IconLocation"],
+                                  capture_output=True, text=True, env={**os.environ, "L": str(lnk)}).stdout.splitlines()
+            check("the shortcut is made when asked: Start-Philibert-Code.bat with Philibert Code's icon",
+                  st.get("done") and lnk.is_file() and info and info[0].endswith("Start-Philibert-Code.bat")
+                  and "philibert-code.ico" in info[1] and (c / "philibert-code.ico").is_file(), (st.get("error"), info))
+        finally:
+            os.environ.pop("PC_DESKTOP", None)
+            shutil.rmtree(desk, ignore_errors=True)
+        # Update-Philibert-Code: a zip of this repo instead of GitHub, through the same engine
+        import zipfile
+        zpath = Path(tempfile.mkdtemp(prefix="pc_zip_")) / "repo.zip"
+        with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
+            for top in ("installer", "code"):
+                for f in (REPO / top).rglob("*"):
+                    rel = f.relative_to(REPO)
+                    if f.is_file() and not set(rel.parts) & {".buildenv", "build", "dist", "__pycache__", "tools", "pylib", "_download"}:
+                        z.write(f, "philibert-esteef-ai-main/" + rel.as_posix())
+            z.write(REPO / "philibert.json", "philibert-esteef-ai-main/philibert.json")
+        shutil.copy(REPO / "philibert.json", root / "philibert.json")
+        u = subprocess.run([sys.executable, str(c / "update.py")], capture_output=True, text=True, timeout=900,
+                           env={**os.environ, "PC_UPDATE_ZIP": str(zpath), "PC_UPDATE_NO_PAUSE": "1"})
+        shutil.rmtree(zpath.parent, ignore_errors=True)
+        out = u.stdout + u.stderr
+        own = ce.CodeInstaller({"philibert": str(root)}, lambda s: None, log_path=root / "x.log").ollama_version()
+        if ce.version_tuple(own) >= ce.version_tuple(PINS["ollama_min"]):
+            check("the update runs Setup again from the download and finishes", u.returncode == 0 and "Philibert Code is ready" in out, out[-400:])
+        else:
+            check(f"the update stops on this Philibert's old Ollama ({own}) and says to update Philibert first",
+                  u.returncode == 1 and "Update Philibert" in out and (c / "app" / "NeuralDock_launcher.py").is_file(), out[-400:])
+        check("the update leaves data\\code alone", (root / "data" / "code" / "chats" / "keep.json").read_text() == "{}")
         inst = ce.CodeInstaller({"philibert": str(root), "source": {"local": str(REPO)}, "accept_slow": True},
                                 lambda s: None, log_path=root / "x.log")
         inst.ollama_version = lambda: "0.40.4"

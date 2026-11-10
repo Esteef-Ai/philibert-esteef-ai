@@ -23,12 +23,13 @@ def main(argv=None):
     ap.add_argument("--repo", default=info["repo"])          # the same repository Philibert installs from
     ap.add_argument("--accept-slow", action="store_true")
     ap.add_argument("--no-model", action="store_true")
+    ap.add_argument("--shortcut", action="store_true", help="a Philibert Code shortcut on this computer's desktop")
     a = ap.parse_args(argv)
     if a.list or not a.philibert:
         found = ce.find_philibert()
         print("\n".join(str(p) for p in found) if found else "No Philibert install found on this computer's drives.")
         return 0
-    plan = {"philibert": a.philibert, "accept_slow": a.accept_slow, "model": not a.no_model,
+    plan = {"philibert": a.philibert, "accept_slow": a.accept_slow, "model": not a.no_model, "shortcut": a.shortcut,
             "source": {"local": a.local} if a.local else {"repo": a.repo, "branch": "main"}}
     last = {"step": -1, "detail": ""}
 

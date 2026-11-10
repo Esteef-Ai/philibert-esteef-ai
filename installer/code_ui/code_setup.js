@@ -200,7 +200,8 @@
   function startInstall() {
     state.running = true;
     $("insterr").classList.add("hide");
-    api("start_install", { philibert: state.pick.path, model: $("opt-model").checked, accept_slow: !!state.slow })
+    api("start_install", { philibert: state.pick.path, model: $("opt-model").checked, accept_slow: !!state.slow,
+                           shortcut: $("opt-shortcut").checked })
       .then(function () { setTimeout(poll, 400); });
   }
   function poll() {

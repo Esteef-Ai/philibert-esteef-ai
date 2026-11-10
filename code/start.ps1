@@ -34,6 +34,25 @@ foreach ($need in @((Join-Path $root "app\NeuralDock_launcher.py"), $py, $ol)) {
 if (-not (Test-Path $app)) { Say "Philibert Code's program is missing from $code\app. Run its Setup again."; exit 1 }
 New-Item -ItemType Directory -Force $data, $logs | Out-Null
 
+# One Philibert Code at a time: if it is already running (data\code\run.json answers), open its window again.
+$runFile = Join-Path $data "run.json"
+if (Test-Path $runFile) {
+    try {
+        $run = Get-Content $runFile -Raw | ConvertFrom-Json
+        Invoke-WebRequest "$($run.url)/api/status" -UseBasicParsing -TimeoutSec 3 | Out-Null
+        if (-not $Headless) {
+            $chrome = Join-Path $rt "chromium\chrome-win64\chrome.exe"
+            if (Test-Path $chrome) {
+                Start-Process $chrome -ArgumentList "--app=$($run.url)", "--user-data-dir=`"$(Join-Path $data 'browser\windows')`"", "--disable-infobars"
+            } else { Start-Process $run.url }
+        }
+        Write-Host "Philibert Code is already running -> $($run.url)"
+        exit 0
+    } catch {
+        Remove-Item $runFile -ErrorAction SilentlyContinue             # left by a run that ended without tidying up
+    }
+}
+
 function Free-Port([int]$start, [int]$tries) {
     foreach ($p in $start..($start + $tries - 1)) {
         $l = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $p)
@@ -107,8 +126,12 @@ Write-Host "Philibert Code -> http://localhost:$($env:ND_PORT)"
 try {
     $p = Start-Process -FilePath $py -ArgumentList $args_ -NoNewWindow -PassThru `
         -RedirectStandardOutput (Join-Path $logs "philibert-code.log") -RedirectStandardError (Join-Path $logs "philibert-code.err.log")
+    # where it runs, for a second start and for Philibert's desktop icon (shared/nd_codelaunch.py)
+    @{ url = "http://127.0.0.1:$($env:ND_PORT)"; pid = $p.Id; started = (Get-Date).ToString("s") } |
+        ConvertTo-Json | Set-Content -Path $runFile -Encoding utf8
     $p.WaitForExit()
 } finally {
+    Remove-Item $runFile -ErrorAction SilentlyContinue
     if ($started -and -not $started.HasExited) {
         & taskkill.exe /PID $started.Id /T /F | Out-Null           # /T: its model runners too
         Write-Host "Stopped the Ollama this start began"

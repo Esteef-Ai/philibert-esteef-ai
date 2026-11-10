@@ -13,3 +13,10 @@ __pycache__/
 installer/.buildenv/
 installer/build/
 installer/dist/
+# What Philibert Code's Setup makes inside code\ - never in the repo.
+/code/tools/
+/code/pylib/
+/code/_download/
+/code/.app-new/
+/code/.pylib-new/
+/code/install.json

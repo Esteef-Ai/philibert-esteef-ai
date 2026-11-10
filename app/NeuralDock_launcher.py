@@ -18838,6 +18838,22 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(nd_imagegen.handle(body, _drive_root(), internet_on(), free_vram_for_comfy))
                 return
             if path == "/api/desktop":
+                if body.get("op") in ("code_status", "open_code"):   # Philibert Code (shared/nd_codelaunch.py)
+                    import nd_codelaunch
+                    if body["op"] == "code_status":
+                        self.send_json({"ok": True, **nd_codelaunch.status(_drive_root())})
+                        return
+                    r = nd_codelaunch.open_code(_drive_root())
+                    if r.get("url"):          # already running: a window on it, in this drive's browser
+                        try:
+                            if portable_browser():
+                                subprocess.Popen(_portable_browser_args(r["url"])[2])
+                            else:
+                                webbrowser.open(r["url"])
+                        except Exception as e:
+                            r = {"ok": False, "msg": f"Could not open its window: {e}"}
+                    self.send_json(r)
+                    return
                 if body.get("op") == "you":       # Control Panel > You, without /api/status's 4 s
                     self.send_json({"ok": True, "user_name": str(_config.get("user_name") or "")[:40],
                                     "online": internet_on()})

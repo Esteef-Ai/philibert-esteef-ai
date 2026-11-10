@@ -93,7 +93,7 @@ class CodeApi(philibert_setup.Api):
 
     def start_install(self, plan):
         plan = {"philibert": str(plan["philibert"]), "accept_slow": bool(plan.get("accept_slow")),
-                "model": bool(plan.get("model", True))}
+                "model": bool(plan.get("model", True)), "shortcut": bool(plan.get("shortcut"))}
         plan["source"] = philibert_setup.source()
         if plan["source"].get("repo") and self._token:
             plan["source"]["token"] = self._token

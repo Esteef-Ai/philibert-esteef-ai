@@ -16,6 +16,8 @@ L = re.escape
 SHARED = {
     "shared/nd_chatref.py": "nd_chatref.py",
     "shared/chatref.js": "live/static/chatref.js",
+    "shared/nd_codelaunch.py": "nd_codelaunch.py",
+    "shared/philibert-code.svg": "live/static/desktop/philibert-code.svg",
 }
 
 # Phase 3 (dev/PHILIBERT_CODE.md): reference a chat from the other app. Both apps.
@@ -49,6 +51,51 @@ CHATREF_CODE = [
      '    <div style="flex:1"></div>\n    <span style="font-size:9px;color:var(--muted)">REF:</span>', 1),
     ("NeuralDock_ui.html", L("</body>"), _SCRIPT.format(btn="chatref-btn", ta="ui"), 1),
 ]
+
+
+# Phase 5: Philibert's retro desktop shows a Philibert Code icon when Philibert Code is installed in this
+# Philibert; opening it starts it, or opens a window on it if it is running (shared/nd_codelaunch.py).
+# Philibert's app only.
+CODEICON_APP = [
+    ("NeuralDock_launcher.py", L('            if path == "/api/desktop":\n                if body.get("op") == "you":'),
+     '            if path == "/api/desktop":\n'
+     '                if body.get("op") in ("code_status", "open_code"):   # Philibert Code (shared/nd_codelaunch.py)\n'
+     "                    import nd_codelaunch\n"
+     '                    if body["op"] == "code_status":\n'
+     '                        self.send_json({"ok": True, **nd_codelaunch.status(_drive_root())})\n'
+     "                        return\n"
+     "                    r = nd_codelaunch.open_code(_drive_root())\n"
+     '                    if r.get("url"):          # already running: a window on it, in this drive\'s browser\n'
+     "                        try:\n"
+     "                            if portable_browser():\n"
+     '                                subprocess.Popen(_portable_browser_args(r["url"])[2])\n'
+     "                            else:\n"
+     '                                webbrowser.open(r["url"])\n'
+     "                        except Exception as e:\n"
+     '                            r = {"ok": False, "msg": f"Could not open its window: {e}"}\n'
+     "                    self.send_json(r)\n"
+     "                    return\n"
+     '                if body.get("op") == "you":', 1),
+    ("live/static/desktop/desktop.js",
+     L('    var sh = THEMES[st.settings.theme] ? THEMES[st.settings.theme].shell : "taskbar";\n    if (sh === "phone" || sh === "c64")'),
+     '    if (st.code) list.push({ id: "code", name: "Philibert Code", icon: "app", img: "/live/desktop/philibert-code.svg",\n'
+     "                             action: openCode });\n"
+     '    var sh = THEMES[st.settings.theme] ? THEMES[st.settings.theme].shell : "taskbar";\n    if (sh === "phone" || sh === "c64")', 1),
+    ("live/static/desktop/desktop.js", L("  window.PhilDesktop = { open: open, close: close, msgbox: msgbox, startSaver: startSaver };"),
+     "  /* Philibert Code, an add-on (open_code: shared/nd_codelaunch.py): its icon shows only when it is installed */\n"
+     "  function openCode() {\n"
+     '    notify("Philibert Code", "Opening Philibert Code - its own window appears in a moment.");\n'
+     '    api("/api/desktop", { op: "open_code" }).then(function (r) {\n'
+     '      if (!r || !r.ok) msgbox("Philibert Code", (r && r.msg) || "Philibert Code did not open.", "error");\n'
+     '    }).catch(function () { msgbox("Philibert Code", "Philibert Code did not open.", "error"); });\n'
+     "  }\n"
+     '  api("/api/desktop", { op: "code_status" }).then(function (r) {\n'
+     "    if (r && r.installed && !st.code) { st.code = true; renderIcons(); }\n"
+     "  }).catch(function () {});\n"
+     "  window.PhilDesktop = { open: open, close: close, msgbox: msgbox, startSaver: startSaver };", 1),
+]
+# sync_app.addons(): each rule set and the word that marks a file it has already edited
+APP_ADDONS = [(CHATREF_BOTH, "chatref"), (CODEICON_APP, "nd_codelaunch|openCode")]
 
 
 def apply(texts, rules):
