@@ -111,8 +111,14 @@ Windows first. Mac later: OpenCode and Ollama run there, but the worker's proces
 5. Update channel, desktop/Start icon (and a Philibert Code icon on Philibert's retro desktop when installed).
 6. Mac.
 
-## 10. Open questions
+## 10. Decided
 
-- Should Philibert's chat offer "This is a coding job: open it in Philibert Code?" when Code is installed
-  (only the task text is handed over)? Proposed for after ND's own handoff (build step 4) works.
-- Repo: keep `code/` in the Philibert repo (one sign-in), or a second private repo?
+- **Handoff from Philibert (yes, 2026-11-09).** When Philibert Code is installed, Philibert's chat
+  offers "This is a coding job: open it in Philibert Code?". Only the task text is handed over, only
+  on the user's click. Built after ND's own coding handoff (build step 4) works, as phase 7.
+- **One repo (recommended, 2026-11-09).** `code/` lives in the Philibert repo, with its own version in
+  `code/install.json`. Reasons: both are built from the same ND3 commit and share modules (notes,
+  chats, model manager), so one commit keeps them in step and the "needs Philibert X or newer" check
+  is trivial; one release flow, one set of testers. The extra download for Philibert-only users is a
+  few MB of code (tools and models are never committed). Split into a second repo only if the two
+  ever need different tester lists or are sold separately.
