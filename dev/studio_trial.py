@@ -150,6 +150,38 @@ def main(argv):
                 print(f"    review gave no usable file ({e}) - the test stays as it was")
                 continue
             f.write_text(new, encoding="utf-8")
+    elif stage == "dispute":
+        # A task is stuck: the referee decides whether its test is wrong; if so the test is repaired (and
+        # the old one kept in .studio/tests_before_dispute), so the foreman can resume. -> verdict printed.
+        tid = argv[2]
+        plan = json.loads((ws / "plan.json").read_text(encoding="utf-8"))
+        t = next(x for x in plan["tasks"] if x["id"] == tid)
+        state = json.loads((ws / ".foreman" / "state.json").read_text(encoding="utf-8"))
+        rep = (ws / ".foreman" / "REPORT.md").read_text(encoding="utf-8")
+        m = rep.split(f"### {tid} ", 1)
+        failure = (m[1].split("Last failure:", 1)[1].split("Prompts:", 1)[0].strip("`\n ") if len(m) > 1 and
+                   "Last failure:" in m[1] else str(state)[:3000])[:6000]
+        files = sorted({f for x in plan["tasks"] for f in x.get("files") or [] if (ws / f).is_file()})
+        code = "\n\n".join(f"--- {f} ---\n" + (ws / f).read_text(encoding="utf-8", errors="replace") for f in files)
+        f = ws / t["tests"]
+        old = f.read_text(encoding="utf-8")
+        reply = ask(ws, f"dispute_{tid}", S.DISPUTE.format(
+            tid=tid, spec=(ws / "SPEC.md").read_text(encoding="utf-8"), plan_summary=S.plan_summary(plan),
+            task=S.task_text(t), code=code[:60000], test=t["tests"], test_code=old, failure=failure), model, think)
+        body = S.strip_think(reply)
+        print(body.split("```")[0].strip()[:2500])
+        if "VERDICT: TEST" in body.upper().replace("**", ""):
+            try:
+                new = S.extract_python(reply)
+                compile(new, t["tests"], "exec")
+            except (ValueError, SyntaxError) as e:
+                print(f"  verdict TEST but no usable file ({e}) - the test stays as it was")
+                return
+            keep = sd / "tests_before_dispute"
+            keep.mkdir(exist_ok=True)
+            (keep / f.name).write_text(old, encoding="utf-8")
+            f.write_text(new, encoding="utf-8")
+            print(f"  {t['tests']} repaired (old copy in {keep})")
     elif stage == "check":
         py = sys.executable
         r = subprocess.run([py, str(FOREMAN), "check", str(ws / "plan.json")], capture_output=True, text=True,

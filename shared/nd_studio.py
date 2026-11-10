@@ -196,6 +196,44 @@ THE TEST FILE {test}:
 First list the wrong checks in one line each, then write the whole corrected file in one ```python block.
 """
 
+DISPUTE = """You are the referee of Philibert Code's builds. The programmer failed task {tid} three times and the \
+build has stopped. The programmer may not edit tests, so a test that is wrong blocks everything after it. Decide \
+who is wrong: the TEST or the CODE.
+
+The TEST is wrong when it cannot pass against a correct program: it builds objects with the wrong fields or \
+arguments (the code of the earlier, finished tasks below is the truth for their classes and functions), calls \
+an API wrongly, contradicts the task brief or the spec, needs admin rights, or is flaky. A test is NOT wrong just \
+because it is strict.
+
+THE SPEC (short): {spec}
+
+THE PLAN: {plan_summary}
+
+THE TASK:
+{task}
+
+THE CODE AS IT IS NOW (earlier tasks are finished and passed their own tests):
+{code}
+
+THE TEST FILE {test}:
+```python
+{test_code}
+```
+
+THE LAST FAILURE (the programmer's best attempt):
+```
+{failure}
+```
+
+Answer in this form:
+VERDICT: TEST or CODE
+WHY: one to three lines.
+If TEST: the whole corrected test file in one ```python block. Change only what is wrong; keep every right check, \
+the helpers (from _t import check, finish, temp_tree, run, WS) and finish() at the end. A failure inside one \
+check must not stop the file: build test data inside try blocks.
+If CODE: a HINT: line for the programmer, naming the exact fix.
+"""
+
 T_HELPER = '''"""Shared helpers for the tests (written by Philibert Code Studio; do not edit)."""
 import os
 import shutil
