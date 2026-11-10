@@ -119,7 +119,11 @@ Windows first. Mac later: OpenCode and Ollama run there, but the worker's proces
    It hides itself when the other app is not installed. Repo-owned files and edits live in
    `dev/patching.py`; `sync_app.py` applies them too (`--addons-only` without re-copying ND3). Tests:
    `dev/test_chatref.py`, plus checks in `test_sync_code.py` and `test_code_start.py`.
-4. **Engine done 2026-11-09 (window still to come).** `installer/code_engine.py` (CodeInstaller on
+4. **Done 2026-11-09.** Window: `installer/code_app.py` (CodeApi on Philibert Setup's Api: sign-in, progress,
+   cancel) + `installer/code_ui/` (Philibert Setup's look; pages Welcome+sign-in, Which Philibert, Ready to
+   install, Installing, Done; `?mock=1` design preview); `python installer/build.py --code [--dev]` ->
+   `installer/dist/Philibert Code Setup.exe` (14.5 MB). Tests: `installer/tests/test_code_app.py`.
+   Engine: `installer/code_engine.py` (CodeInstaller on
    Philibert's Installer) + `installer/code_setup.py` (console). Steps: check (Philibert set up here;
    hardware warning; Philibert's OWN ollama.exe >= `ollama_min`) -> app (code\app replaced whole, data\code
    never touched) -> tools (OpenCode 1.19.5 and MinGit 2.55.0.3, sha256-pinned in `code/pins.json`) ->

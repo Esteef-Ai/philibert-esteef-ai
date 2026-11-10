@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Philibert Code Setup</title>
+<link rel="stylesheet" href="../ui/fonts/fonts.css">
+<link rel="stylesheet" href="setup.css">
+<style>
+  .card .path { font-family: var(--mono); font-size: 12.5px; color: var(--cyan); }
+  .card .ver { font-size: 12px; color: var(--faint); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .has { font-size: 12px; color: var(--yellow); margin-top: 6px; }
+  .checks { margin-top: 18px; }
+  .checks .row { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; padding: 14px 18px; align-items: flex-start; }
+  .checks .row .dot { margin-top: 4px; }
+  .warnlist { margin-top: 14px; padding-left: 18px; color: var(--yellow); font-size: 13px; line-height: 1.6; }
+  .code-tag { font-family: var(--brand); font-weight: 800; letter-spacing: .12em; color: var(--pink); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <svg class="p1" viewBox="0 0 200 200" aria-hidden="true">
+      <path d="M62 62 V46 Q62 34 74 34 H126 Q138 34 138 46 V62" fill="none" stroke="var(--mark)" stroke-width="9" stroke-linecap="round"/>
+      <rect x="26" y="60" width="148" height="100" rx="16" fill="var(--mark)"/>
+      <circle cx="70" cy="104" r="25" fill="var(--bg)"/><circle cx="70" cy="104" r="17" fill="var(--mark)"/><circle cx="70" cy="104" r="6" fill="var(--bg)"/>
+      <circle cx="130" cy="104" r="25" fill="var(--bg)"/><circle cx="130" cy="104" r="17" fill="var(--mark)"/><circle cx="130" cy="104" r="6" fill="var(--bg)"/>
+      <path d="M48 143 H86 L93 134 L100 150 L107 138 L112 143 H152" fill="none" stroke="var(--bg)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="44" y="160" width="20" height="10" rx="3" fill="var(--mark)"/><rect x="136" y="160" width="20" height="10" rx="3" fill="var(--mark)"/>
+    </svg>
+    <div>
+      <div class="name">PHILIBERT <span class="code-tag">CODE</span></div>
+      <div class="by">BY
+        <svg viewBox="50 0 230 80" aria-label="Esteef.Ai">
+          <text x="128" y="52" text-anchor="middle" font-family="Montserrat" font-weight="800" font-size="34" letter-spacing="4" fill="var(--ink)">ESTEEF</text>
+          <ellipse cx="238" cy="40" rx="30" ry="14" fill="none" stroke="var(--orbit)" stroke-width="3" transform="rotate(-18 238 40)"/>
+          <text x="238" y="52" text-anchor="middle" font-family="Montserrat" font-weight="800" font-size="30" letter-spacing="3.6" fill="var(--ai)">AI</text>
+          <circle cx="212" cy="53" r="4" fill="var(--node)"/>
+        </svg>
+      </div>
+    </div>
+    <div class="setup">SETUP</div>
+  </header>
+
+  <nav class="rail"><ol id="rail"></ol></nav>
+
+  <main id="main">
+    <!-- 0 welcome -->
+    <section class="page" data-title="Welcome">
+      <h1>Install Philibert Code</h1>
+      <p class="lead">Philibert Code is Philibert's coding workshop: a coding agent that writes, tests and fixes programs on
+        this computer, with Philibert's own models and notes. It is an add-on - it goes inside a Philibert install and
+        shares its AI models, so Philibert has to be installed first.</p>
+      <div class="facts">
+        <dt>Needs</dt><dd>Philibert, set up on this computer. A graphics card with 16 GB and 32 GB of memory make coding jobs fast.</dd>
+        <dt>Takes</dt><dd>A couple of minutes for the program, then the coding model - about 22 GB to download.</dd>
+        <dt>Adds</dt><dd>Everything goes into a <code>code</code> folder inside Philibert's folder. Nothing is installed on the computer itself.</dd>
+      </div>
+      <p class="note hide" id="netnote"></p>
+      <div class="signin hide" id="signin">
+        <h3>Sign in to GitHub</h3>
+        <p class="note">Philibert Code is shared privately, like Philibert. Sign in with the GitHub account that was
+          invited - Setup only reads Philibert Code with it, and forgets the sign-in when it closes.</p>
+        <div id="gh-device">
+          <button class="btn primary" id="gh-start" type="button">Sign in with GitHub</button>
+          <div class="ghcode hide" id="gh-codebox">Type this code on the GitHub page that opened:
+            <b id="gh-code">----</b><span class="note" id="gh-wait">waiting for you to approve…</span></div>
+        </div>
+        <details id="gh-tokenbox"><summary class="note">Or paste a GitHub token</summary>
+          <div class="ghrow"><input id="gh-token" type="password" placeholder="ghp_… or github_pat_…" autocomplete="off" spellcheck="false">
+            <button class="btn" id="gh-use" type="button">Use it</button></div></details>
+        <p class="note" id="gh-msg"></p>
+      </div>
+    </section>
+
+    <!-- 1 which philibert -->
+    <section class="page" data-title="Which Philibert">
+      <h1>Which Philibert?</h1>
+      <p class="lead">Philibert Code goes inside the Philibert you pick, and uses its AI models and notes.</p>
+      <div class="cards" id="installs"></div>
+      <div class="pathline"><button class="linkbtn" id="browse" type="button">Choose another Philibert folder…</button></div>
+      <div class="verdict hide" id="pickmsg"></div>
+    </section>
+
+    <!-- 2 checks -->
+    <section class="page" data-title="Ready to install">
+      <h1>Ready to install</h1>
+      <p class="lead" id="checklead">Setup checked the Philibert you picked and this computer.</p>
+      <div class="checks" id="checks"></div>
+      <div class="opts">
+        <div class="head">Options</div>
+        <div class="row"><div class="t"><b>Get the coding model now</b><small>Qwen3.6 coding, about 22 GB. Without it, Philibert Code
+          installs but cannot run coding jobs until you run Setup again.</small></div>
+          <label class="ck"><input type="checkbox" id="opt-model" checked> Get it</label></div>
+      </div>
+    </section>
+
+    <!-- 3 installing -->
+    <section class="page" data-title="Installing">
+      <h1 id="insttitle">Installing Philibert Code</h1>
+      <p class="lead">You can leave this running. If it stops, run Setup again - it continues where it left off.</p>
+      <div class="bars"><div class="bar"><i id="overall"></i></div><div class="bar thin" id="stepbar"><i id="steppct"></i></div></div>
+      <div class="detail" id="detail"></div>
+      <ol class="steps" id="steps"></ol>
+      <div class="verdict no hide" id="insterr"></div>
+    </section>
+
+    <!-- 4 done -->
+    <section class="page" data-title="Done">
+      <h1>Philibert Code is ready</h1>
+      <p class="lead">Start it from <code id="donepath"></code> - or with the button below. It shares Philibert's models and
+        notes; its own chats and settings are kept apart, and either app can reference a chat from the other.</p>
+      <ul class="warnlist" id="warns"></ul>
+    </section>
+  </main>
+
+  <footer>
+    <span class="msg" id="msg"></span>
+    <button class="btn" id="back">Back</button>
+    <button class="btn primary" id="next">Next</button>
+  </footer>
+</div>
+<script src="code_setup.js"></script>
+</body>
+</html>

@@ -28,6 +28,8 @@ NEEDS = (["pyinstaller==6.16.0", "pywebview==6.2.1", "psutil==7.2.2", "backports
 
 def main():
     dev = "--dev" in sys.argv
+    if "--code" in sys.argv:
+        return build_code(dev)
     if not PY.exists():
         print("making the build environment ...")
         venv.create(ENV, with_pip=True)
@@ -57,6 +59,37 @@ def main():
             "--paths", str(HERE), "--paths", str(REPO / "app"), str(HERE / "app.py")]
     subprocess.run(args, check=True, cwd=str(HERE))
     out = HERE / "dist" / (name + (".exe" if IS_WIN else ".app"))
+    print(f"built {out} ({out.stat().st_size / 1e6:.1f} MB)" if out.exists() else "build finished")
+
+
+def build_code(dev):
+    """Philibert Code Setup (installer/code_app.py + code_ui): Windows only for now."""
+    if not PY.exists():
+        print("making the build environment ...")
+        venv.create(ENV, with_pip=True)
+    subprocess.run([str(PY), "-m", "pip", "install", "--no-cache-dir", "--disable-pip-version-check", "-q", *NEEDS], check=True)
+    bundle = HERE / "build" / "code_bundle"
+    shutil.rmtree(bundle, ignore_errors=True)
+    bundle.mkdir(parents=True)
+    info = json.loads((REPO / "philibert.json").read_text(encoding="utf-8"))
+    (bundle / "philibert.json").write_text(json.dumps(info), encoding="utf-8")
+    shutil.copy2(REPO / "code" / "pins.json", bundle / "code_pins.json")       # the page-3 checks before downloading
+    shutil.copy2(REPO / "models.json", bundle / "models.json")                 # Philibert Setup's Api expects it
+    if dev:
+        (bundle / "source.json").write_text(json.dumps({"local": str(REPO)}), encoding="utf-8")
+    sep = ";" if IS_WIN else ":"
+    name = "Philibert Code Setup" + (" (dev)" if dev else "")
+    args = [str(PY), "-m", "PyInstaller", "--noconfirm", "--clean", "--windowed", "--onefile",
+            "--name", name, "--icon", str(REPO / "setup" / "assets" / "philibert.ico"),
+            "--distpath", str(HERE / "dist"), "--workpath", str(HERE / "build" / "code_work"),
+            "--specpath", str(HERE / "build"),
+            "--add-data", f"{HERE / 'code_ui'}{sep}code_ui", "--add-data", f"{HERE / 'ui' / 'fonts'}{sep}ui/fonts",
+            "--add-data", f"{bundle}{sep}bundle",
+            "--hidden-import", "core", "--hidden-import", "engine", "--hidden-import", "github_auth",
+            "--hidden-import", "app", "--hidden-import", "code_engine", "--hidden-import", "certifi",
+            "--paths", str(HERE), str(HERE / "code_app.py")]
+    subprocess.run(args, check=True, cwd=str(HERE))
+    out = HERE / "dist" / (name + ".exe")
     print(f"built {out} ({out.stat().st_size / 1e6:.1f} MB)" if out.exists() else "build finished")
 
 
