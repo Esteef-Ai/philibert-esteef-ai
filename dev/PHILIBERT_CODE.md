@@ -8,7 +8,7 @@ Philibert itself stays the streamlined helper and agent chat; coding work happen
 
 - **Philibert first.** Philibert Code installs only into an existing Philibert install. It never ships
   its own Python, Ollama, model store, updater or sign-in: it uses Philibert's.
-- **The developer's ND3 is not touched.** `G:\!Ai\ND3` stays the developer's own dev copy, with its
+- **The developer's ND3 is not touched.** The ND3 folder beside this repo stays the developer's own dev copy, with its
   memory, vault, history and settings. Philibert Code is *built from* it by a script in this repo
   (like `dev/sync_app.py`), and the rebrand happens in that build, never in ND3.
 - **Nothing personal ships.** Same rule and same guard as Philibert: no memory, chats, vault, config,

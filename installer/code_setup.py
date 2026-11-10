@@ -6,6 +6,7 @@
 --local installs from a repo folder (development); without it, from GitHub (needs access, see Setup).
 """
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -18,7 +19,8 @@ def main(argv=None):
     ap.add_argument("philibert", nargs="?")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--local")
-    ap.add_argument("--repo", default="sskrobe/philibert-esteef-ai")
+    info = json.loads((Path(__file__).resolve().parent.parent / "philibert.json").read_text(encoding="utf-8"))
+    ap.add_argument("--repo", default=info["repo"])          # the same repository Philibert installs from
     ap.add_argument("--accept-slow", action="store_true")
     ap.add_argument("--no-model", action="store_true")
     a = ap.parse_args(argv)
