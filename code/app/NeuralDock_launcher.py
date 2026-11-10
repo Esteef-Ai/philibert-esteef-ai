@@ -18775,6 +18775,24 @@ class Handler(BaseHTTPRequestHandler):
             import nd_chatref
             self.send_json(nd_chatref.handle(body, "philibert" if PORTABLE else "code", _drive_root()))
             return
+        if path == "/api/autonomy":
+            # Philibert Code: read or choose the agent autonomy (dev/patching.py AUTONOMY_CODE)
+            _origin = self.headers.get("Origin")
+            if _origin and urllib.parse.urlparse(_origin).netloc != self.headers.get("Host"):
+                self.send_json({"ok": False, "msg": "refused: another site"}, 403)
+                return
+            _lvl = str(body.get("level") or "").lower()
+            if _lvl:
+                if _lvl not in ('ask', 'trusted', 'autonomous'):
+                    self.send_json({"ok": False, "msg": "unknown level"}, 400)
+                    return
+                _config["agent_autonomy"] = _lvl
+                _config["agent_autonomy_chosen"] = True
+                save_config()
+                log(f"Agent autonomy set to {_lvl}", "info")
+            _cur = str(_config.get("agent_autonomy", "ask")).lower()
+            self.send_json({"ok": True, "level": "autonomous" if _cur == "auto" else _cur})
+            return
         if path in ("/api/notes", "/api/chats", "/api/desktop", "/api/band", "/api/images", "/api/files", "/api/feedback", "/api/board", "/api/yoteach", "/api/modelshare", "/api/guitartab"):
             # The Notes app (nd_notes.py) and saved chats (nd_chats.py). They
             # write files, so a page from another site in the user's own browser

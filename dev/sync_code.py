@@ -142,7 +142,7 @@ class Source:
         return {"from": "commit", "commit": _git("rev-parse", "HEAD").decode().strip()}
 
 
-RULES = BRAND + PATCHES + patching.CHATREF_BOTH + patching.CHATREF_CODE
+RULES = BRAND + PATCHES + patching.CHATREF_BOTH + patching.CHATREF_CODE + patching.AUTONOMY_CODE
 
 
 def brand(files, rules=BRAND):

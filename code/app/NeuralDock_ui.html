@@ -817,6 +817,11 @@ body.portable [onclick="openCloneModal()"] { display: none !important; }
     <button onclick="clearWorkspace()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px" title="Clear workspace">x</button>
     <button class="ws-mini" onclick="termOpenHere('powershell')" title="PowerShell in this folder (TERMINAL tab)">&gt;_ PS</button>
     <button class="ws-mini" onclick="termOpenHere('cmd')" title="Command Prompt in this folder (TERMINAL tab)">&gt;_ CMD</button>
+    <span style="color:var(--muted);font-size:9px;letter-spacing:1px;margin-left:6px">AUTONOMY:</span>
+    <select id="autonomy-sel" class="ctrl-num" style="color:var(--text);font-size:9px;padding:1px 4px"
+            title="Ask: every change and command asks first.&#10;Trusted: file writes and tests run without asking; /code jobs may run commands (needed to run the tests).&#10;Autonomous: nothing asks (destructive commands are still refused).">
+      <option value="ask">ASK</option><option value="trusted">TRUSTED</option><option value="autonomous">AUTONOMOUS</option>
+    </select>
   </div>
   <div id="project-bar">
     <span style="color:var(--muted);font-size:9px;letter-spacing:1px">PROJECT:</span>
@@ -7380,5 +7385,18 @@ document.addEventListener('DOMContentLoaded',function(){ setTimeout(projPopulate
 if (window.PhilModelPicker) PhilModelPicker.attach(document.getElementById("model-sel"), { prefix: "ollama:" });</script>
 <script src="/live/chatref.js"></script>
 <script>ChatRef.attach(document.getElementById('chatref-btn'), document.getElementById('ui'));</script>
+<script>/* Philibert Code: agent autonomy on the workspace bar (dev/patching.py AUTONOMY_CODE) */
+(function(){
+  var sel=document.getElementById('autonomy-sel'); if(!sel) return;
+  function show(l){ sel.value=l; sel.style.color=l==='ask'?'var(--text)':(l==='trusted'?'var(--amber,#fb0)':'var(--red)'); }
+  api('/api/autonomy',{}).then(function(r){ if(r&&r.ok) show(r.level); }).catch(function(){});
+  sel.addEventListener('change',function(){
+    var l=sel.value;
+    if(l==='autonomous'&&!confirm('Autonomous: the agent runs every command without asking. Continue?')){
+      api('/api/autonomy',{}).then(function(r){ if(r&&r.ok) show(r.level); }); return; }
+    api('/api/autonomy',{level:l}).then(function(r){ if(r&&r.ok) show(r.level); else alert((r&&r.msg)||'Not saved'); })
+      .catch(function(e){ alert('Not saved: '+e.message); });
+  });
+})();</script>
 </body>
 </html>

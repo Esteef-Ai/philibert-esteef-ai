@@ -3,8 +3,10 @@ parts that are easier to queue up and keep track of on a playlist.
 
 The parts are copies of the original's own audio, cut without re-encoding (PyAV, which Philibert's
 Python already has): no quality is lost and an hour takes seconds. The original file is only ever
-read. Parts are named <name>_part1, _part2, ... (_part01 when there are ten or more, so they sort
-in order), with the original's tags and cover, the title + " - Part N" and the track number N/total.
+read. Parts are named <name>_1, _2, ... (_01 when there are ten or more, so they sort in order),
+with the original's tags and cover, the title + " - Part N" and a track number. Track numbers start
+at 1 or carry on from a number given (first_track), so a book that comes as several long files
+(MISTBORN0301, 0302, 0303) numbers 1-7, 8-14, 15-21 and a player that sorts by track plays it in order.
 
   data/audiosplit/inbox/<token>/   a file dropped on the page (the browser can't say where it lives,
                                    so it is copied here first); removed when its parts are done
@@ -90,11 +92,18 @@ def plan(duration, parts=None, max_minutes=None):
 def part_names(src, n, out_dir):
     src = Path(src)
     width = len(str(n)) if n >= 10 else 1
-    return [Path(out_dir) / f"{src.stem}_part{str(i + 1).zfill(width)}{src.suffix}" for i in range(n)]
+    return [Path(out_dir) / f"{src.stem}_{str(i + 1).zfill(width)}{src.suffix}" for i in range(n)]
+
+
+def first_track(body):
+    try:
+        return max(1, min(9999, int(body.get("first_track") or 1)))
+    except (TypeError, ValueError):
+        return 1
 
 
 # --- cutting --------------------------------------------------------------------------------------
-def split(src, cuts, outs, progress=lambda frac, i: None):
+def split(src, cuts, outs, progress=lambda frac, i: None, first=1):
     """Copy src's audio packets into one file per (start, end); no re-encoding. Writes each part
     as <name>.partial first, so a part only appears under its real name once it is whole."""
     av = _av()
@@ -121,7 +130,7 @@ def split(src, cuts, outs, progress=lambda frac, i: None):
             o = av.open(str(outs[k]) + ".partial", "w", format=_format(outs[k], inp))
             o.metadata.update({key: v for key, v in md.items() if key.lower() not in ("title", "track", "encoder", "duration")})
             o.metadata["title"] = f"{title} - Part {k + 1}"
-            o.metadata["track"] = f"{k + 1}/{total}"
+            o.metadata["track"] = f"{k + 1}/{total}" if first == 1 else str(first + k)
             os_ = o.add_stream_from_template(a)
             if o.format.name == "ogg":                      # Ogg keeps its tags on the stream
                 os_.metadata.update(o.metadata)
@@ -236,6 +245,7 @@ def start(body, data_dir):
     if not out_dir.is_dir():
         return {"ok": False, "msg": "That folder for the parts isn't there."}
     outs = part_names(info["path"], len(cuts), out_dir)
+    first = first_track(body)
     src = Path(info["path"]).resolve()
     if any(o.resolve() == src for o in outs):
         return {"ok": False, "msg": "A part would have the original's name - rename the original first."}
@@ -257,8 +267,10 @@ def start(body, data_dir):
 
     def go():
         try:
-            files = split(info["path"], cuts, outs, say)
-            _job.update(state="done", files=[{"name": Path(f).name, "length": clock(e - s)} for f, (s, e) in zip(files, cuts)])
+            files = split(info["path"], cuts, outs, say, first)
+            _job.update(state="done", next_track=first + len(files),
+                        files=[{"name": Path(f).name, "length": clock(e - s), "track": first + k}
+                               for k, (f, (s, e)) in enumerate(zip(files, cuts))])
             inbox = Path(data_dir) / "audiosplit" / "inbox"
             if src.is_relative_to(inbox.resolve()):
                 shutil.rmtree(src.parent, ignore_errors=True)    # our own copy of a dropped file
@@ -285,9 +297,10 @@ def handle(body, data_dir):
         if isinstance(cuts, str):
             return {"ok": False, "msg": cuts}
         out_dir = str(body.get("out_dir") or _default_out(info, data_dir))
-        names = part_names(info["path"], len(cuts), out_dir)
+        names, first = part_names(info["path"], len(cuts), out_dir), first_track(body)
         return {"ok": True, "folder": out_dir, "parts": [{"name": n.name, "start": clock(s), "end": clock(e), "length": clock(e - s),
-                                                         "exists": n.exists()} for n, (s, e) in zip(names, cuts)]}
+                                                         "track": first + k, "exists": n.exists()}
+                                                        for k, (n, (s, e)) in enumerate(zip(names, cuts))]}
     if op == "split_pick_folder":
         import nd_retro_vault
         path = nd_retro_vault.pick_folder("Where should the parts go", str(body.get("start") or ""))

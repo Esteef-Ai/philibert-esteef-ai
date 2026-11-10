@@ -126,6 +126,12 @@ if sc.ND.is_dir():
                   launcher.index('if path == "/api/chatref":') > launcher.index("if path not in AUTH_EXEMPT and not self.authed():"))
             check("phase 3: the main window has the button and loads the script",
                   'id="chatref-btn"' in ui_t and "ChatRef.attach(document.getElementById('chatref-btn')" in ui_t)
+            check("autonomy: /api/autonomy sits after the sign-in check and validates the level",
+                  launcher.index('if path == "/api/autonomy":') > launcher.index("if path not in AUTH_EXEMPT and not self.authed():")
+                  and "('ask', 'trusted', 'autonomous')" in launcher)
+            check("autonomy: the workspace bar has the selector and its script",
+                  'id="autonomy-sel"' in ui_t and "api('/api/autonomy',{level:l})" in ui_t
+                  and ui_t.index('id="autonomy-sel"') < ui_t.index('<div id="project-bar">'))
             wk = (out / "opencode_worker.py").read_text(encoding="utf-8")
             fm_t = (out / "nd_foreman.py").read_text(encoding="utf-8")
             check("phase 4: the worker and the foreman follow ND_OLLAMA_URL (Philibert's port)",

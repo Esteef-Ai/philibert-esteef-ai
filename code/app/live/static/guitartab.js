@@ -629,7 +629,7 @@
   function openSplit() {
     flushSave(); stop(); closePop();
     st.cur = null; st.item = null; st.tab = null; st.mode = "split";
-    if (!st.split) st.split = { file: null, by: "max", parts: 4, minutes: 60, folder: "", preview: null, job: null, busy: "" };
+    if (!st.split) st.split = { file: null, by: "max", parts: 4, minutes: 60, folder: "", preview: null, job: null, busy: "", track: 1, nextAt: "" };
     history.replaceState(null, "", "#split");
     drawNav(); drawSplit();
   }
@@ -668,12 +668,15 @@
           ? '<label class="f2">Parts<input type="number" id="spParts" min="2" max="500" value="' + S.parts + '"><span class="hint">each about ' + clockS(f.duration / Math.max(1, S.parts)) + "</span></label>"
           : '<label class="f2">Minutes per part, at most<input type="number" id="spMin" min="1" max="1440" value="' + S.minutes + '">'
             + '<span class="hint"><a href="#" data-m="30">30 min</a> · <a href="#" data-m="60">1 h</a> · <a href="#" data-m="120">2 h</a> · <a href="#" data-m="180">3 h</a></span></label>')
-        + '</div><p class="note" style="margin-top:12px">The parts are all the same length' + (S.by === "max" ? ": as few as fit under that limit" : "") + ".</p></div>"
+        + '<label class="f2">First track number<input type="number" id="spTrack" min="1" max="9999" value="' + S.track + '">'
+        + '<span class="hint">' + (S.track > 1 ? "carries on from the last file you split" : "for the next file of the same book, carry on from its last track") + "</span></label>"
+        + '</div><p class="note" style="margin-top:12px">The parts are all the same length' + (S.by === "max" ? ": as few as fit under that limit" : "")
+        + ". A book in several long files: split them in order and the track numbers keep going, so the playlist plays straight through.</p></div>"
         + '<div class="card"><h2>The parts <span class="right"><button class="btn" id="spFolder" type="button">CHANGE FOLDER</button></span></h2>'
         + '<p class="spfolder">Saved in ' + esc(pv && pv.folder ? pv.folder : (S.folder || f.folder)) + "</p>"
         + (pv && pv.ok
           ? '<ol class="parts">' + pv.parts.map(function (p) {
-              return "<li><b>" + esc(p.name) + "</b><span>" + p.start + " – " + p.end + (p.exists ? " <em>already there</em>" : "") + "</span></li>"; }).join("") + "</ol>"
+              return "<li><b>" + esc(p.name) + "</b><span>track " + p.track + " · " + p.start + " – " + p.end + (p.exists ? " <em>already there</em>" : "") + "</span></li>"; }).join("") + "</ol>"
           : '<p class="err">' + esc(pv ? pv.msg : "") + "</p>")
         + '<div class="go"><button class="btn primary" id="spGo" type="button"' + (pv && pv.ok ? "" : " disabled") + ">SPLIT INTO "
         + (pv && pv.ok ? pv.parts.length + " PARTS" : "PARTS") + "</button>"
@@ -692,12 +695,13 @@
     if ($("spFolder")) $("spFolder").onclick = function () {
       api("split_pick_folder", { start: pv && pv.folder ? pv.folder : "" }).then(function (r) { if (r.ok) { S.folder = r.path; splitPreview(); } });
     };
+    if ($("spTrack")) $("spTrack").oninput = function () { S.track = Math.max(1, Math.min(9999, parseInt(this.value, 10) || 1)); splitPreview(true); };
     if ($("spGo")) $("spGo").onclick = function () { splitStart(false); };
     status(j && j.state === "running" ? "Splitting…" : f ? f.name + " · " + f.length : "Audio File Splitter", "ok");
   }
   function cutArgs() {
     var S = st.split;
-    return { path: S.file.path, out_dir: S.folder || "", parts: S.by === "parts" ? S.parts : null, max_minutes: S.by === "max" ? S.minutes : null };
+    return { path: S.file.path, out_dir: S.folder || "", first_track: S.track, parts: S.by === "parts" ? S.parts : null, max_minutes: S.by === "max" ? S.minutes : null };
   }
   function splitPreview(typing) {
     var S = st.split;
@@ -716,7 +720,12 @@
     var S = st.split;
     S.busy = "";
     if (!r.ok) { drawSplit(); if (!r.cancelled) toast(r.msg); return; }
-    S.file = r; S.job = null; S.folder = ""; S.preview = null;
+    // the next file of the same book (browsed from the same folder, or dropped after a dropped one):
+    // its track numbers carry on from the last split, and dropped parts go to the same folder
+    var keep = S.nextAt && (r.dropped ? S.nextAt === "dropped" : S.nextAt === r.folder);
+    S.file = r; S.job = null; S.preview = null;
+    if (!keep) S.track = 1;
+    if (!keep || !r.dropped) S.folder = "";
     if (S.by === "max" && r.duration < S.minutes * 60 * 2) S.by = "parts";      // under two parts' worth: count them instead
     splitPreview();
   }
@@ -766,7 +775,10 @@
       S.job = j;
       if (st.mode === "split") drawSplit();
       if (j.state === "running") setTimeout(splitPoll, 400);
-      else if (j.state === "done") toast("Split into " + j.files.length + " parts.");
+      else if (j.state === "done") {
+        S.track = j.next_track || 1; S.nextAt = !S.file ? "" : S.file.dropped ? "dropped" : S.file.folder;
+        toast("Split into " + j.files.length + " parts.");
+      }
     });
   }
 

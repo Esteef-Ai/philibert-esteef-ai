@@ -53,6 +53,62 @@ CHATREF_CODE = [
 ]
 
 
+# Philibert Code's agent autonomy, chosen on the workspace bar (it was only a config-file key).
+# "ask": every write and command asks; "trusted": file writes and tests run without asking, and /code
+# jobs may run commands (OpenCode cannot ask mid-run); "autonomous": nothing asks except the hard
+# blacklist, which refuses at every level. Applied AFTER CHATREF_BOTH (it reuses that anchor).
+AUTONOMY_LEVELS = ("ask", "trusted", "autonomous")
+_AUTONOMY_ROUTE = (
+    '        if path == "/api/autonomy":\n'
+    "            # Philibert Code: read or choose the agent autonomy (dev/patching.py AUTONOMY_CODE)\n"
+    '            _origin = self.headers.get("Origin")\n'
+    '            if _origin and urllib.parse.urlparse(_origin).netloc != self.headers.get("Host"):\n'
+    '                self.send_json({"ok": False, "msg": "refused: another site"}, 403)\n'
+    "                return\n"
+    '            _lvl = str(body.get("level") or "").lower()\n'
+    "            if _lvl:\n"
+    f"                if _lvl not in {AUTONOMY_LEVELS!r}:\n"
+    '                    self.send_json({"ok": False, "msg": "unknown level"}, 400)\n'
+    "                    return\n"
+    '                _config["agent_autonomy"] = _lvl\n'
+    '                _config["agent_autonomy_chosen"] = True\n'
+    "                save_config()\n"
+    '                log(f"Agent autonomy set to {_lvl}", "info")\n'
+    '            _cur = str(_config.get("agent_autonomy", "ask")).lower()\n'
+    '            self.send_json({"ok": True, "level": "autonomous" if _cur == "auto" else _cur})\n'
+    "            return\n")
+_AUTONOMY_UI = (
+    '    <span style="color:var(--muted);font-size:9px;letter-spacing:1px;margin-left:6px">AUTONOMY:</span>\n'
+    '    <select id="autonomy-sel" class="ctrl-num" style="color:var(--text);font-size:9px;padding:1px 4px"\n'
+    '            title="Ask: every change and command asks first.&#10;Trusted: file writes and tests run without asking;'
+    ' /code jobs may run commands (needed to run the tests).&#10;Autonomous: nothing asks (destructive commands are'
+    ' still refused).">\n'
+    '      <option value="ask">ASK</option><option value="trusted">TRUSTED</option>'
+    '<option value="autonomous">AUTONOMOUS</option>\n'
+    "    </select>\n"
+    '  </div>\n  <div id="project-bar">')
+_AUTONOMY_JS = (
+    "<script>/* Philibert Code: agent autonomy on the workspace bar (dev/patching.py AUTONOMY_CODE) */\n"
+    "(function(){\n"
+    "  var sel=document.getElementById('autonomy-sel'); if(!sel) return;\n"
+    "  function show(l){ sel.value=l; sel.style.color=l==='ask'?'var(--text)':(l==='trusted'?'var(--amber,#fb0)':'var(--red)'); }\n"
+    "  api('/api/autonomy',{}).then(function(r){ if(r&&r.ok) show(r.level); }).catch(function(){});\n"
+    "  sel.addEventListener('change',function(){\n"
+    "    var l=sel.value;\n"
+    "    if(l==='autonomous'&&!confirm('Autonomous: the agent runs every command without asking. Continue?')){\n"
+    "      api('/api/autonomy',{}).then(function(r){ if(r&&r.ok) show(r.level); }); return; }\n"
+    "    api('/api/autonomy',{level:l}).then(function(r){ if(r&&r.ok) show(r.level); else alert((r&&r.msg)||'Not saved'); })\n"
+    "      .catch(function(e){ alert('Not saved: '+e.message); });\n"
+    "  });\n"
+    "})();</script>\n</body>")
+AUTONOMY_CODE = [
+    ("NeuralDock_launcher.py", L('        if path in ("/api/notes", "/api/chats",'),
+     _AUTONOMY_ROUTE + '        if path in ("/api/notes", "/api/chats",', 1),
+    ("NeuralDock_ui.html", L('  </div>\n  <div id="project-bar">'), _AUTONOMY_UI, 1),
+    ("NeuralDock_ui.html", L("</body>"), _AUTONOMY_JS, 1),
+]
+
+
 # Phase 5: Philibert's retro desktop shows a Philibert Code icon when Philibert Code is installed in this
 # Philibert; opening it starts it, or opens a window on it if it is running (shared/nd_codelaunch.py).
 # Philibert's app only.
