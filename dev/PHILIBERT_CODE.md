@@ -1,0 +1,118 @@
+# Philibert Code by Esteef.Ai — design (draft)
+
+Decided 2026-11-09: NeuralDock is officially **Philibert Code**. It is the coding and power-agent
+member of the Philibert family: a separate install that **requires Philibert** and reuses its pieces.
+Philibert itself stays the streamlined helper and agent chat; coding work happens in Philibert Code.
+
+## 1. Principles
+
+- **Philibert first.** Philibert Code installs only into an existing Philibert install. It never ships
+  its own Python, Ollama, model store, updater or sign-in: it uses Philibert's.
+- **The developer's ND3 is not touched.** `G:\!Ai\ND3` stays the developer's own dev copy, with its
+  memory, vault, history and settings. Philibert Code is *built from* it by a script in this repo
+  (like `dev/sync_app.py`), and the rebrand happens in that build, never in ND3.
+- **Nothing personal ships.** Same rule and same guard as Philibert: no memory, chats, vault, config,
+  history, personal paths, names, emails or tokens. The build refuses to finish if any are left.
+- **Brand at the surface only.** Window titles, UI text, docs and installer say "Philibert Code".
+  Internal file names (`NeuralDock_launcher.py`, `nd_*.py`) keep their names, because many scripts,
+  tests and `sync_app.py` depend on them.
+
+## 2. Where it lives
+
+Philibert Code installs as an add-on folder **inside** the Philibert install it belongs to:
+
+```
+<Philibert install>\               (E:\Philibert, K:\Philibert, ...)
+  app\  runtime\<os>\  setup\  data\        <- Philibert, unchanged
+  code\                                     <- Philibert Code
+    app\                                    built from ND3 (rebranded, scrubbed)
+    pylib\                                  extra Python packages, on top of Philibert's runtime
+    tools\opencode\  tools\git\             pinned third-party tools
+    install.json                            version, channel, what was installed
+  data\code\                                Philibert Code's own data (see 3)
+```
+
+Why inside: sharing becomes plain relative paths; a portable drive keeps working when moved; uninstalling
+Philibert Code is deleting `code\` and `data\code\` (with a "keep my data" option).
+It is still a **separate install**: its own Setup, its own version and update channel, its own
+desktop/Start icon, uninstallable on its own. Setup finds Philibert by looking for
+`install.json` in the folder the user picks (or the drives' `\Philibert` folders), never through the registry.
+
+## 3. Shared and separate
+
+| | Shared with Philibert | Philibert Code's own |
+|---|---|---|
+| Python + Ollama runtimes | yes (`runtime\<os>`) | extra packages in `code\pylib` |
+| Model store and model manager | yes; Code adds its entries to the catalogue | — |
+| Updater, GitHub sign-in, installer engine | yes | its own update channel |
+| **Notes vault** | **yes, one vault** (`data\vault`, edited through nd_notes) | — |
+| Chats | no | `data\code\chats` |
+| Settings, autonomy, memory, logs | no | `data\code\` |
+
+**Referencing a chat from the other app.** The chat histories stay separate, but the user can pull one in
+when it's needed: a "Reference a chat…" button lists the other app's chats (read-only), and the one
+picked is added to the current conversation as a quoted, clearly labeled context block. It only happens when
+the user asks: neither app reads the other's chats on its own, and nothing is ever written back.
+This works both ways (Philibert can reference a Philibert Code chat too).
+
+## 4. What ships
+
+**In:** the full ND agent and chat UI with shell access (asks before changes; autonomy default `ask`), the
+OpenCode coding worker and `/code` (KEEP / UNDO / SHOW DIFF / FIX THE REGRESSIONS), the foreman plan
+runner, ND's coding guards and lint/tests/browser checks, automation (managed browser, hidden desktop),
+notes, files.
+
+**Out:** Heretic / abliteration, the model benchmarks and bench harnesses (T3, overnight runs), remote
+control, anything under `temp\`, experiments, and everything personal. Image generation and Retro
+Vault stay Philibert features.
+
+**Third-party tools, pinned in `setup\pins.json`:** OpenCode (MIT), MinGit (Git for Windows,
+GPL-2.0 binary, unmodified). Downloaded by Setup, never committed. OpenCode's config is written by
+Philibert Code (`opencode_worker.write_config`), never the user's own `~/.config/opencode`.
+
+## 5. Models and hardware
+
+- Default coding model: Qwen3.6 35B-A3B coding (`qwen3.6:35b-a3b-coding`, official Ollama library)
+  plus a Modelfile that makes the 128K-window tag. Philibert's model manager pulls it and Setup
+  creates the tag.
+- **Hardware check in Setup:** below 16 GB of video memory or 32 GB of RAM, Setup warns plainly
+  ("coding jobs will be very slow or will not load on this computer") and lets the user continue.
+- Philibert's own chat models are untouched; Philibert Code can also use them for plain chat.
+
+## 6. Building it (in this repo, read-only from ND3)
+
+`dev/sync_code.py`, modelled on `sync_app.py`:
+1. Copy the listed ND3 code files into `code/app/` (an explicit list, like `FILES`; never `temp/`,
+   `experiments/`, data or config).
+2. Apply the same SCRUB table and the same personal-data guard; refuse on any hit.
+3. Apply the brand swaps (`NeuralDock` → `Philibert Code` in visible strings), each with an asserted
+   count, so a change in ND3 that moves a string fails the build loudly instead of shipping half-branded.
+4. Print a summary; the developer reviews `git diff` and commits. Pushing needs the developer's OK.
+
+## 7. Updates
+
+Same private repo and sign-in as Philibert, `code/` folder, its own version in `code/install.json`.
+Philibert's Update button updates Philibert; Philibert Code's own Update button updates `code\` (and
+refuses if its required Philibert version is newer than the one installed, telling the user to update
+Philibert first).
+
+## 8. Platforms
+
+Windows first. Mac later: OpenCode and Ollama run there, but the worker's process handling
+(taskkill, cmd) and the foreman's are Windows-only today and need a platform layer.
+
+## 9. Build phases
+
+1. `dev/sync_code.py` + scrub/brand guard + tests (no installer yet; run from a dev folder).
+2. Shared paths: Philibert Code runs from `<Philibert>\code\` against Philibert's runtime, models and vault,
+   with its own `data\code\`.
+3. "Reference a chat" in both apps.
+4. Setup for Philibert Code (find Philibert, hardware check, OpenCode + MinGit, model pull + tag).
+5. Update channel, desktop/Start icon (and a Philibert Code icon on Philibert's retro desktop when installed).
+6. Mac.
+
+## 10. Open questions
+
+- Should Philibert's chat offer "This is a coding job: open it in Philibert Code?" when Code is installed
+  (only the task text is handed over)? Proposed for after ND's own handoff (build step 4) works.
+- Repo: keep `code/` in the Philibert repo (one sign-in), or a second private repo?
