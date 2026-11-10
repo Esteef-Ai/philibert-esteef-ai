@@ -26,6 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import sync_app  # noqa: E402  - Philibert's own build: FILES, DIRS, TEXT, scrub(), PERSONAL
+import patching  # noqa: E402  - counted edits + repo-owned files (shared/), used by both builds
 
 REPO = sync_app.REPO
 ND = sync_app.ND
@@ -133,24 +134,20 @@ class Source:
         return {"from": "commit", "commit": _git("rev-parse", "HEAD").decode().strip()}
 
 
+RULES = BRAND + PATCHES + patching.CHATREF_BOTH + patching.CHATREF_CODE
+
+
 def brand(files, rules=BRAND):
-    """Apply the brand swaps to {rel: text}; -> list of problems (a wrong hit count is one)."""
-    problems = []
-    for rel, pat, new, want in rules:
-        if rel not in files:
-            problems.append(f"brand: {rel} is not in the build")
-            continue
-        text, n = re.subn(pat, lambda _m: new, files[rel])
-        if n != want:
-            problems.append(f"brand: {rel}: expected {want} hit(s) of {pat!r}, found {n} - "
-                            f"look at what changed in ND3 and update BRAND")
-            continue
-        files[rel] = text
-    return problems
+    """Apply counted edits to {rel: LF text}; -> list of problems (a wrong hit count is one)."""
+    return patching.apply(files, rules)
 
 
-def build(src, out, files=None, dirs=None, rules=BRAND + PATCHES):
+def build(src, out, files=None, dirs=None, rules=None, shared=None):
     """Stage, scrub, check and brand; replace `out` only when clean. -> (ok, report lines)."""
+    if rules is None:
+        rules = RULES
+    if shared is None:                          # the repo's own files: only for the real build
+        shared = patching.shared_files() if files is None else {}
     rels = list(files if files is not None else FILES)
     for d in (dirs if dirs is not None else DIRS):
         rels += [r for r in src.listdir(d) if "__pycache__" not in r]
@@ -185,6 +182,11 @@ def build(src, out, files=None, dirs=None, rules=BRAND + PATCHES):
         else:
             notes.append(f"skipped {rel}: not in the source, and nothing in this build uses it")
     rels = [r for r in rels if r not in missing]
+    for rel, text in shared.items():            # owned by this repo, not ND3 - same privacy check
+        for m in sync_app.PERSONAL.finditer(text):
+            problems.append(f"personal: {rel}: {m.group(0)}")
+        texts[rel] = text.replace("\r\n", "\n")
+        rels.append(rel)
     problems += brand(texts, rules)
     if problems:
         return False, problems

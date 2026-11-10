@@ -90,6 +90,11 @@ def main():
         note = root / "data" / "vault" / "Projects" / "Shared note.md"
         note.parent.mkdir(parents=True)
         note.write_text("# Shared note\nWritten in Philibert, read by Philibert Code.\n", encoding="utf-8")
+        chat = root / "data" / "chats" / "c20261109-090000-abcd.json"
+        chat.parent.mkdir(parents=True)
+        chat.write_text(json.dumps({"id": "c20261109-090000-abcd", "title": "Venue load-in times", "updated": time.time(),
+                                    "messages": [{"role": "user", "content": "When is load-in at the Roxy?"},
+                                                 {"role": "assistant", "content": "Load-in is at 4 pm."}]}), encoding="utf-8")
 
         p, out = start(root)
         base = ollama = None
@@ -116,8 +121,23 @@ def main():
                   == (root / "data" / "vault").resolve(), body)
             code, body = post(base, "/api/notes", {"op": "read", "id": "Projects/Shared note.md"})
             check("a note written in Philibert opens in Philibert Code", "read by Philibert Code" in str(body.get("body")), body)
+            code, body = post(base, "/api/chatref", {"op": "list"})
+            check("phase 3: Philibert Code lists Philibert's chats", code == 200 and body.get("from") == "Philibert"
+                  and [c["title"] for c in body.get("chats", [])] == ["Venue load-in times"], (code, body))
+            code, body = post(base, "/api/chatref", {"op": "get", "id": "c20261109-090000-abcd"})
+            check("phase 3: and turns one into a quoted, labelled block",
+                  '[Referenced chat from Philibert: "Venue load-in times"' in str(body.get("text"))
+                  and "> Philibert: Load-in is at 4 pm." in str(body.get("text")), body)
+            req = urllib.request.Request(base + "/api/chatref", b'{"op":"list"}', method="POST",
+                                         headers={"Content-Type": "application/json", "Origin": "http://evil.example"})
+            try:
+                urllib.request.urlopen(req, timeout=10)
+                refused = False
+            except urllib.error.HTTPError as e:
+                refused = e.code == 403
+            check("phase 3: another website cannot read the chats", refused)
             check("its own data goes to data\\code", (root / "data" / "code" / "logs" / "philibert-code.log").is_file())
-            check("Philibert's data is not written to", sorted(x.name for x in (root / "data").iterdir()) == ["code", "vault"],
+            check("Philibert's data is not written to", sorted(x.name for x in (root / "data").iterdir()) == ["chats", "code", "vault"],
                   sorted(x.name for x in (root / "data").iterdir()))
         # -- closing Philibert Code stops the Ollama it started ------------------------------------------
         stop_launcher(root)

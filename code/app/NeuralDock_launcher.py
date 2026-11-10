@@ -18766,6 +18766,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error":"unauthorized","hint":"Send X-ND-Token. Pair in Setup > Devices."}, 401)
             return
 
+        if path == "/api/chatref":
+            # Philibert <-> Philibert Code: the OTHER app's chats, read-only (shared/nd_chatref.py)
+            _origin = self.headers.get("Origin")
+            if _origin and urllib.parse.urlparse(_origin).netloc != self.headers.get("Host"):
+                self.send_json({"ok": False, "msg": "refused: another site"}, 403)
+                return
+            import nd_chatref
+            self.send_json(nd_chatref.handle(body, "philibert" if PORTABLE else "code", _drive_root()))
+            return
         if path in ("/api/notes", "/api/chats", "/api/desktop", "/api/band", "/api/images", "/api/files", "/api/feedback", "/api/board", "/api/yoteach", "/api/modelshare", "/api/guitartab"):
             # The Notes app (nd_notes.py) and saved chats (nd_chats.py). They
             # write files, so a page from another site in the user's own browser

@@ -846,6 +846,7 @@ body.portable [onclick="openCloneModal()"] { display: none !important; }
     <button class="chat-act-btn" onclick="clearCurrentChat()">⌫ CLEAR</button>
     <button class="chat-act-btn" onclick="undoLastFileChange()" title="Restore the last file the AI modified from its automatic backup" style="color:var(--orange)">↩ UNDO FILE</button>
     <button class="chat-act-btn" id="route-toggle" onclick="toggleAutoRoute()" title="AUTO: coding requests are routed to your code model automatically">ROUTE: AUTO</button>
+    <button class="chat-act-btn" id="chatref-btn" hidden>&#8644; PHILIBERT CHAT</button>
     <div style="flex:1"></div>
     <span style="font-size:9px;color:var(--muted)">REF:</span>
     <select id="chat-ref-sel" style="background:var(--panel);border:1px solid var(--border);color:var(--muted);padding:2px 6px;border-radius:var(--r);font-size:9px;font-family:inherit" onchange="insertRef(this.value)">
@@ -7377,5 +7378,7 @@ document.addEventListener('DOMContentLoaded',function(){ setTimeout(projPopulate
 <script src="/live/modelpicker.js"></script>
 <script>/* the model picker: plain names, scores, download and delete (nd_models.json) */
 if (window.PhilModelPicker) PhilModelPicker.attach(document.getElementById("model-sel"), { prefix: "ollama:" });</script>
+<script src="/live/chatref.js"></script>
+<script>ChatRef.attach(document.getElementById('chatref-btn'), document.getElementById('ui'));</script>
 </body>
 </html>

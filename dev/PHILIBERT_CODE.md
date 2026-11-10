@@ -111,7 +111,14 @@ Windows first. Mac later: OpenCode and Ollama run there, but the worker's proces
    Heretic (endpoints, panels); Philibert's and Philibert Code's program folders are write-protected.
    `dev/test_code_start.py` runs it from a stand-in install. Extra packages for Setup to put in
    `code\pylib`: `code/requirements.txt` (ruff, pillow, pywin32).
-3. "Reference a chat" in both apps.
+3. **Done 2026-11-09.** "Reference a chat" in both apps: `shared/nd_chatref.py` (read-only; Philibert's
+   `data\chats`, Philibert Code's `data\code\chat_session.json` tabs and `data\code\chats`) behind
+   `/api/chatref` (after sign-in, same-site only), and `shared/chatref.js`: a ⇄ button (Philibert: beside
+   the message box; Philibert Code: "⇄ PHILIBERT CHAT" on the chat toolbar) that puts the picked chat at
+   the top of the message box as a labelled, quoted block (newest 6,000 characters), to edit or send.
+   It hides itself when the other app is not installed. Repo-owned files and edits live in
+   `dev/patching.py`; `sync_app.py` applies them too (`--addons-only` without re-copying ND3). Tests:
+   `dev/test_chatref.py`, plus checks in `test_sync_code.py` and `test_code_start.py`.
 4. Setup for Philibert Code (find Philibert, hardware check, OpenCode + MinGit, model pull + tag).
 5. Update channel, desktop/Start icon (and a Philibert Code icon on Philibert's retro desktop when installed).
 6. Mac.

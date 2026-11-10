@@ -18,6 +18,8 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))      # dev/patching.py
+
 REPO = Path(__file__).resolve().parent.parent
 ND = Path(os.environ.get("ND_SOURCE") or (REPO.parent / "ND3"))
 APP = REPO / "app"
@@ -72,7 +74,45 @@ def scrub(text):
     return text
 
 
+def addons(app=None):
+    """What only the Philibert family has (dev/patching.py): the repo's own files (shared/) and counted
+    edits to the copies. Idempotent: an edited file carries its marker and is left alone the next time.
+    -> problems."""
+    import patching
+    app = Path(app or APP)
+    for dst, text in patching.shared_files().items():
+        p = app / dst
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(text.encode("utf-8"))
+    problems = []
+    marker = "chatref"                      # every CHATREF edit adds this word to the file it edits
+    by_file = {}
+    for rule in patching.CHATREF_BOTH:
+        by_file.setdefault(rule[0], []).append(rule)
+    for rel, rules in by_file.items():
+        p = app / rel
+        if not p.is_file():
+            problems.append(f"edit: {rel} is not in app/")
+            continue
+        raw = p.read_bytes().decode("utf-8")
+        if marker in raw:
+            continue
+        crlf = "\r\n" in raw
+        texts = {rel: raw.replace("\r\n", "\n")}
+        bad = patching.apply(texts, rules)
+        if bad:
+            problems += bad
+            continue
+        out = texts[rel].replace("\n", "\r\n") if crlf else texts[rel]
+        p.write_bytes(out.encode("utf-8"))
+    return problems
+
+
 def main():
+    if "--addons-only" in sys.argv:
+        bad = addons()
+        print("\n".join(["ADD-ONS NOT APPLIED:"] + ["  " + b for b in bad]) if bad else "add-ons applied to app/")
+        sys.exit(1 if bad else 0)
     if not ND.is_dir():
         sys.exit(f"NeuralDock source not found at {ND} (set ND_SOURCE)")
     APP.mkdir(exist_ok=True)
@@ -82,7 +122,7 @@ def main():
         rels += [p.relative_to(ND).as_posix() for p in sorted((ND / d).rglob("*"))
                  if p.is_file() and "__pycache__" not in p.parts]
         # a file removed from ND goes from app/ too (a retired theme's stylesheet, say)
-        keep = set(rels)
+        keep = set(rels) | set(__import__("patching").SHARED.values())    # the repo's own files stay
         for old in sorted((APP / d).rglob("*")) if (APP / d).is_dir() else []:
             if old.is_file() and old.relative_to(APP).as_posix() not in keep:
                 old.unlink()
@@ -99,7 +139,9 @@ def main():
             line = out.count("\n", 0, m.start()) + 1
             problems.append(f"{f}:{line}: {m.group(0)}")
         dst.write_bytes(out.encode("utf-8"))
-    gone = sorted(p.name for p in APP.iterdir() if p.is_file() and p.name not in FILES)
+    problems += addons()
+    gone = sorted(p.name for p in APP.iterdir() if p.is_file() and p.name not in FILES
+                  and p.name not in {Path(d).name for d in __import__("patching").SHARED.values()})
     if problems:
         print("PERSONAL DATA LEFT - add a SCRUB entry or remove it at the source:")
         for p in problems:

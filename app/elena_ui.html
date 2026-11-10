@@ -416,6 +416,8 @@ button:disabled{color:var(--dim); border-color:var(--s2); cursor:default}
             aria-label="Conversation mode">&#9673;</button>
     <button id="imgbtn" class="icon" type="button" hidden title="Picture mode: your next message becomes a picture"
             aria-label="Picture mode" aria-pressed="false">&#127912;</button>
+    <button id="refbtn" class="icon" type="button" hidden title="Reference a chat from the other app"
+            aria-label="Reference a chat">&#8644;</button>
     <textarea id="ta" rows="1" placeholder="Ask Elena&hellip;"></textarea>
     <span class="split">
       <button id="mic" class="icon" title="Click to start, click again to stop"
@@ -2522,5 +2524,7 @@ probe();
 <script src="/live/modelpicker.js"></script>
 <script>/* the model picker: plain names, download and delete, on the drive and in native ND */
 if (window.PhilModelPicker) PhilModelPicker.attach(document.getElementById("modelsel"));</script>
+<script src="/live/chatref.js"></script>
+<script>ChatRef.attach(document.getElementById('refbtn'), document.getElementById('ta'));</script>
 </body>
 </html>

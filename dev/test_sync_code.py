@@ -120,6 +120,14 @@ if sc.ND.is_dir():
             check("phase 2: the shared notes vault is Philibert's", 'Path(os.environ["PHILIBERT_ROOT"]) / "data"' in launcher)
             ui_t = (out / "NeuralDock_ui.html").read_text(encoding="utf-8")
             check("phase 2: the Heretic and device panels are hidden", "Philibert Code: not included" in ui_t)
+            check("phase 3: the chat-reference module and script ship (from shared/)",
+                  (out / "nd_chatref.py").is_file() and (out / "live" / "static" / "chatref.js").is_file())
+            check("phase 3: the /api/chatref route sits after the sign-in check",
+                  launcher.index('if path == "/api/chatref":') > launcher.index("if path not in AUTH_EXEMPT and not self.authed():"))
+            check("phase 3: the main window has the button and loads the script",
+                  'id="chatref-btn"' in ui_t and "ChatRef.attach(document.getElementById('chatref-btn')" in ui_t)
+            el_t = (out / "elena_ui.html").read_text(encoding="utf-8")
+            check("phase 3: the chat page has the button too", 'id="refbtn"' in el_t and "ChatRef.attach" in el_t)
             have = {p.relative_to(out).as_posix() for p in out.rglob("*") if p.is_file()}
             check("coding ships: worker, foreman, playbooks", {"opencode_worker.py", "nd_foreman.py",
                   "prompts/foreman_worker_opencode.md"} <= have, sorted(have)[:10])
