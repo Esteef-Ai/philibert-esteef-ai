@@ -8,10 +8,10 @@
     "mac-x64":   "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.11.17%2B20261003-x86_64-apple-darwin-install_only.tar.gz"
   },
   "ollama": {
-    "version": "v0.40.4",
-    "win-x64":   "https://github.com/ollama/ollama/releases/download/v0.40.4/ollama-windows-amd64.zip",
-    "mac-arm64": "https://github.com/ollama/ollama/releases/download/v0.40.4/ollama-darwin.tgz",
-    "mac-x64":   "https://github.com/ollama/ollama/releases/download/v0.40.4/ollama-darwin.tgz"
+    "version": "v0.40.15",
+    "win-x64":   "https://github.com/ollama/ollama/releases/download/v0.40.15/ollama-windows-amd64.zip",
+    "mac-arm64": "https://github.com/ollama/ollama/releases/download/v0.40.15/ollama-darwin.tgz",
+    "mac-x64":   "https://github.com/ollama/ollama/releases/download/v0.40.15/ollama-darwin.tgz"
   },
   "chromium": {
     "version": "156.0.8078.47",

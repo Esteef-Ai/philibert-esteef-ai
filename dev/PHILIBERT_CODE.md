@@ -127,8 +127,9 @@ Windows first. Mac later: OpenCode and Ollama run there, but the worker's proces
    runs) -> model (qwen3.6:35b-a3b-coding pulled, q36c-nd128k made via /api/create; reuses Philibert's
    running Ollama) -> code\install.json. start.ps1 puts code\tools on PATH and sets ND_OPENCODE_EXE;
    the build points the worker/foreman at ND_OLLAMA_URL and OpenCode's files at data\code\opencode.
-   Tests: `installer/tests/test_code_engine.py`. **Blocker:** Philibert pins Ollama 0.40.4; the coding
-   model was measured on 0.40.15.
+   Tests: `installer/tests/test_code_engine.py`. Philibert's Ollama pin was bumped 0.40.4 -> 0.40.15
+   (2026-11-09, setup/pins.json + windows.ps1 + mac.sh) so the coding model runs on Philibert's Ollama;
+   a drive picks it up on its first start after an update (the version stamp differs).
 5. Update channel, desktop/Start icon (and a Philibert Code icon on Philibert's retro desktop when installed).
 6. Mac.
 

@@ -32,7 +32,7 @@ APP="$ROOT/app/NeuralDock_launcher.py"
 
 # Pinned: what this version of Philibert was tested with.
 PY_URL="https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.11.17%2B20261003-$PYA-install_only.tar.gz"
-OL_VER="v0.40.4"
+OL_VER="v0.40.15"
 OL_URL="https://github.com/ollama/ollama/releases/download/$OL_VER/ollama-darwin.tgz"
 # The window: Chrome for Testing, Google's pinned Chromium builds, run from the drive.
 CR_VER="156.0.8078.47"

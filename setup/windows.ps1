@@ -78,8 +78,8 @@ $cfg = @{
     FsNote = $(if ($fs -eq "NTFS") { "This drive is NTFS: it works on Windows, but a Mac can only read it." } else { "" })
     # Pinned: what this version of Philibert was tested with.
     PyUrl = "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.11.17%2B20261003-x86_64-pc-windows-msvc-install_only.tar.gz"
-    OlVer = "v0.40.4"
-    OlUrl = "https://github.com/ollama/ollama/releases/download/v0.40.4/ollama-windows-amd64.zip"
+    OlVer = "v0.40.15"
+    OlUrl = "https://github.com/ollama/ollama/releases/download/v0.40.15/ollama-windows-amd64.zip"
     # The window: Chrome for Testing, Google's pinned Chromium builds, run from the drive.
     CrVer = "156.0.8078.47"
     CrUrl = "https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.47/win64/chrome-win64.zip"
