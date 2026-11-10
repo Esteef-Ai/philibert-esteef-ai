@@ -99,6 +99,14 @@ PATCHES = [
      '        _config["obsidian_root"] = str(Path(os.environ["PHILIBERT_ROOT"]) / "data")\n'
      '        _config["obsidian_vault"] = "vault"\n'
      '    if not PORTABLE:\n        return\n    _config["obsidian_root"] = str(_CONFIG_DIR)\n', 1),
+    # inside Philibert, Ollama is on Philibert's port (ND_OLLAMA_URL, set by the launcher), not 11434
+    ("opencode_worker.py", L('OLLAMA = "http://127.0.0.1:11434"\n'),
+     'OLLAMA = os.environ.get("ND_OLLAMA_URL") or "http://127.0.0.1:11434"\n', 1),
+    ("nd_foreman.py", L('OLLAMA_URL = "http://127.0.0.1:11434"\n'),
+     'OLLAMA_URL = os.environ.get("ND_OLLAMA_URL") or "http://127.0.0.1:11434"\n', 1),
+    # OpenCode's config and run logs are data: data\code\opencode, not inside the program (an update replaces it)
+    ("opencode_worker.py", L('HOME = HERE / "opencode"\n'),
+     'HOME = (Path(os.environ["ND_DATA_DIR"]) / "opencode") if os.environ.get("ND_DATA_DIR") else HERE / "opencode"\n', 1),
     # the UI: no Heretic and no device pairing panels
     ("NeuralDock_ui.html", L("</head>"),
      "<style>/* Philibert Code: not included */ .sc:has(#heretic-model-list), .sc:has(#dev-list),"

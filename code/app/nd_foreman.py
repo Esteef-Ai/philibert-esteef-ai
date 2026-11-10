@@ -58,7 +58,7 @@ PLAYBOOK_OC = HERE / "prompts" / "foreman_worker_opencode.md"
 # names still go to ND, so old plans are unchanged and alt_model can switch WORKER as well as model.
 OPENCODE = "opencode/"
 ND_URL = "http://127.0.0.1:7788"
-OLLAMA_URL = "http://127.0.0.1:11434"
+OLLAMA_URL = os.environ.get("ND_OLLAMA_URL") or "http://127.0.0.1:11434"
 FM = ".foreman"
 PROMPT_BUDGET = 30000          # chars (~8K tokens) - leaves room in a 32K window for the work
 FILE_CAP = 9000                # one shown file at most; longer ones are cut with a note

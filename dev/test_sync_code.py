@@ -126,6 +126,12 @@ if sc.ND.is_dir():
                   launcher.index('if path == "/api/chatref":') > launcher.index("if path not in AUTH_EXEMPT and not self.authed():"))
             check("phase 3: the main window has the button and loads the script",
                   'id="chatref-btn"' in ui_t and "ChatRef.attach(document.getElementById('chatref-btn')" in ui_t)
+            wk = (out / "opencode_worker.py").read_text(encoding="utf-8")
+            fm_t = (out / "nd_foreman.py").read_text(encoding="utf-8")
+            check("phase 4: the worker and the foreman follow ND_OLLAMA_URL (Philibert's port)",
+                  'OLLAMA = os.environ.get("ND_OLLAMA_URL")' in wk and 'OLLAMA_URL = os.environ.get("ND_OLLAMA_URL")' in fm_t)
+            check("phase 4: OpenCode's config and runs live in data\\code\\opencode",
+                  'HOME = (Path(os.environ["ND_DATA_DIR"]) / "opencode")' in wk)
             el_t = (out / "elena_ui.html").read_text(encoding="utf-8")
             check("phase 3: the chat page has the button too", 'id="refbtn"' in el_t and "ChatRef.attach" in el_t)
             have = {p.relative_to(out).as_posix() for p in out.rglob("*") if p.is_file()}

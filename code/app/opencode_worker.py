@@ -42,8 +42,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import nd_foreman as fm  # noqa: E402  (git, run_test, lost_labels: tested, 59 tests)
 
-OLLAMA = "http://127.0.0.1:11434"
-HOME = HERE / "opencode"
+OLLAMA = os.environ.get("ND_OLLAMA_URL") or "http://127.0.0.1:11434"
+HOME = (Path(os.environ["ND_DATA_DIR"]) / "opencode") if os.environ.get("ND_DATA_DIR") else HERE / "opencode"
 RUNS = HOME / "runs"
 CONFIG = HOME / "opencode.json"
 # qwen3.6:35b-a3b-coding at num_ctx 65536. Not 32K: T3 peaks at 24-30K (15 direct runs), so with a 32K

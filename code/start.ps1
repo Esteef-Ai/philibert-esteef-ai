@@ -81,7 +81,15 @@ if ($port) {
 Remove-Item Env:ND_PORTABLE -ErrorAction SilentlyContinue        # the full app, not Philibert's portable one
 $env:PYTHONNOUSERSITE = "1"                                        # never this computer's own Python packages
 $env:PYTHONIOENCODING = "utf-8"
-$env:PYTHONPATH       = Join-Path $code "pylib"                    # Philibert Code's extra packages
+$env:PYTHONPATH       = Join-Path $code "pylib"                    # Philibert Code's extra packages (its
+                                                                   # sitecustomize.py makes it a real site dir)
+# OpenCode and Git from code\tools (Setup puts them there); never this computer's own copies
+$oc  = Join-Path $code "tools\opencode\opencode.exe"
+$git = Join-Path $code "tools\git\cmd"
+if (Test-Path $oc) { $env:ND_OPENCODE_EXE = $oc }
+foreach ($dir in @($git, (Split-Path $oc -Parent))) {
+    if (Test-Path $dir) { $env:PATH = "$dir;$env:PATH" }
+}
 $env:PHILIBERT_ROOT   = $root
 $env:ND_DATA_DIR      = $data
 $env:ND_OLLAMA_URL    = "http://127.0.0.1:$port"

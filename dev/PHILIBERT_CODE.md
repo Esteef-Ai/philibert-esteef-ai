@@ -119,7 +119,16 @@ Windows first. Mac later: OpenCode and Ollama run there, but the worker's proces
    It hides itself when the other app is not installed. Repo-owned files and edits live in
    `dev/patching.py`; `sync_app.py` applies them too (`--addons-only` without re-copying ND3). Tests:
    `dev/test_chatref.py`, plus checks in `test_sync_code.py` and `test_code_start.py`.
-4. Setup for Philibert Code (find Philibert, hardware check, OpenCode + MinGit, model pull + tag).
+4. **Engine done 2026-11-09 (window still to come).** `installer/code_engine.py` (CodeInstaller on
+   Philibert's Installer) + `installer/code_setup.py` (console). Steps: check (Philibert set up here;
+   hardware warning; Philibert's OWN ollama.exe >= `ollama_min`) -> app (code\app replaced whole, data\code
+   never touched) -> tools (OpenCode 1.19.5 and MinGit 2.55.0.3, sha256-pinned in `code/pins.json`) ->
+   python (ruff, pillow, pywin32 via pip --target into code\pylib + a sitecustomize.py so pywin32.pth
+   runs) -> model (qwen3.6:35b-a3b-coding pulled, q36c-nd128k made via /api/create; reuses Philibert's
+   running Ollama) -> code\install.json. start.ps1 puts code\tools on PATH and sets ND_OPENCODE_EXE;
+   the build points the worker/foreman at ND_OLLAMA_URL and OpenCode's files at data\code\opencode.
+   Tests: `installer/tests/test_code_engine.py`. **Blocker:** Philibert pins Ollama 0.40.4; the coding
+   model was measured on 0.40.15.
 5. Update channel, desktop/Start icon (and a Philibert Code icon on Philibert's retro desktop when installed).
 6. Mac.
 

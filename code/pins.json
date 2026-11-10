@@ -1,0 +1,24 @@
+{
+  "about": "What this version of Philibert Code was tested with. Its Setup (installer/code_engine.py) reads this. Downloads are checked against sha256 before use: OpenCode and Git run with the agent's shell, so only these exact files are accepted.",
+  "opencode": {
+    "version": "1.19.5",
+    "win-x64": "https://github.com/anomalyco/opencode/releases/download/v1.19.5/opencode-windows-x64.zip",
+    "sha256": "09a6e693157f0887e504f2cf4357a8cbddc5ead5d0dffb9a269dcc47c48640f5",
+    "licence": "MIT"
+  },
+  "git": {
+    "version": "2.55.0.windows.3",
+    "win-x64": "https://github.com/git-for-windows/git/releases/download/v2.55.0.windows.3/MinGit-2.55.0.3-64-bit.zip",
+    "sha256": "f48e2d2dc74a24454adc6d8fd0ac25bf9c2386f19cfb06202b9465aaad4f9f05",
+    "licence": "GPL-2.0 (unmodified binary distribution of Git for Windows' MinGit)"
+  },
+  "packages": ["ruff==0.15.20", "pillow==11.3.0", "pywin32==312"],
+  "model": {
+    "about": "The coding worker's model: pulled from Ollama's library, then a 128K-window tag is made from it (opencode_worker.MODEL / WINDOW).",
+    "pull": "qwen3.6:35b-a3b-coding",
+    "tag": "q36c-nd128k",
+    "num_ctx": 131072
+  },
+  "ollama_min": "0.40.15",
+  "hardware": {"vram_gb": 16, "ram_gb": 32}
+}
