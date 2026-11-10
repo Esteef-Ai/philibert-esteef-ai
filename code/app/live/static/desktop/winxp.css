@@ -1,0 +1,63 @@
+/* Philibert XP: our take on the early-2000s blue look - a glossy blue taskbar, the
+   green Start button reading an italic "philibert", rounded blue windows, the
+   boombox as the user tile, and a rolling-hills wallpaper drawn in-house. */
+@import url("win95.css");
+:root { --sel: #316ac5; --face: #ece9d8; --ui-font: Tahoma, "Segoe UI", Verdana, sans-serif; }
+html, body { -webkit-font-smoothing: antialiased; }
+.btn { border-radius: 3px; background: linear-gradient(#fff, #ece9d8 85%, #d6d0bd); box-shadow: inset 0 0 0 1px #003c74; }
+.btn:active, .btn.down { background: linear-gradient(#e3e1d6, #f2f0e6); box-shadow: inset 0 0 0 1px #003c74; padding: 4px 10px; }
+
+/* windows */
+.win { padding: 0 3px 3px; border-radius: 8px 8px 0 0; background: #0831d9; box-shadow: 0 0 0 1px #001ea0, 2px 3px 8px rgba(0,0,0,.35); }
+.win:not(.active) { background: #7a96df; }
+.titlebar { height: 28px; margin: 0 -3px; padding: 0 5px 0 7px; border-radius: 7px 7px 0 0; color: #fff; font: bold 13px var(--ui-font);
+  text-shadow: 1px 1px #0f1089; background: linear-gradient(#7a96df, #a8b9ec 12%, #7a96df 45%, #6c88d4); }
+.win.active .titlebar { background: linear-gradient(#0997ff, #0053ee 9%, #0050ee 18%, #06f 40%, #0050ee 85%, #003ed6); }
+.titlebar .ico { width: 16px; height: 16px; }
+.tbtn { width: 21px; height: 21px; border-radius: 3px; color: #fff; font-size: 11px; box-shadow: inset 0 0 0 1px #fff;
+        background: radial-gradient(circle at 40% 30%, #6aa0ff, #2563e8 70%); }
+.tbtn.close { background: radial-gradient(circle at 40% 30%, #f1a07c, #e04a18 70%); }
+.tbtn:active { padding: 0; filter: brightness(.85); }
+.wbody { margin-top: 0; }
+.wbody.face { background: var(--face); }
+
+/* taskbar */
+#taskbar { height: 30px; padding: 0 0 0 0; background: linear-gradient(#3168d5, #4993e6 6%, #2157d7 18%, #2663e0 80%, #1941a5);
+           box-shadow: none; }
+#desk { bottom: 30px; }
+#start { height: 30px; padding: 0 22px 0 8px; margin-right: 6px; border-radius: 0 12px 12px 0; color: #fff;
+  font: italic bold 18px Montserrat, var(--ui-font); text-shadow: 1px 1px 2px rgba(0,0,0,.5); letter-spacing: .01em;
+  background: radial-gradient(ellipse at 40% 20%, #6ec267, #3c9a3c 55%, #2c7a2c); box-shadow: inset -2px 0 3px rgba(0,0,0,.25); }
+#start.down, #start:active { filter: brightness(.88); padding: 0 22px 0 8px; }
+#start b { font-weight: 800; }
+.task { height: 24px; margin-top: 3px; border-radius: 3px; color: #fff; box-shadow: inset 0 0 0 1px #1a3d9a;
+        background: linear-gradient(#3c81f3, #2f6ee6); }
+.task.down { background: linear-gradient(#1e52b7, #2e64d0); font-weight: bold; background-image: none; }
+#tray { height: 30px; padding: 0 12px; color: #fff; background: linear-gradient(#0c59b9, #19b9f3 8%, #139ee9 18%, #0d84d6 90%);
+        box-shadow: inset 1px 0 #095bc9, inset 2px 0 #19a3ee; }
+
+/* start menu: header, two columns, footer */
+#startmenu { bottom: 30px; padding: 0; min-width: 380px; border-radius: 8px 8px 0 0; overflow: hidden; background: #fff;
+             box-shadow: 0 0 0 1px #0831d9, 3px 3px 10px rgba(0,0,0,.4); }
+#startmenu .sm-head { display: flex; align-items: center; gap: 10px; height: 58px; padding: 0 10px; color: #fff;
+  font: bold 15px var(--ui-font); text-shadow: 1px 1px 2px rgba(0,0,0,.4); background: linear-gradient(#1868ce, #0e60cb 15%, #0e60cb 80%, #0c4fae); }
+#startmenu .sm-head .tile { width: 48px; height: 48px; border: 2px solid #fff; border-radius: 4px; background: #2b6fd6; display: grid; place-items: center; }
+#startmenu .band { display: none; }
+#startmenu .sm-main { border-top: 2px solid #f08e3c; }
+#sm-list { padding: 6px 0; background: #fff; flex: 1; }
+.sm-right { display: block; list-style: none; margin: 0; padding: 6px 0; width: 180px; background: #d3e5fa; border-left: 1px solid #95bdee; }
+#startmenu .mi { height: 34px; color: #000; }
+#startmenu .mi:hover, #startmenu .mi.open { background: #316ac5; color: #fff; }
+#startmenu .sep { box-shadow: none; height: 1px; background: linear-gradient(90deg, transparent, #c4c4c4, transparent); margin: 4px 8px; }
+#startmenu .sm-foot { display: flex; justify-content: flex-end; gap: 10px; height: 40px; padding: 0 8px; align-items: center;
+  background: linear-gradient(#1868ce, #0e60cb 15%, #0e60cb 80%, #0c4fae); }
+.xpf { display: flex; align-items: center; gap: 5px; background: none; border: none; color: #fff; padding: 4px 6px; border-radius: 3px; }
+.xpf:hover { background: rgba(255,255,255,.15); }
+#flyout { border-radius: 0; background: #fff; box-shadow: 0 0 0 1px #8c8c8c, 2px 2px 6px rgba(0,0,0,.35); }
+#flyout .mi:hover { background: #316ac5; }
+
+/* icons */
+.dicon .lbl { text-shadow: 1px 1px 2px #000; }
+.dicon.sel .lbl { background: #316ac5; outline: none; }
+.tab { border-radius: 3px 3px 0 0; }
+.tabpanel { background: #fcfcfe; box-shadow: 0 0 0 1px #919b9c; }

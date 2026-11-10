@@ -1,0 +1,1283 @@
+"""Retro Vault on the drive: the user's own games, played offline.
+
+Ported from the Retro Vault app (retro-vault/server.py) for Philibert's Full
+edition. What changed for a drive that travels between computers:
+
+  - games come from <drive>/Entertainment/Cartridges/<system folder>, plus the
+    user's own ROM folders (Settings -> ROM Folders, kept in Entertainment/rom_folders.json):
+    one "My ROMs" folder with a folder per system like Cartridges, and/or one folder
+    per system. A folder that isn't on this computer (the drive moved) is skipped.
+  - EmulatorJS and its cores are on the drive (Entertainment/emulator/<ver>),
+    fetched once at install - nothing loads from a CDN while playing
+  - box art is cached in Entertainment/art; new art is only downloaded while
+    Philibert's Internet switch is on
+  - save states are files in Entertainment/saves, so a game saved on Windows
+    loads on the Mac; so are battery saves (SRAM, the game's own save), in
+    saves/sram, each write keeping the one before as .bak
+  - game descriptions come from Philibert's own model, not an online service
+  - no netplay, phone page, push-to-talk helper, uploads or LAN sharing
+
+Served by the launcher under /retro/ (handle_get / handle_post).
+"""
+import difflib
+import json
+import os
+import re
+import shutil
+import secrets
+import subprocess
+import sys
+import threading
+import time
+import zipfile
+from concurrent.futures import ThreadPoolExecutor
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+EJS_VERSION = "4.2.3"
+EJS_BASE = f"https://cdn.emulatorjs.org/{EJS_VERSION}/data/"
+CORES = ["fceumm", "snes9x", "genesis_plus_gx", "mgba", "mupen64plus_next", "gambatte", "mame2003_plus"]
+# Cores added after drives were already set up: Setup fetches them with the rest, a drive
+# without them gets them the first time a game needs them (while online) - see handle_get
+ON_DEMAND_CORES = ["fbneo",            # Neo Geo (FinalBurn Neo)
+                   "parallel_n64"]     # Mario Kart 64: the usual N64 core loses its 2-3-4 player TIME and LAP
+ON_DEMAND_FILES = [f for c in ON_DEMAND_CORES for f in
+                   (f"cores/{c}-wasm.data", f"cores/{c}-legacy-wasm.data", f"cores/reports/{c}.json")]
+EJS_FILES = (["loader.js", "emulator.min.js", "emulator.min.css",
+              "compression/extractzip.js", "compression/extract7z.js"]
+             + [f"cores/{c}-wasm.data" for c in CORES]
+             + [f"cores/{c}-legacy-wasm.data" for c in CORES]
+             + [f"cores/reports/{c}.json" for c in CORES]
+             + ON_DEMAND_FILES)
+
+# extensions and folder names per system (from Retro Vault, plus the Master System)
+SYS_EXTS = {
+    "NES": [".nes", ".zip"], "SNES": [".sfc", ".smc", ".zip"], "Genesis": [".bin", ".md", ".gen", ".zip"],
+    "SMS": [".sms", ".bin", ".zip"], "GBA": [".gba", ".zip"], "N64": [".z64", ".n64", ".v64", ".zip"],
+    "GB": [".gb", ".gbc", ".zip"], "MAME": [".zip"], "NEOGEO": [".zip"],
+}
+SYS_FOLDERS = {
+    "NES": ["nes", "Nintendo Entertainment System", "Nintendo Entertainment System (NES)",
+            "Nintendo - Nintendo Entertainment System", "Famicom"],
+    "SNES": ["snes", "Super Nintendo", "Super Nintendo Entertainment System", "Super Nintendo Entertainment System (SNES)",
+             "Nintendo - Super Nintendo Entertainment System", "Super Famicom", "Super NES"],
+    "Genesis": ["genesis", "megadrive", "Mega Drive", "md", "Sega Genesis", "Sega Mega Drive", "Sega Mega Drive - Genesis",
+                "Sega - Mega Drive - Genesis", "Mega Drive & Genesis", "Sega Genesis & Mega Drive"],
+    "SMS": ["sms", "Master System", "Sega Master System", "Sega - Master System - Mark III", "Mark III"],
+    "GBA": ["gba", "Game Boy Advance", "Nintendo Game Boy Advance", "Nintendo - Game Boy Advance",
+            "Gameboy Advance", "GameBoy Advance"],
+    "N64": ["n64", "Nintendo 64", "Nintendo64", "Nintendo - Nintendo 64", "N64 (Nintendo 64)"],
+    "GB": ["gb", "gbc", "gameboy", "Game Boy", "Nintendo Game Boy", "Nintendo - Game Boy", "Nintendo - Game Boy Color",
+           "Game Boy Color", "GameBoy Color", "GB & GBC"],
+    "MAME": ["mame", "arcade", "mame2003", "mame2003_plus", "Arcade - MAME", "MAME - Arcade", "FinalBurn", "FBNeo"],
+    "NEOGEO": ["neogeo", "Neo Geo", "Neo-Geo", "SNK Neo Geo", "SNK - Neo Geo", "Neo Geo MVS", "Neo Geo AES", "NeoGeo MVS"],
+}
+KEYWORDS = {
+    "NES": [r"nintendo entertainment", r"\bnes\b", r"famicom"],
+    "SNES": [r"super nintendo", r"super nes", r"\bsnes\b", r"super famicom"],
+    "Genesis": [r"genesis", r"mega drive", r"megadrive"],
+    "SMS": [r"master system", r"\bsms\b", r"mark iii"],
+    "GBA": [r"game ?boy advance", r"\bgba\b"],
+    "N64": [r"nintendo 64", r"\bn64\b"],
+    "GB": [r"game ?boy colou?r", r"\bgbc\b", r"game ?boy$", r"\bgb\b"],
+    "MAME": [r"\bmame\b", r"arcade", r"finalburn", r"fbneo"],
+    "NEOGEO": [r"neo ?-?geo"],
+}
+LIBRETRO = {
+    "NES": "Nintendo - Nintendo Entertainment System", "SNES": "Nintendo - Super Nintendo Entertainment System",
+    "Genesis": "Sega - Mega Drive - Genesis", "SMS": "Sega - Master System - Mark III",
+    "GBA": "Nintendo - Game Boy Advance", "N64": "Nintendo - Nintendo 64", "GB": "Nintendo - Game Boy", "MAME": "MAME",
+    "NEOGEO": "SNK - Neo Geo",
+}
+_art_lock = threading.Lock()
+
+# Discord push to talk: a controller button held down is a real mouse button or key held down on this PC,
+# which is what Discord listens for. handle_ptt is reached only from a browser on this PC (see the launcher).
+# The page repeats itself while the button is held: if it stops, the button is let go by itself, so a closed
+# or frozen page can't leave the microphone open or a mouse button stuck.
+PTT_MOUSE = {"mouse3": (0x0020, 0x0040, 0), "mouse4": (0x0080, 0x0100, 1), "mouse5": (0x0080, 0x0100, 2)}
+PTT_LET_GO_SECS = 1.5
+_ptt_lock = threading.Lock()
+_ptt = {"held": "", "seen": 0.0, "watch": False}
+
+
+def _ptt_valid(out):
+    if out in PTT_MOUSE:
+        return True
+    m = re.fullmatch(r"vk:(\d{1,3})", out)
+    return bool(m) and 8 <= int(m.group(1)) <= 254
+
+
+def _ptt_input(out, down):
+    """One real press or release, as Windows sees it from a mouse or keyboard. -> True if it was sent"""
+    if sys.platform != "win32":
+        return False
+    import ctypes
+    from ctypes import wintypes as w
+    ptr = ctypes.c_size_t
+
+    class MOUSE(ctypes.Structure):
+        _fields_ = [("dx", w.LONG), ("dy", w.LONG), ("data", w.DWORD), ("flags", w.DWORD), ("time", w.DWORD), ("extra", ptr)]
+
+    class KEY(ctypes.Structure):
+        _fields_ = [("vk", w.WORD), ("scan", w.WORD), ("flags", w.DWORD), ("time", w.DWORD), ("extra", ptr)]
+
+    class U(ctypes.Union):
+        _fields_ = [("mi", MOUSE), ("ki", KEY)]
+
+    class INPUT(ctypes.Structure):
+        _fields_ = [("type", w.DWORD), ("u", U)]
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    user32.SendInput.argtypes = (w.UINT, ctypes.POINTER(INPUT), ctypes.c_int)
+    user32.SendInput.restype = w.UINT
+    user32.MapVirtualKeyW.argtypes = (w.UINT, w.UINT)
+    user32.MapVirtualKeyW.restype = w.UINT
+    i = INPUT()
+    if out in PTT_MOUSE:
+        on, off, x = PTT_MOUSE[out]
+        i.type = 0
+        i.u.mi = MOUSE(0, 0, x, on if down else off, 0, 0)
+    else:
+        vk = int(out[3:])
+        extended = 1 if vk in (0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2D, 0x2E, 0xA3, 0xA5) else 0
+        i.type = 1
+        i.u.ki = KEY(vk, user32.MapVirtualKeyW(vk, 0), extended | (0 if down else 2), 0, 0)
+    return user32.SendInput(1, ctypes.byref(i), ctypes.sizeof(INPUT)) == 1
+
+
+def _ptt_watch():
+    while True:
+        time.sleep(0.25)
+        with _ptt_lock:
+            if _ptt["held"] and time.time() - _ptt["seen"] > PTT_LET_GO_SECS:
+                _ptt_input(_ptt["held"], False)
+                _ptt["held"] = ""
+
+
+def ptt_hold(out):
+    """Hold this mouse button or key ("" lets go). -> True when Windows took it."""
+    with _ptt_lock:
+        ok = True
+        if _ptt["held"] and _ptt["held"] != out:
+            _ptt_input(_ptt["held"], False)
+            _ptt["held"] = ""
+        if out and _ptt["held"] != out:
+            ok = _ptt_input(out, True)
+            _ptt["held"] = out if ok else ""
+        _ptt["seen"] = time.time()
+        if not _ptt["watch"]:
+            _ptt["watch"] = True
+            threading.Thread(target=_ptt_watch, daemon=True).start()
+        return ok
+
+
+def handle_ptt(raw):
+    try:
+        out = json.loads(raw or b"").get("out", "")
+    except (ValueError, AttributeError):
+        return 400, "application/json", b'{"ok":false}'
+    if not isinstance(out, str) or (out and not _ptt_valid(out)):
+        return 400, "application/json", b'{"ok":false}'
+    return (200, "application/json", b'{"ok":true}') if ptt_hold(out) else (500, "application/json", b'{"ok":false}')
+# libretro-thumbnails: one GitHub repo per system, named with underscores
+# ("Nintendo_-_Super_Nintendo_Entertainment_System"). The old links used the
+# spaced name and every request was a 404 - art never arrived (2026-10-22).
+THUMB_RAW = "https://raw.githubusercontent.com/libretro-thumbnails/"
+THUMB_API = "https://api.github.com/repos/libretro-thumbnails/"
+ART_DIRS = {"box": "Named_Boxarts", "snap": "Named_Snaps"}
+INDEX_DAYS = 30
+REGION_PREF = ["(USA)", "(USA, Europe)", "(World)", "(USA, Australia)", "(Japan, USA)", "(Europe)", "(USA, Japan)", "(Japan)"]
+UA = {"User-Agent": "Philibert-RetroVault/1.0"}
+
+
+# Folders are often mixed: a "Master System" folder full of Genesis, 32X and Game Gear
+# games (K: has 947 .bin files, 132 of them Master System). Look there too.
+ALSO = {"SMS": ["Sega - Mega Drive - Genesis", "Sega - Game Gear", "Sega - 32X"],
+        "Genesis": ["Sega - 32X", "Sega - Master System - Mark III"],
+        "GB": ["Nintendo - Game Boy Color"]}
+
+
+CHEAT_API = "https://api.github.com/repos/libretro/libretro-database"
+CHEAT_RAW = "https://raw.githubusercontent.com/libretro/libretro-database/master/cht/"
+PLAYERS_RAW = "https://raw.githubusercontent.com/libretro/libretro-database/master/metadat/maxusers/"
+
+
+def parse_maxusers(text):
+    """A libretro maxusers .dat -> {art_key: most players}: versions of one game count as one."""
+    out = {}
+    for name, n in re.findall(r'(?:comment|name)\s+"([^"]+)"\s+users\s+(\d+)', text):
+        k = art_key(name)
+        out[k] = max(int(n), out.get(k, 0))
+    return out
+
+
+def parse_cht(text):
+    """A RetroArch .cht file -> [{c: code, d: what it does}], without repeats."""
+    desc, code = {}, {}
+    for m in re.finditer(r'^cheat(\d+)_(desc|code)\s*=\s*"(.*)"\s*$', text, flags=re.M):
+        (desc if m.group(2) == "desc" else code)[int(m.group(1))] = m.group(3).strip()
+    out, seen = [], set()
+    for i in sorted(code):
+        c = code[i]
+        if c and c not in seen:
+            seen.add(c)
+            out.append({"c": c[:200], "d": (desc.get(i) or "Unnamed code")[:300]})
+    return out[:5000]
+
+
+def thumb_repo(sys_id):
+    return LIBRETRO.get(sys_id, sys_id).replace(" ", "_")
+
+
+def art_repos(sys_id):
+    return [LIBRETRO[sys_id]] + ALSO.get(sys_id, [])
+
+
+def art_key(name):
+    """A ROM file name and a thumbnail name, reduced to what they share: no region or
+    dump tags, no 'The', no punctuation. 'Legend of Zelda - A Link to the Past, The.zip'
+    and 'Legend of Zelda, The - A Link to the Past (USA)' both become
+    'legendofzeldaalinktothepast'."""
+    n = re.sub(r"\.(zip|7z|png|nes|sfc|smc|gba|gb|gbc|z64|n64|v64|sms|bin|md|gen)$", "", str(name), flags=re.I)
+    n = re.sub(r"\([^)]*\)|\[[^\]]*\]", " ", n).lower().replace("&", " and ")
+    n = re.sub(r"\bthe\b", " ", n)
+    return re.sub(r"[^a-z0-9]+", "", n)
+_STATE_KEY = re.compile(r"^[A-Za-z0-9 _\-.]{1,120}$")
+_PROFILE_ID = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+
+
+class Vault:
+    def __init__(self, ent_dir, online=lambda: False, ask_json=None, log=print):
+        self.root = Path(ent_dir)
+        self.carts = self.root / "Cartridges"
+        self.emu = self.root / "emulator" / EJS_VERSION
+        self.art = self.root / "art"
+        self.saves = self.root / "saves"
+        self.online, self.ask_json, self.log = online, ask_json, log
+        self._keys = {}                                     # (system, kind) -> {art_key: [names]}
+        self.job = {"state": "idle"}                        # the background art download
+
+    # --- the user's own ROM folders --------------------------------------------------
+    def folders(self):
+        """{"root": "<My ROMs folder>" | "", "systems": {sys_id: "<folder>"}}"""
+        try:
+            d = json.loads((self.root / "rom_folders.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            d = {}
+        if not isinstance(d, dict):
+            d = {}
+        root = d.get("root") if isinstance(d.get("root"), str) else ""
+        systems = {k: v for k, v in (d.get("systems") or {}).items()
+                   if k in SYS_EXTS and isinstance(v, str) and v} if isinstance(d.get("systems"), dict) else {}
+        return {"root": root, "systems": systems}
+
+    @staticmethod
+    def _clean_folder(path):
+        """A folder the user typed or picked -> (absolute path, None) or (None, why)."""
+        path = (path or "").strip().strip('"').strip()
+        if not path:
+            return "", None
+        if len(path) > 400 or "\0" in path:
+            return None, "That doesn't look like a folder."
+        p = Path(os.path.expanduser(path))
+        if not p.is_absolute():
+            return None, "Use the whole path, like D:\\Games\\ROMs (or press Browse)."
+        if not p.is_dir():
+            return None, f"There's no folder {path} on this computer."
+        return str(p), None
+
+    def set_folder(self, sys_id, path):
+        """sys_id "" = the My ROMs folder. An empty path removes it. -> (ok, message)"""
+        if sys_id and sys_id not in SYS_EXTS:
+            return False, "Unknown system."
+        clean, why = self._clean_folder(path)
+        if why:
+            return False, why
+        f = self.folders()
+        if not sys_id:
+            f["root"] = clean
+        elif clean:
+            f["systems"][sys_id] = clean
+        else:
+            f["systems"].pop(sys_id, None)
+        self.root.mkdir(parents=True, exist_ok=True)
+        p = self.root / "rom_folders.json"
+        tmp = p.with_name(p.name + ".saving")
+        tmp.write_text(json.dumps(f, indent=1), encoding="utf-8")
+        os.replace(tmp, p)
+        self.log(f"Retro Vault: ROM folder {sys_id or '(My ROMs)'} -> {clean or 'removed'}")
+        return True, clean
+
+    # --- the library -------------------------------------------------------------
+    @staticmethod
+    def _match(parent, sys_id):
+        """The folder for sys_id inside parent (Cartridges or My ROMs), by name."""
+        try:
+            dirs = [d for d in Path(parent).iterdir() if d.is_dir() and not d.name.startswith(".")]
+        except OSError:
+            return None
+        cands = [c.lower() for c in SYS_FOLDERS.get(sys_id, [sys_id])]
+        for d in dirs:
+            if d.name.lower() in cands:
+                return d
+        for d in dirs:
+            if any(re.search(k, d.name.lower()) for k in KEYWORDS.get(sys_id, [])):
+                return d
+        return None
+
+    def sys_dirs(self, sys_id):
+        """Every folder this system's games come from; the first one wins a name clash:
+        the system's own folder, the My ROMs folder's match, then Cartridges."""
+        f, out = self.folders(), []
+        own = f["systems"].get(sys_id)
+        if own and Path(own).is_dir():
+            out.append(Path(own))
+        if f["root"] and Path(f["root"]).is_dir():
+            m = self._match(f["root"], sys_id)
+            if m:
+                out.append(m)
+        if self.carts.is_dir():
+            m = self._match(self.carts, sys_id)
+            if m:
+                out.append(m)
+        seen, uniq = set(), []
+        for d in out:
+            k = os.path.normcase(str(d.resolve()))
+            if k not in seen:
+                seen.add(k)
+                uniq.append(d)
+        return uniq
+
+    def sys_dir(self, sys_id):
+        """The drive's own folder for the system (where Restore puts a game back by default)."""
+        return self._match(self.carts, sys_id) if self.carts.is_dir() else None
+
+    def _is_custom(self, d):
+        try:
+            Path(d).resolve().relative_to(self.carts.resolve())
+            return False
+        except (ValueError, OSError):
+            return True
+
+    def list_system(self, sys_id, include_hidden=False):
+        exts = [e for e in SYS_EXTS.get(sys_id, []) if e != ".zip"]
+        files, have = [], set()
+        for d in self.sys_dirs(sys_id):
+            try:
+                names = [f.name for f in d.iterdir() if f.is_file() and not f.name.startswith(".")]
+            except OSError:
+                continue
+            for n in names:
+                if n.lower() not in have:
+                    have.add(n.lower())
+                    files.append(n)
+        zips = sorted(f for f in files if f.lower().endswith(".zip"))
+        roms = sorted(f for f in files if any(f.lower().endswith(e) for e in exts))
+        chosen = zips if zips else roms                      # never both: no duplicates
+        hidden = set(self.hidden().get(sys_id, []))
+        out = [{"name": f, "path": "/retro/roms/" + sys_id + "/" + urllib.parse.quote(f),
+                "isZip": f.lower().endswith(".zip"), "hidden": f in hidden}
+               for f in chosen if include_hidden or f not in hidden]
+        if sys_id == "NEOGEO":                               # real titles; the BIOS isn't a game
+            sets = self.neo_sets()
+            out = [g for g in out if os.path.splitext(g["name"])[0].lower() not in ("neogeo", "gg-bios")]
+            for g in out:
+                s = sets.get(os.path.splitext(g["name"])[0].lower())
+                if s:
+                    g.update(title=s[0], parent=s[1], year=s[2], publisher=s[3])
+        return out
+
+    # --- hide / throw away games ---------------------------------------------------
+    # Hidden = a list on the drive (Entertainment/hidden.json); the file stays.
+    # Delete = the file moves to Entertainment/Trash/<system>/ - Restore puts it back,
+    # "Delete forever" removes it from the Trash.
+    def hidden(self):
+        try:
+            d = json.loads((self.root / "hidden.json").read_text(encoding="utf-8"))
+            return d if isinstance(d, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def set_hidden(self, sys_id, filename, hide):
+        if not self.rom_file(sys_id, filename):
+            return False
+        h = self.hidden()
+        names = set(h.get(sys_id, []))
+        (names.add if hide else names.discard)(filename)
+        h[sys_id] = sorted(names)
+        p = self.root / "hidden.json"
+        tmp = p.with_name(p.name + ".saving")
+        tmp.write_text(json.dumps(h, indent=1), encoding="utf-8")
+        os.replace(tmp, p)
+        return True
+
+    def _trash_dir(self, sys_id):
+        return self.root / "Trash" / re.sub(r"[^A-Za-z0-9_-]", "", sys_id)
+
+    def trash(self, sys_id, filename):
+        f = self.rom_file(sys_id, filename)
+        if not f:
+            return False, "That game isn't in the library."
+        dest_dir = self._trash_dir(sys_id)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest, n = dest_dir / f.name, 2
+        while dest.exists():                                 # never overwrite an earlier one
+            dest = dest_dir / f"{f.stem} ({n}){f.suffix}"; n += 1
+        shutil.move(str(f), str(dest))
+        self._origin(sys_id, dest.name, str(f.parent))     # Restore puts it back where it was
+        self.set_hidden_quiet(sys_id, f.name)
+        self.log(f"Retro Vault: {sys_id}/{f.name} moved to the Trash")
+        return True, dest.name
+
+    def set_hidden_quiet(self, sys_id, filename):
+        """Drop a name from the hidden list without checking the file (it just moved)."""
+        h = self.hidden()
+        if filename in h.get(sys_id, []):
+            h[sys_id] = [x for x in h[sys_id] if x != filename]
+            (self.root / "hidden.json").write_text(json.dumps(h, indent=1), encoding="utf-8")
+
+    def trash_list(self):
+        out = {}
+        t = self.root / "Trash"
+        for s in SYS_EXTS:
+            d = self._trash_dir(s)
+            if t.is_dir() and d.is_dir():
+                out[s] = sorted(f.name for f in d.iterdir() if f.is_file() and not f.name.startswith("."))
+        return out
+
+    def _trash_file(self, sys_id, filename):
+        if not filename or "/" in filename or "\\" in filename or filename.startswith("."):
+            return None
+        p = self._trash_dir(sys_id) / filename
+        return p if p.is_file() else None
+
+    def _origin(self, sys_id, name, folder=None):
+        """Trash/<system>/.origins.json: {file in the Trash: the folder it came from}"""
+        j = self._trash_dir(sys_id) / ".origins.json"
+        try:
+            o = json.loads(j.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            o = {}
+        if folder is None:
+            return o.get(name)
+        o[name] = folder
+        j.write_text(json.dumps(o, indent=1), encoding="utf-8")
+        return folder
+
+    def restore(self, sys_id, filename):
+        p = self._trash_file(sys_id, filename)
+        came = self._origin(sys_id, filename) if p else None
+        d = Path(came) if came and Path(came).is_dir() else self.sys_dir(sys_id)
+        if not p or not d:
+            return False, "Not in the Trash."
+        dest = d / p.name
+        if dest.exists():
+            return False, f"A game called {p.name} is already in the library."
+        shutil.move(str(p), str(dest))
+        return True, p.name
+
+    def purge(self, sys_id, filename):
+        p = self._trash_file(sys_id, filename)
+        if not p:
+            return False, "Not in the Trash."
+        p.unlink()
+        self.log(f"Retro Vault: {sys_id}/{filename} deleted from the Trash")
+        return True, filename
+
+    def rom_file(self, sys_id, filename):
+        if not filename or "/" in filename or "\\" in filename or filename.startswith("."):
+            return None
+        for d in self.sys_dirs(sys_id):
+            f = self._rom_in(d, filename)
+            # from the user's own folders only game files are served, nothing else in them
+            if f and (not self._is_custom(d) or f.suffix.lower() in SYS_EXTS.get(sys_id, [])):
+                return f
+        return None
+
+    @staticmethod
+    def _rom_in(d, filename):
+        p = d / filename
+        if p.is_file():
+            return p
+        low = filename.lower()
+        try:
+            entries = [e for e in d.iterdir() if e.is_file()]
+        except OSError:
+            return None
+        for e in entries:
+            if e.name.lower() == low:
+                return e
+        base = os.path.splitext(low)[0]
+        for e in entries:
+            if os.path.splitext(e.name)[0].lower() == base:
+                return e
+        return None
+
+    # --- arcade: what MAME 2003-Plus needs to start a set ---------------------------
+    # The core only recognises a set by its lower-case name (1942.zip, not 1942.ZIP),
+    # and a clone or BIOS game also needs the chips of its parent / BIOS - but the
+    # emulator only gets one file. So arcade games are served as one zip named
+    # <set>.zip holding the set's own files plus its parent's and BIOS's.
+    # Built once into Entertainment/.cache/arcade, rebuilt when a source zip changes.
+    _romof = None
+
+    def arcade_chain(self, set_name):
+        if Vault._romof is None:
+            try:
+                p = Path(__file__).parent / "live" / "static" / "retro" / "mame2003_romof.json"
+                Vault._romof = json.loads(p.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                Vault._romof = {}
+        chain, cur = [], Vault._romof.get(set_name)
+        while cur and cur not in chain and len(chain) < 4:
+            chain.append(cur)
+            cur = Vault._romof.get(cur)
+        return chain
+
+    def arcade_zip(self, set_name):
+        set_name = (set_name or "").lower()
+        if set_name.endswith(".zip"):
+            set_name = set_name[:-4]
+        if not re.fullmatch(r"[a-z0-9_]{1,32}", set_name):
+            return None
+        own = self.rom_file("MAME", set_name + ".zip")
+        if not own:
+            return None
+        parts = [own] + [p for p in (self.rom_file("MAME", c + ".zip") for c in self.arcade_chain(set_name)) if p]
+        if len(parts) == 1:
+            return own                                   # nothing to add; the URL already gives the lower-case name
+        out = self.root / ".cache" / "arcade" / (set_name + ".zip")
+        newest = max(p.stat().st_mtime for p in parts)
+        if out.is_file() and out.stat().st_mtime >= newest:
+            return out
+        out.parent.mkdir(parents=True, exist_ok=True)
+        tmp = out.with_name(out.name + ".building")
+        seen = set()
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as z:
+            for p in parts:                              # the set's own chips first, then parent, then BIOS
+                try:
+                    with zipfile.ZipFile(p) as src:
+                        for i in src.infolist():
+                            name = i.filename.rsplit("/", 1)[-1].lower()
+                            if i.is_dir() or not name or name in seen:
+                                continue
+                            seen.add(name)
+                            z.writestr(name, src.read(i))
+                except zipfile.BadZipFile:
+                    self.log(f"Retro Vault: {p.name} is not a readable zip")
+        os.replace(tmp, out)
+        return out
+
+    # --- the emulator ------------------------------------------------------------
+    def emulator_ready(self):
+        return all((self.emu / f).is_file() for f in EJS_FILES if "-legacy-" not in f and f not in ON_DEMAND_FILES)
+
+    def fetch_on_demand(self, rel):
+        """A core added after this drive was set up: download it now (while online)."""
+        if rel not in ON_DEMAND_FILES or not self.online():
+            return None
+        core = rel.split("/")[-1].split("-")[0].replace(".json", "")
+        files = [f for f in ON_DEMAND_FILES if f.split("/")[-1].startswith(core)]
+        try:
+            fetch_emulator(self.root, log=lambda m: self.log("Retro Vault " + m), files=files)
+        except Exception as e:
+            self.log(f"Retro Vault: could not download the {core} core ({e})")
+            return None
+        return self.emulator_file(rel)
+
+    # --- Neo Geo (FinalBurn Neo) -----------------------------------------------------
+    # Sets are named like MAME (mslug.zip); FBNeo needs the game zip, its parent zip (clones)
+    # and neogeo.zip (BIOS) side by side as zips - the page serves all three from
+    # /retro/neogeo/<file> with <base href> so EmulatorJS keeps the names (dontExtractBIOS).
+    # neogeo_fbneo.json (from the FBNeo Neo Geo DAT): set -> [title, parent, year, maker].
+    NEO_BIOS_NEED = {0x94416D67: "sm1.sm1", 0xC2EA0CFD: "sfix.sfix", 0x5A86CFF2: "000-lo.lo"}
+    NEO_BIOS_ANY = {0x9036D879, 0xC7F2FA45, 0x2723A5B5, 0xACEDE59C, 0x91B64BE3, 0xE72943DE, 0x16D0C132}
+    _neo = None
+
+    @classmethod
+    def neo_sets(cls):
+        if cls._neo is None:
+            try:
+                cls._neo = json.loads((Path(__file__).parent / "live" / "static" / "retro" / "neogeo_fbneo.json")
+                                      .read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                cls._neo = {}
+        return cls._neo
+
+    def neo_art_title(self, rom, kind="box"):
+        """The title libretro's Neo Geo covers use for a set: FBNeo's "A / B" is "A _ B" there
+        ("Art of Fighting 2 _ Ryuuko no Ken 2 (NGH-056)"); else just the first title."""
+        s = self.neo_sets().get(os.path.splitext(os.path.basename(rom))[0].lower())
+        if not s:
+            return rom
+        full = s[0].replace(" / ", " _ ")
+        return full if " _ " not in full or self.match_art("NEOGEO", full, kind) else s[0].split(" / ")[0]
+
+    def neo_bios(self):
+        """missing | old | ok - FBNeo needs the CURRENT neogeo.zip (2003-era BIOS sets don't boot)."""
+        f = self.rom_file("NEOGEO", "neogeo.zip")
+        if not f:
+            return "missing"
+        try:
+            with zipfile.ZipFile(f) as z:
+                crcs = {i.CRC for i in z.infolist()}
+        except (OSError, zipfile.BadZipFile):
+            return "missing"
+        return "ok" if all(c in crcs for c in self.NEO_BIOS_NEED) and crcs & self.NEO_BIOS_ANY else "old"
+
+    def emulator_file(self, rel):
+        try:
+            root = self.emu.resolve()
+            p = (root / rel).resolve()
+            p.relative_to(root)
+        except (ValueError, OSError):
+            return None
+        return p if p.is_file() else None
+
+    # --- box art -----------------------------------------------------------------
+    @staticmethod
+    def lt_title(title):
+        t = title.replace("&", " and ").replace(":", " -")
+        t = re.sub(r"[/|]", "-", t)
+        t = re.sub(r'[?*<>"]', "", t)
+        return re.sub(r"\s+", " ", t).strip()
+
+    def art_path(self, sys_id, title, art_type="box"):
+        if sys_id not in LIBRETRO or art_type not in ("box", "snap"):
+            return None
+        safe = self.lt_title(title).replace("\\", "-").replace("/", "-").replace(":", "-")
+        if not safe or safe.startswith("."):
+            return None
+        return self.art / sys_id / art_type / (safe + ".png")
+
+    def art_file(self, sys_id, rom, art_type="box"):
+        """Art for a ROM file, kept under the ROM's own name: art/<system>/<box|snap>/<rom stem>.png."""
+        if sys_id not in LIBRETRO or art_type not in ART_DIRS or not rom:
+            return None
+        stem = os.path.splitext(os.path.basename(str(rom)))[0]
+        safe = re.sub(r'[\\/:*?"<>|]', "-", stem).strip()
+        if not safe or safe.startswith("."):
+            return None
+        return self.art / sys_id / art_type / (safe + ".png")
+
+    def art_index(self, sys_id, art_type="box", repo=None):
+        """Every thumbnail name libretro has for a system (no .png), cached on the drive
+        for INDEX_DAYS. Two GitHub API calls when it has to be fetched."""
+        repo = (repo or LIBRETRO[sys_id]).replace(" ", "_")
+        f = self.art / "_index" / f"{repo}-{art_type}.json"
+        try:
+            if f.is_file() and (time.time() - f.stat().st_mtime < INDEX_DAYS * 86400 or not self.online()):
+                return json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass
+        if not self.online():
+            return []
+        def get(url):
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as r:
+                return json.loads(r.read())
+        root = get(THUMB_API + repo + "/git/trees/master")
+        sha = next(e["sha"] for e in root.get("tree", []) if e.get("path") == ART_DIRS[art_type])
+        names = [e["path"][:-4] for e in get(THUMB_API + repo + "/git/trees/" + sha).get("tree", [])
+                 if e.get("path", "").lower().endswith(".png")]
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(names), encoding="utf-8")
+        self._keys.pop((repo, art_type), None)
+        return names
+
+    def _by_key(self, sys_id, art_type, repo):
+        k = (repo.replace(" ", "_"), art_type)
+        if k not in self._keys:
+            by = {}
+            for n in self.art_index(sys_id, art_type, repo):
+                by.setdefault(art_key(n), []).append(n)
+            self._keys[k] = by
+        return self._keys[k]
+
+    def match_art(self, sys_id, rom, art_type="box", with_repo=False):
+        """The thumbnail for a ROM, or None: the same key in the system's own list, then
+        in the lists of systems its folder often mixes in, then the closest key above
+        0.88. The scan libretro has for that game - never a made-up cover. Prefers USA,
+        then World, Europe..."""
+        key = art_key(rom)
+        if not key:
+            return None
+        found = None
+        for repo in art_repos(sys_id):
+            names = self._by_key(sys_id, art_type, repo).get(key)
+            if names:
+                found = (repo, names)
+                break
+        if not found:
+            by = self._by_key(sys_id, art_type, art_repos(sys_id)[0])
+            close = difflib.get_close_matches(key, by.keys(), n=1, cutoff=0.88)
+            if close:
+                found = (art_repos(sys_id)[0], by[close[0]])
+        if not found:
+            return None
+        rank = lambda n: min([i for i, r in enumerate(REGION_PREF) if r in n] or [len(REGION_PREF)])
+        name = sorted(found[1], key=lambda n: (rank(n), len(n)))[0]
+        return (found[0], name) if with_repo else name
+
+    def fetch_art(self, sys_id, title, art_type="box", rom=None):
+        """Art for one game: from the drive if it is there, else (online only) the matched
+        libretro thumbnail, saved to the drive."""
+        p = self.art_file(sys_id, rom, art_type) if rom else self.art_path(sys_id, title, art_type)
+        if not p:
+            return None, "unknown system"
+        if p.is_file():
+            return p, ""
+        if not self.online():
+            return None, "offline"                        # only cached art while the Internet is off
+        try:
+            m = self.match_art(sys_id, rom or title, art_type, with_repo=True)
+        except Exception as e:
+            return None, f"no index ({str(e)[:60]})"
+        if not m:
+            return None, "not found"
+        url = (THUMB_RAW + m[0].replace(" ", "_") + "/master/" + ART_DIRS[art_type] + "/"
+               + urllib.parse.quote(m[1] + ".png", safe=""))
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=20) as r:
+                data = r.read(4_000_000)
+        except Exception:
+            return None, "download failed"
+        if len(data) > 500 and data[:4] == b"\x89PNG":
+            p.parent.mkdir(parents=True, exist_ok=True)
+            tmp = p.with_name(p.name + ".part")
+            tmp.write_bytes(data)
+            os.replace(tmp, p)
+            return p, ""
+        return None, "not found"
+
+    # --- box art for the whole library, in the background ---------------------------
+    def art_job_start(self, kinds=("box",)):
+        """Download missing art for every game on the drive, on the server: it carries on
+        when the window is minimised, hidden or closed. Misses are remembered so the next
+        run does not ask again (until the index is refreshed)."""
+        with _art_lock:
+            if self.job.get("state") == "running":
+                return dict(self.job)
+            if not self.online():
+                return {"state": "offline"}
+            self.job = {"state": "running", "total": 0, "done": 0, "got": 0, "missed": 0, "system": "",
+                        "started": time.time()}
+        threading.Thread(target=self._art_job, args=(tuple(kinds),), daemon=True).start()
+        return dict(self.job)
+
+    def _art_job(self, kinds):
+        miss_f = self.art / "_index" / "misses.json"
+        try:
+            misses = set(json.loads(miss_f.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            misses = set()
+        work = []
+        for sys_id in SYS_EXTS:
+            if sys_id not in LIBRETRO:
+                continue
+            for g in self.list_system(sys_id):
+                for kind in kinds:
+                    p = self.art_file(sys_id, g["name"], kind)
+                    tag = f"{sys_id}/{kind}/{g['name']}"
+                    if p and not p.is_file() and tag not in misses:
+                        work.append((sys_id, g["name"], kind, tag))
+        self.job["total"] = len(work)
+
+        def one(w):
+            sys_id, rom, kind, tag = w
+            self.job["system"] = sys_id
+            title = rom
+            if sys_id == "NEOGEO":                           # mslug.zip -> "Metal Slug - Super Vehicle-001"
+                title = self.neo_art_title(rom, kind)
+            p, why = self.fetch_art(sys_id, title, kind, rom=rom)
+            with _art_lock:
+                self.job["done"] += 1
+                if p:
+                    self.job["got"] += 1
+                else:
+                    self.job["missed"] += 1
+                    if why == "not found":
+                        misses.add(tag)
+        try:
+            for sys_id in {w[0] for w in work}:          # the indexes first, not one per thread
+                for kind in kinds:
+                    for repo in art_repos(sys_id):
+                        try:
+                            self._by_key(sys_id, kind, repo)
+                        except Exception as e:
+                            self.log(f"Retro Vault: no art index for {repo} ({e})")
+            with ThreadPoolExecutor(max_workers=6) as ex:
+                list(ex.map(one, work))
+            self.job["state"] = "done"
+        except Exception as e:
+            self.job.update(state="error", error=str(e)[:200])
+        finally:
+            try:
+                miss_f.parent.mkdir(parents=True, exist_ok=True)
+                miss_f.write_text(json.dumps(sorted(misses)), encoding="utf-8")
+            except OSError:
+                pass
+
+    # --- save states (files on the drive) -------------------------------------------
+    def state_path(self, key):
+        key = urllib.parse.unquote(key or "")
+        if not _STATE_KEY.match(key) or ".." in key:
+            return None
+        return self.saves / "states" / (key + ".state")
+
+    def sram_path(self, key):
+        key = urllib.parse.unquote(key or "")
+        if not _STATE_KEY.match(key) or ".." in key:
+            return None
+        return self.saves / "sram" / (key + ".srm")
+
+    def profile_path(self, uid):
+        return self.saves / "profiles" / (uid + ".json") if _PROFILE_ID.match(uid or "") else None
+
+    # --- how many can play: libretro-database's player counts (CC BY-SA 4.0), kept on the drive ---
+    def _player_counts(self, db):
+        """{art_key: most players} of one system, or None when it isn't here and can't be fetched."""
+        f = self.root / "players" / (db + ".json")
+        if f.is_file() and (time.time() - f.stat().st_mtime < INDEX_DAYS * 86400 or not self.online()):
+            return json.loads(f.read_text(encoding="utf-8"))
+        if not self.online():
+            return None
+        try:
+            with urllib.request.urlopen(urllib.request.Request(PLAYERS_RAW + urllib.parse.quote(db + ".dat"), headers=UA), timeout=30) as r:
+                counts = parse_maxusers(r.read().decode("utf-8", "replace"))
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+            counts = {}                                  # the database has no counts for this system
+        except OSError:
+            return json.loads(f.read_text(encoding="utf-8")) if f.is_file() else None
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(counts), encoding="utf-8")
+        return counts
+
+    def players(self, sys_id):
+        """-> {file name: most players} for the games of a system that two or more can play."""
+        counts = {}
+        for db in art_repos(sys_id):
+            for k, n in (self._player_counts(db) or {}).items():
+                counts[k] = max(n, counts.get(k, 0))
+        out = {}
+        for g in self.list_system(sys_id):
+            k = art_key(g["name"])
+            n = counts.get(k, 0)
+            if k not in counts:                          # "Street Fighter II - The World Warrior" is "Street Fighter II" there
+                for size in range(len(k) - 1, 9, -1):    # (not "Mega Man X" for "Mega Man X2", nor "Doom" for "Doom II")
+                    if k[:size] in counts and not k[size].isdigit() and k[size] not in "ivx":
+                        n = counts[k[:size]]
+                        break
+            if n >= 2:
+                out[g["name"]] = n
+        return out
+
+    # --- the code book: libretro-database's cheat files (CC BY-SA 4.0), kept on the drive ---
+    def _cheat_names(self, db):
+        """The cheat files of one system, {name: size}: a list from GitHub, kept for INDEX_DAYS."""
+        f = self.root / "cheats" / db / "index.json"
+        fresh = f.is_file() and (time.time() - f.stat().st_mtime < INDEX_DAYS * 86400 or not self.online())
+        if fresh:
+            return json.loads(f.read_text(encoding="utf-8"))
+        if not self.online():
+            return None
+
+        def get(url):
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as r:
+                return json.loads(r.read().decode("utf-8"))
+        top = get(CHEAT_API + "/contents/cht")
+        sha = next(e["sha"] for e in top if e["name"] == db)
+        names = {e["path"][:-4]: e.get("size", 0) for e in get(CHEAT_API + "/git/trees/" + sha).get("tree", [])
+                 if e["path"].endswith(".cht")}
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(names), encoding="utf-8")
+        return names
+
+    def cheat_book(self, sys_id, shelf, rom):
+        """-> {ok, game, codes: [{c, d}]} for a ROM, matched by name like the box art."""
+        repos = art_repos(sys_id) + ([LIBRETRO[shelf]] if shelf in LIBRETRO and shelf != sys_id else [])
+        key = art_key(rom)
+        offline = False
+        for db in repos:
+            try:
+                names = self._cheat_names(db)
+            except Exception as e:
+                self.log(f"Retro Vault: no list of codes for {db} ({e})")
+                names = None
+            if names is None:
+                offline = True
+                continue
+            same = [n for n in names if art_key(n) == key]
+            if not same:
+                continue
+            # the fullest list of the western versions: one version often has 6 codes, another 700
+            west = [n for n in same if any(r in n for r in REGION_PREF[:5])] or same
+            name = max(west, key=lambda n: names[n])
+            f = self.root / "cheats" / db / (name + ".cht")
+            if not f.is_file():
+                if not self.online():
+                    offline = True
+                    continue
+                try:
+                    url = CHEAT_RAW + urllib.parse.quote(db + "/" + name + ".cht")
+                    with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as r:
+                        data = r.read()
+                    f.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = f.with_name(f.name + ".part")
+                    tmp.write_bytes(data)
+                    os.replace(tmp, f)
+                except Exception as e:
+                    self.log(f"Retro Vault: could not fetch the codes for {name} ({e})")
+                    return {"ok": False, "codes": [], "msg": "The codes couldn't be downloaded. Try again in a moment."}
+            return {"ok": True, "game": re.sub(r"\s*\([^)]*\)", "", name), "codes": parse_cht(f.read_text(encoding="utf-8", errors="replace"))}
+        if offline:
+            return {"ok": False, "codes": [], "msg": "This game's codes aren't on the drive yet. Turn the Internet switch on and open the book again."}
+        return {"ok": False, "codes": [], "msg": "This book has no codes for this game."}
+
+    def cheats_on_path(self, key):
+        key = urllib.parse.unquote(key or "")
+        if not _STATE_KEY.match(key) or ".." in key:
+            return None
+        return self.saves / "cheats" / (key + ".json")
+
+    # --- descriptions from Philibert's own model --------------------------------------
+    def describe(self, games):
+        if not self.ask_json:
+            return {"ok": False, "error": "no model"}
+        games = [g for g in (games or []) if isinstance(g, dict)][:12]
+        prompt = ("You are a retro video game database. Return ONLY a valid JSON array, no markdown, no "
+                  "explanation. One object per game in the same order as the input, each with exactly: "
+                  '"title" (proper-case display title), "genre" (one of Platformer, RPG, Action, Fighting, '
+                  'Racing, Shooter, Sports, Puzzle, Adventure, Strategy, Simulation), "year" (integer or null), '
+                  '"description" (1-2 sentences), "emoji" (one emoji).\n\nGames:\n'
+                  + "\n".join(f'{i + 1}. "{str(g.get("name", ""))[:120]}" ({str(g.get("system", ""))[:20]})'
+                              for i, g in enumerate(games)))
+        try:
+            text = self.ask_json(prompt) or ""
+            text = re.sub(r"```(?:json)?", "", text).strip()
+            start, end = text.find("["), text.rfind("]")
+            items = json.loads(text[start:end + 1]) if start >= 0 else []
+            return {"ok": True, "items": items if isinstance(items, list) else []}
+        except Exception as e:
+            return {"ok": False, "error": str(e)[:200]}
+
+
+def fetch_emulator(dest_root, log=print, files=None):
+    """Download EmulatorJS EJS_VERSION and the cores into <Entertainment>/emulator/<ver>.
+    Resumes: files already there are skipped. Returns the number downloaded."""
+    dest = Path(dest_root) / "emulator" / EJS_VERSION
+    n = 0
+    for rel in files or EJS_FILES:
+        p = dest / rel
+        if p.is_file() and p.stat().st_size > 0:
+            continue
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".part")
+        req = urllib.request.Request(EJS_BASE + rel, headers={"User-Agent": "Philibert-Setup/1.0"})
+        with urllib.request.urlopen(req, timeout=60) as r, open(tmp, "wb") as f:
+            while True:
+                chunk = r.read(1 << 16)
+                if not chunk:
+                    break
+                f.write(chunk)
+        os.replace(tmp, p)
+        n += 1
+        log(f"emulator: {rel}")
+    (dest / "VERSION.txt").write_text(
+        f"EmulatorJS {EJS_VERSION} (GPL-3.0, https://github.com/EmulatorJS/EmulatorJS) with libretro cores: "
+        + ", ".join(CORES) + ". Downloaded from " + EJS_BASE + "\n", encoding="utf-8")
+    return n
+
+
+# --- HTTP ----------------------------------------------------------------------------
+TYPES = {".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8", ".css": "text/css",
+         ".json": "application/json", ".wasm": "application/wasm", ".png": "image/png", ".data": "application/octet-stream",
+         ".zip": "application/zip"}
+
+
+def _art_url(sys_id, kind, rom):
+    return "/retro/art/" + "/".join(urllib.parse.quote(x, safe="") for x in (sys_id, kind, rom))
+
+
+def pick_folder(title, start=""):
+    """This computer's own folder picker (Philibert runs on the same computer as its
+    window). -> the folder, or "" when cancelled or not possible."""
+    title = re.sub(r"[^\w .,:()\-]", "", title)[:80]
+    start = start if start and Path(start).is_dir() else ""
+    try:
+        if sys.platform == "win32":
+            ps = ("Add-Type -AssemblyName System.Windows.Forms;"
+                  "$o=New-Object System.Windows.Forms.Form -Property @{TopMost=$true;ShowInTaskbar=$false};"
+                  "$d=New-Object System.Windows.Forms.FolderBrowserDialog;$d.Description=$env:RV_TITLE;"
+                  "$d.ShowNewFolderButton=$false;if($env:RV_START){$d.SelectedPath=$env:RV_START};"
+                  "if($d.ShowDialog($o) -eq 'OK'){[Console]::Out.Write($d.SelectedPath)}")
+            r = subprocess.run(["powershell", "-NoProfile", "-STA", "-Command", ps], capture_output=True, text=True,
+                               timeout=600, env={**os.environ, "RV_TITLE": title, "RV_START": start},
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        elif sys.platform == "darwin":
+            r = subprocess.run(["osascript", "-e", f'POSIX path of (choose folder with prompt "{title}")'],
+                               capture_output=True, text=True, timeout=600)
+        else:
+            return ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    out = (r.stdout or "").strip()
+    return out if out and Path(out).is_dir() else ""
+
+
+def handle_get(v, path, query):
+    """-> (status, content_type, bytes_or_Path). path is under /retro/."""
+    rel = path[len("/retro/"):] if path.startswith("/retro/") else ""
+    if rel == "api/status":
+        systems = {s: len(v.list_system(s)) for s in SYS_EXTS}
+        return 200, "application/json", json.dumps({
+            "ok": True, "emulator": v.emulator_ready(), "version": EJS_VERSION, "online": v.online(),
+            "cartridges": str(v.carts), "systems": systems}).encode()
+    if rel == "api/roms":
+        sys_q = (query.get("system") or ["all"])[0]
+        inc = (query.get("hidden") or ["0"])[0] == "1"        # ?hidden=1: hidden games too, flagged
+        data = ({s: v.list_system(s, inc) for s in SYS_EXTS} if sys_q in ("all", "")
+                else v.list_system(sys_q, inc))
+        return 200, "application/json", json.dumps(data).encode()
+    if rel == "api/trash":
+        return 200, "application/json", json.dumps(v.trash_list()).encode()
+    if rel == "api/get-sys-paths":
+        f = v.folders()
+        data = {s: {"override": f["systems"].get(s) or "",
+                    "missing": bool(f["systems"].get(s)) and not Path(f["systems"][s]).is_dir(),
+                    "resolved": [str(d) for d in v.sys_dirs(s)], "count": len(v.list_system(s))} for s in SYS_EXTS}
+        data["_root"] = {"path": f["root"], "missing": bool(f["root"]) and not Path(f["root"]).is_dir(),
+                         "cartridges": str(v.carts)}
+        return 200, "application/json", json.dumps(data).encode()
+    if rel == "api/meta":
+        return 200, "application/json", json.dumps({"publisher": "", "developer": "", "year": None, "genre": ""}).encode()
+    if rel == "ping":
+        return 200, "application/json", json.dumps({"ok": True, "romsDir": str(v.carts),
+                                                   "romsDirExists": v.carts.is_dir()}).encode()
+    if rel.startswith("roms/"):
+        parts = urllib.parse.unquote(rel[5:]).split("/", 1)
+        f = v.rom_file(parts[0], parts[1] if len(parts) > 1 else "")
+        return (200, TYPES.get(f.suffix.lower(), "application/octet-stream"), f) if f else \
+               (404, "text/plain", b"That game is not in Entertainment/Cartridges.")
+    if rel.startswith("neogeo/"):                        # neogeo/<file>.zip - game, parent or BIOS, see neo_bios
+        name = urllib.parse.unquote(rel[7:])
+        f = v.rom_file("NEOGEO", name) if name.lower().endswith(".zip") else None
+        return (200, "application/zip", f) if f else (404, "text/plain", b"That Neo Geo file is not in Entertainment/Cartridges.")
+    if rel == "api/neogeo":
+        return 200, "application/json", json.dumps({"bios": v.neo_bios(), "online": v.online(),
+                                                    "core": all(v.emulator_file(f) for f in ON_DEMAND_FILES if "fbneo" in f and "-legacy-" not in f)}).encode()
+    if rel.startswith("arcade/"):                        # arcade/<set>.zip - see Vault.arcade_zip
+        f = v.arcade_zip(urllib.parse.unquote(rel[7:]))
+        return (200, "application/zip", f) if f else \
+               (404, "text/plain", b"That arcade game is not in Entertainment/Cartridges.")
+    if rel == "api/art-job":
+        return 200, "application/json", json.dumps(dict(v.job, online=v.online())).encode()
+    if rel.startswith("art/"):                          # art/<system>/<box|snap>/<rom file>
+        parts = [urllib.parse.unquote(x) for x in rel[4:].split("/", 2)]
+        p = v.art_file(parts[0], parts[2], parts[1]) if len(parts) == 3 else None
+        return (200, "image/png", p) if p and p.is_file() else (204, "text/plain", b"")
+    if rel.startswith("boxart/"):
+        parts = [urllib.parse.unquote(x) for x in rel[7:].split("/")]
+        p = v.art_path(parts[0], parts[1] if len(parts) > 1 else "", parts[2] if len(parts) > 2 else "box")
+        return (200, "image/png", p) if p and p.is_file() else (204, "text/plain", b"")
+    if rel.startswith("emulator/"):
+        f = v.emulator_file(urllib.parse.unquote(rel[9:])) or v.fetch_on_demand(urllib.parse.unquote(rel[9:]))
+        return (200, TYPES.get(f.suffix.lower(), "application/octet-stream"), f) if f else \
+               (404, "text/plain", b"Retro Vault's emulator is not on this drive yet.")
+    if rel in ("api/controllers", "api/favorites"):
+        p = v.saves / (rel[4:] + ".json")
+        return (200, "application/json", p) if p.is_file() else (200, "application/json", b"{}")
+    if rel == "api/players":
+        sys_id = (query.get("system") or [""])[0]
+        if sys_id not in SYS_EXTS:
+            return 400, "application/json", b"{}"
+        return 200, "application/json", json.dumps(v.players(sys_id)).encode()
+    if rel == "api/cheats":
+        q = lambda n: (query.get(n) or [""])[0]
+        if q("system") not in LIBRETRO:
+            return 400, "application/json", b'{"ok":false,"codes":[]}'
+        return 200, "application/json", json.dumps(v.cheat_book(q("system"), q("shelf"), q("file"))).encode()
+    if rel == "api/cheats-on":
+        p = v.cheats_on_path((query.get("key") or [""])[0])
+        return (200, "application/json", p) if p and p.is_file() else (200, "application/json", b'{"active":[]}')
+    if rel.startswith("state/"):
+        p = v.state_path(rel[6:])
+        return (200, "application/octet-stream", p) if p and p.is_file() else (404, "text/plain", b"")
+    if rel.startswith("sram/"):
+        p = v.sram_path(rel[5:])
+        return (200, "application/octet-stream", p) if p and p.is_file() else (404, "text/plain", b"")
+    if rel.startswith("profile/"):
+        p = v.profile_path(urllib.parse.unquote(rel[8:]).strip("/"))
+        return (200, "application/json", p) if p and p.is_file() else (404, "application/json", b'{"error":"Not found"}')
+    if rel.startswith("no-ptt/"):
+        return 404, "text/plain", b""                       # the push-to-talk helper is not part of Philibert
+    return None
+
+
+def handle_post(v, path, raw):
+    rel = path[len("/retro/"):] if path.startswith("/retro/") else ""
+    if rel == "api/fetch-art":
+        try:
+            d = json.loads(raw or b"{}")
+        except ValueError:
+            d = {}
+        sys_id, kind, rom = str(d.get("system", "")), str(d.get("type", "box")), str(d.get("file") or "")
+        p, why = v.fetch_art(sys_id, str(d.get("title", "")), kind, rom=rom or None)
+        if p:
+            url = (_art_url(sys_id, kind, rom) if rom else
+                   "/retro/boxart/" + urllib.parse.quote(sys_id, safe="") + "/"
+                   + urllib.parse.quote(str(d.get("title")), safe="") + "/" + kind)
+            return 200, "application/json", json.dumps({"ok": True, "url": url}).encode()
+        return 200, "application/json", json.dumps({"ok": False, "why": why}).encode()
+    if rel in ("api/rom-hide", "api/rom-trash", "api/rom-restore", "api/rom-purge"):
+        try:
+            d = json.loads(raw or b"{}")
+        except ValueError:
+            d = {}
+        sys_id, name = str(d.get("system", "")), str(d.get("file", ""))
+        if rel == "api/rom-hide":
+            ok, msg = v.set_hidden(sys_id, name, bool(d.get("hidden", True))), name
+        elif rel == "api/rom-trash":
+            ok, msg = v.trash(sys_id, name)
+        elif rel == "api/rom-restore":
+            ok, msg = v.restore(sys_id, name)
+        else:
+            ok, msg = v.purge(sys_id, name)
+        return (200 if ok else 404), "application/json", json.dumps({"ok": ok, "message": msg}).encode()
+    if rel == "api/art-job":
+        return 200, "application/json", json.dumps(v.art_job_start()).encode()
+    if rel in ("api/set-sys-path", "api/set-roms-root"):
+        try:
+            d = json.loads(raw or b"{}")
+        except ValueError:
+            d = {}
+        sys_id = "" if rel == "api/set-roms-root" else str(d.get("system", ""))
+        if rel == "api/set-sys-path" and not sys_id:
+            return 400, "application/json", b'{"ok":false,"error":"Which system?"}'
+        ok, msg = v.set_folder(sys_id, str(d.get("path", "")))
+        body = {"ok": ok, "path": msg} if ok else {"ok": False, "error": msg}
+        if ok:
+            body["count"] = len(v.list_system(sys_id)) if sys_id else sum(len(v.list_system(x)) for x in SYS_EXTS)
+        return 200, "application/json", json.dumps(body).encode()
+    if rel == "api/pick-folder":
+        try:
+            d = json.loads(raw or b"{}")
+        except ValueError:
+            d = {}
+        path = pick_folder(str(d.get("title") or "Pick your ROMs folder"), str(d.get("start") or ""))
+        return 200, "application/json", json.dumps({"ok": bool(path), "path": path}).encode()
+    if rel == "api/art-cached":
+        # which games already have art on the drive: one request for the whole library,
+        # so art shows offline at once (new art is only downloaded while online)
+        try:
+            games = (json.loads(raw or b"{}").get("games") or [])[:20000]
+        except (ValueError, AttributeError):
+            games = []
+        out = []
+        for g in games:
+            sys_id, title = str((g or {}).get("system", "")), str((g or {}).get("title", ""))
+            rom = str((g or {}).get("file") or "")
+            hit = {}
+            for kind in ("box", "snap"):
+                p = v.art_file(sys_id, rom, kind) if rom else None
+                if p and p.is_file():
+                    hit[kind] = _art_url(sys_id, kind, rom)
+                    continue
+                p = v.art_path(sys_id, title, kind)
+                if p and p.is_file():
+                    hit[kind] = ("/retro/boxart/" + urllib.parse.quote(sys_id, safe="") + "/"
+                                 + urllib.parse.quote(title, safe="") + "/" + kind)
+            out.append(hit)
+        return 200, "application/json", json.dumps({"ok": True, "art": out, "online": v.online()}).encode()
+    if rel == "api/describe":
+        try:
+            d = json.loads(raw or b"{}")
+        except ValueError:
+            d = {}
+        return 200, "application/json", json.dumps(v.describe(d.get("games"))).encode()
+    if rel == "api/freeze-report":                  # a game stopped: a small log to send on (the newest 30 stay)
+        try:
+            d = json.loads(raw or b"")
+        except ValueError:
+            d = None
+        if not isinstance(d, dict) or len(raw) > 200_000:
+            return 400, "application/json", b'{"ok":false}'
+        folder = v.saves / "freeze-reports"
+        folder.mkdir(parents=True, exist_ok=True)
+        kind = re.sub(r"[^a-z_]", "", str(d.get("kind", "")))[:30] or "report"
+        p = folder / f"freeze-{time.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(2)}-{kind}.json"
+        p.write_text(json.dumps(d, indent=1), encoding="utf-8")
+        for old in sorted(folder.glob("freeze-*.json"))[:-30]:
+            old.unlink(missing_ok=True)
+        return 200, "application/json", b'{"ok":true}'
+    if rel == "api/cheats-on":                      # the codes in use for one game
+        try:
+            d = json.loads(raw or b"")
+        except ValueError:
+            d = {}
+        p = v.cheats_on_path(str(d.get("key", ""))) if isinstance(d, dict) else None
+        if not p or not isinstance(d.get("active"), list) or len(raw) > 200_000:
+            return 400, "application/json", b'{"ok":false}'
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".saving")
+        tmp.write_text(json.dumps({"active": d["active"]}), encoding="utf-8")
+        os.replace(tmp, p)
+        return 200, "application/json", b'{"ok":true}'
+    if rel in ("api/controllers", "api/favorites"):   # controller setups and favorites, on the drive so they travel with it
+        try:
+            d = json.loads(raw or b"")
+        except ValueError:
+            d = None
+        if not isinstance(d, dict) or len(raw) > 1_000_000:
+            return 400, "application/json", b'{"ok":false}'
+        p = v.saves / (rel[4:] + ".json")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".saving")
+        tmp.write_bytes(raw)
+        os.replace(tmp, p)
+        return 200, "application/json", b'{"ok":true}'
+    if rel.startswith("state/"):
+        p = v.state_path(rel[6:])
+        if not p or not raw or len(raw) > 64_000_000:
+            return 400, "application/json", b'{"ok":false}'
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".saving")
+        tmp.write_bytes(raw)
+        os.replace(tmp, p)
+        return 200, "application/json", b'{"ok":true}'
+    if rel.startswith("sram/"):
+        p = v.sram_path(rel[5:])
+        if not p or not raw or len(raw) > 4_000_000:
+            return 400, "application/json", b'{"ok":false}'
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if p.is_file():
+            if p.read_bytes() == raw:
+                return 200, "application/json", b'{"ok":true}'
+            os.replace(p, p.with_name(p.name + ".bak"))     # one step back, if a write ever goes wrong
+        tmp = p.with_name(p.name + ".saving")
+        tmp.write_bytes(raw)
+        os.replace(tmp, p)
+        return 200, "application/json", b'{"ok":true}'
+    if rel.startswith("profile/"):
+        uid = urllib.parse.unquote(rel[8:]).strip("/")
+        p = v.profile_path(uid)
+        try:
+            data = json.loads(raw or b"{}")
+        except ValueError:
+            data = None
+        if not p or not isinstance(data, dict) or str(data.get("id", "")) != uid or len(raw) > 500_000:
+            return 400, "application/json", b'{"error":"bad profile"}'
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        return 200, "application/json", json.dumps({"ok": True, "id": uid}).encode()
+    return None
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) >= 3 and sys.argv[1] == "--fetch":
+        n = fetch_emulator(sys.argv[2], log=lambda m: print(m, flush=True))   # Setup shows each line
+        print(n, "files downloaded", flush=True)

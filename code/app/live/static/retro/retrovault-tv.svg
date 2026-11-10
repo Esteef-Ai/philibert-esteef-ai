@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 470" width="520" height="470">
+  <!-- Retro Vault: the Philibert boombox face on a beat-up CRT with bent rabbit ears.
+       Cel-shaded: flat base colour + one shadow tone + one highlight, heavy ink outline.
+       Screen on the left, control panel on the right: one knob, one knob MISSING. -->
+  <defs>
+    <radialGradient id="scr" cx="0.45" cy="0.42" r="0.75">
+      <stop offset="0" stop-color="#14325a"/><stop offset="0.65" stop-color="#0b1730"/><stop offset="1" stop-color="#050a16"/>
+    </radialGradient>
+    <pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="1.4" fill="#000" opacity="0.35"/></pattern>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="glass"><path d="M96 170 Q92 154 110 152 L322 148 Q340 148 340 166 L344 336 Q344 354 326 356 L114 360 Q96 360 94 342 Z"/></clipPath>
+  </defs>
+  <g stroke="#1a120c" stroke-linecap="round" stroke-linejoin="round">
+    <!-- rabbit ears: left straight, right one bent half way and drooping -->
+    <path d="M236 112 L148 16" stroke-width="10" fill="none"/>
+    <path d="M236 112 L148 16" stroke="#c9ced6" stroke-width="4" fill="none"/>
+    <circle cx="146" cy="14" r="9" fill="#d9dee6" stroke-width="5"/>
+    <path d="M272 112 L326 44 L392 70" stroke-width="10" fill="none"/>
+    <path d="M272 112 L326 44 L392 70" stroke="#c9ced6" stroke-width="4" fill="none"/>
+    <circle cx="395" cy="71" r="9" fill="#d9dee6" stroke-width="5"/>
+    <path d="M198 132 Q254 82 310 132 Z" fill="#3a2e24" stroke-width="7"/>
+    <path d="M216 126 Q254 98 292 126" fill="none" stroke="#5a4838" stroke-width="5"/>
+
+    <!-- cabinet: aged beige plastic; dent top-right, chipped bottom-left corner -->
+    <path d="M62 146 Q54 128 78 128 L430 126 Q456 126 456 150 L458 182 Q440 186 444 202 L460 210 L462 400
+             Q462 424 438 424 L100 428 L82 412 L66 418 Q54 410 56 392 Z" fill="#cdb48a" stroke-width="9"/>
+    <path d="M78 140 L428 138 Q442 138 442 152" fill="none" stroke="#efdfba" stroke-width="7"/>
+    <path d="M450 218 L452 396 Q452 412 434 414 L108 418" fill="none" stroke="#a48a63" stroke-width="12"/>
+    <path d="M444 202 L426 212 L432 220 L414 232" fill="none" stroke-width="3"/>
+    <path d="M82 412 L96 392 L90 384" fill="none" stroke-width="3"/>
+    <g stroke="#8b7352" stroke-width="3" fill="none">
+      <path d="M72 300 L84 296"/><path d="M70 330 L80 334"/><path d="M428 150 L440 160"/><path d="M150 412 L176 410"/><path d="M300 410 L314 408"/>
+    </g>
+    <g stroke="none" fill="#8b6a3e" opacity="0.6">
+      <circle cx="90" cy="390" r="5"/><circle cx="98" cy="400" r="3"/><circle cx="440" cy="386" r="4"/><circle cx="420" cy="404" r="6"/><circle cx="406" cy="150" r="3"/>
+    </g>
+
+    <!-- screen bezel + bulging glass -->
+    <path d="M80 160 Q76 140 98 138 L336 134 Q358 134 358 156 L362 340 Q362 366 336 368 L108 372 Q82 372 80 348 Z" fill="#2c241c" stroke-width="8"/>
+    <path d="M96 170 Q92 154 110 152 L322 148 Q340 148 340 166 L344 336 Q344 354 326 356 L114 360 Q96 360 94 342 Z" fill="url(#scr)" stroke-width="5"/>
+    <g clip-path="url(#glass)" stroke="none">
+      <g transform="translate(118 158) scale(0.98)" filter="url(#glow)">
+        <path d="M62 62 V46 Q62 34 74 34 H126 Q138 34 138 46 V62" fill="none" stroke="#00e5ff" stroke-width="9" stroke-linecap="round"/>
+        <rect x="26" y="60" width="148" height="100" rx="16" fill="#00e5ff"/>
+        <circle cx="70" cy="104" r="25" fill="#0b1730"/><circle cx="70" cy="104" r="17" fill="#00e5ff"/><circle cx="70" cy="104" r="6" fill="#0b1730"/>
+        <circle cx="130" cy="104" r="25" fill="#0b1730"/><circle cx="130" cy="104" r="17" fill="#00e5ff"/><circle cx="130" cy="104" r="6" fill="#0b1730"/>
+        <path d="M48 143 H86 L93 134 L100 150 L107 138 L112 143 H152" fill="none" stroke="#0b1730" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="44" y="160" width="20" height="10" rx="3" fill="#00e5ff"/><rect x="136" y="160" width="20" height="10" rx="3" fill="#00e5ff"/>
+      </g>
+      <rect x="90" y="140" width="260" height="230" fill="url(#scan)"/>
+      <path d="M108 164 Q160 156 204 160 L196 178 Q150 174 112 184 Z" fill="#fff" opacity="0.13"/>
+      <path d="M340 300 L316 318 L324 328 L306 344 M316 318 L300 316" fill="none" stroke="#bfefff" stroke-width="2" opacity="0.7"/>
+    </g>
+
+    <!-- control panel -->
+    <rect x="376" y="160" width="62" height="200" rx="12" fill="#b89d72" stroke-width="6"/>
+    <!-- knob 1: still there -->
+    <circle cx="407" cy="200" r="20" fill="#3a2e24" stroke-width="6"/>
+    <circle cx="407" cy="200" r="13" fill="#5a4838" stroke="none"/>
+    <path d="M407 187 L407 199" stroke="#efdfba" stroke-width="5"/>
+    <!-- knob 2: MISSING - dark socket, bare post, a scratched ring where it used to sit -->
+    <circle cx="407" cy="258" r="17" fill="none" stroke="#8b7352" stroke-width="3" stroke-dasharray="6 5"/>
+    <circle cx="407" cy="258" r="9" fill="#1a120c" stroke-width="3"/>
+    <rect x="404" y="250" width="6" height="12" rx="2" fill="#9aa3ad" stroke-width="2"/>
+    <!-- speaker slots -->
+    <g stroke-width="4"><path d="M392 300 H422"/><path d="M392 314 H422"/><path d="M392 328 H422"/><path d="M392 342 H414"/></g>
+
+    <!-- stubby feet -->
+    <path d="M110 428 L104 448 H150 L146 428" fill="#3a2e24" stroke-width="7"/>
+    <path d="M380 426 L376 446 H422 L418 426" fill="#3a2e24" stroke-width="7"/>
+  </g>
+</svg>

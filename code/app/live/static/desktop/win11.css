@@ -1,0 +1,75 @@
+/* Philibert 11: our take on today's Windows - rounded light windows on soft
+   "glass", a centred taskbar, a floating Start panel with pinned apps. */
+@import url("win95.css");
+:root { --face: #f3f3f3; --sel: #005fb8; --ui-font: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; --accent: #005fb8; }
+html, body { font: 13px var(--ui-font); -webkit-font-smoothing: antialiased; }
+.btn { border-radius: 4px; background: #fbfbfb; border: 1px solid #d6d6d6; box-shadow: 0 1px 0 rgba(0,0,0,.06); padding: 5px 14px; }
+.btn:active, .btn.down { background: #f0f0f0; padding: 5px 14px; box-shadow: none; }
+.raised, .wbody.face { background: #f9f9f9; }
+
+/* windows: rounded, soft shadow, light title bar with flat caption buttons */
+.win { padding: 0; border-radius: 8px; overflow: hidden; background: #f3f3f3; border: 1px solid rgba(0,0,0,.12);
+       box-shadow: 0 16px 40px rgba(0,0,0,.22), 0 2px 6px rgba(0,0,0,.12); }
+.win.max { border-radius: 0; }
+.titlebar { height: 32px; padding: 0 0 0 12px; gap: 8px; background: #f3f3f3 !important; color: #555 !important; font-weight: 400; }
+.win.active .titlebar { color: #111 !important; }
+.tbtn { width: 46px; height: 32px; border-radius: 0; background: transparent; box-shadow: none; border: none; font: 10px "Segoe MDL2 Assets", "Segoe UI", sans-serif; color: #222; }
+.tbtn:hover { background: rgba(0,0,0,.06); }
+.tbtn.close:hover { background: #c42b1c; color: #fff; }
+.tbtn + .tbtn.close { margin: 0; }
+.wbody { margin: 0; }
+.wbody iframe { inset: 0; width: 100%; height: 100%; }
+.grip { background: none; }
+
+/* the taskbar: light glass, everything centred */
+#taskbar { height: 48px; padding: 0 8px; justify-content: center; gap: 4px; background: rgba(243,243,243,.85);
+           backdrop-filter: blur(30px) saturate(1.4); box-shadow: 0 -1px 0 rgba(0,0,0,.08); }
+#desk { bottom: 48px; }
+#start { height: 40px; min-width: 40px; padding: 0 9px; border: none; background: transparent; box-shadow: none; border-radius: 4px; }
+#start b { display: none; }
+#start:hover, #start.down { background: rgba(255,255,255,.7); padding: 0 9px; }
+#tasks { flex: 0 1 auto; height: 40px; }
+.task { flex: 0 0 auto; height: 40px; min-width: 40px; padding: 0 9px; border: none; background: transparent; box-shadow: none; border-radius: 4px; position: relative; }
+.task .tt { display: none; }
+.task .ico { width: 24px; height: 24px; }
+.task::after { content: ""; position: absolute; left: 50%; bottom: 2px; width: 6px; height: 3px; margin-left: -3px; border-radius: 2px; background: #888; }
+.task.down { background: rgba(255,255,255,.7); font-weight: 400; background-image: none; }
+.task.down::after { width: 16px; margin-left: -8px; background: var(--accent); }
+#tray { position: absolute; right: 8px; height: 40px; box-shadow: none; color: #111; }
+
+/* Start: a floating panel */
+#startmenu { left: 50%; transform: translateX(-50%); bottom: 58px; width: 620px; padding: 22px 26px 0; border-radius: 8px;
+  background: rgba(238,241,247,.92); backdrop-filter: blur(40px) saturate(1.6); border: 1px solid rgba(0,0,0,.1);
+  box-shadow: 0 20px 50px rgba(0,0,0,.25); flex-direction: column; }
+#startmenu .band { display: none; }
+#startmenu .sm-head { display: block; }
+.w11-search { width: 100%; border: 1px solid #d0d0d0; border-bottom: 2px solid var(--accent); border-radius: 18px; padding: 8px 16px;
+  background: #fff; font: 13px var(--ui-font); outline: none; }
+#sm-list { padding: 14px 0 0; }
+.w11-h { list-style: none; font-weight: 600; margin: 4px 6px 10px; }
+.w11-grid { list-style: none; display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; margin-bottom: 14px; }
+.w11-app { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px; border: none; background: none;
+  border-radius: 6px; font-size: 12px; text-align: center; }
+.w11-app:hover, .w11-doc:hover { background: rgba(255,255,255,.8); }
+.w11-rec { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; min-height: 60px; }
+.w11-doc { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: none; background: none; border-radius: 6px; text-align: left; }
+.w11-rec .none { color: #777; padding: 8px; }
+#startmenu .sm-foot { display: flex; align-items: center; justify-content: space-between; margin: 10px -26px 0; padding: 10px 46px;
+  background: rgba(0,0,0,.04); border-top: 1px solid rgba(0,0,0,.08); }
+.w11-user { display: flex; align-items: center; gap: 10px; }
+.w11-user svg { border-radius: 50%; background: #3c8cff; padding: 2px; }
+.w11-pow { border: none; background: none; padding: 6px; border-radius: 4px; }
+.w11-pow:hover { background: rgba(255,255,255,.8); }
+#flyout { border-radius: 8px; background: rgba(249,249,249,.96); box-shadow: 0 10px 30px rgba(0,0,0,.2); padding: 4px; }
+#flyout .mi { border-radius: 4px; color: #111; }
+#flyout .mi:hover { background: rgba(0,0,0,.05); color: #111; }
+
+/* icons, menus, dialogs */
+.dicon .lbl { text-shadow: 0 1px 3px rgba(0,0,0,.7); font-size: 12px; }
+.dicon.sel .img::after { display: none; }
+.dicon.sel { background: rgba(255,255,255,.22); border-radius: 4px; outline: 1px solid rgba(255,255,255,.4); }
+.dicon.sel .lbl { background: none; outline: none; }
+.tab { border-radius: 4px 4px 0 0; box-shadow: none; border: 1px solid #ddd; background: #f3f3f3; }
+.tabpanel { box-shadow: none; border: 1px solid #ddd; border-radius: 0 6px 6px 6px; background: #fff; }
+.well, .listbox { box-shadow: none; border: 1px solid #ddd; border-radius: 4px; }
+.listbox div.on { background: #cfe4fa; color: #000; }

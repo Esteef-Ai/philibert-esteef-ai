@@ -1,0 +1,68 @@
+/* Philibert for macOS: our take on today's Mac - a translucent menu bar with the
+   Philibert menu where the Apple menu is, rounded windows with traffic-light
+   buttons on the left, and a glass Dock. No Apple artwork or fonts ship. */
+@import url("win95.css");
+:root { --ui-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, sans-serif; --sel: #0a64d8; }
+html, body { font: 13px var(--ui-font); -webkit-font-smoothing: antialiased; }
+#taskbar { display: none !important; }
+#desk { top: 26px; bottom: 0; }
+body.shell-menubar #menubar { display: flex !important; position: fixed; left: 0; right: 0; top: 0; height: 26px; z-index: 700;
+  justify-content: space-between; align-items: stretch; background: rgba(30,30,40,.35); backdrop-filter: blur(30px) saturate(1.8);
+  color: #fff; font: 600 13px var(--ui-font); }
+#mb-left, #mb-right { display: flex; align-items: stretch; }
+#menubar .mb { color: #fff; font: 500 13px var(--ui-font); padding: 0 10px; border-radius: 5px; margin: 2px 0; display: flex; align-items: center; }
+#menubar .mb:first-child { font-weight: 700; }
+#menubar .mb.open, #mb-apps.open { background: rgba(255,255,255,.22); }
+#mb-clock { display: flex; align-items: center; padding: 0 12px; }
+#mb-apps { display: flex; align-items: center; gap: 6px; background: none; border: none; color: #fff; padding: 0 10px; font: 600 13px var(--ui-font); }
+#mb-apps svg, #mb-apps img { width: 14px; height: 14px; }
+#flyout.drop { padding: 5px; border-radius: 9px; background: rgba(246,246,248,.86); backdrop-filter: blur(30px);
+  box-shadow: 0 12px 34px rgba(0,0,0,.3), 0 0 0 .5px rgba(0,0,0,.2); }
+#flyout.drop .mi { height: 24px; padding: 0 12px; border-radius: 5px; color: #111; font: 13px var(--ui-font); }
+#flyout.drop .mi:hover { background: var(--sel); color: #fff; }
+#flyout.drop .mi .ico { width: 14px; height: 14px; }
+#flyout .sep { box-shadow: none; height: 1px; background: rgba(0,0,0,.1); margin: 5px 8px; }
+
+/* windows: rounded, big soft shadow, traffic lights on the left */
+.win { padding: 0; border-radius: 12px; overflow: hidden; background: #ececec; border: .5px solid rgba(0,0,0,.25);
+       box-shadow: 0 22px 60px rgba(0,0,0,.35), 0 0 0 .5px rgba(255,255,255,.3) inset; }
+.win.max { inset: 0 0 0 0 !important; border-radius: 0; }
+.titlebar { height: 30px; padding: 0 12px; gap: 8px; color: #444 !important; background: #e9e9ec !important;
+  font: 600 13px var(--ui-font); border-bottom: 1px solid rgba(0,0,0,.08); }
+.titlebar .ico { display: none; }
+.titlebar .tt { order: 5; flex: 1; text-align: center; margin-right: 52px; }
+.tbtn { width: 12px; height: 12px; min-width: 0; min-height: 0; padding: 0; border-radius: 50%; font-size: 0; border: none; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.25); }
+.tbtn.close { order: 1; background: #ff5f57; margin: 0 !important; }
+.tbtn[data-act="min"] { order: 2; background: #febc2e; }
+.tbtn[data-act="max"] { order: 3; background: #28c840; }
+.win:not(.active) .tbtn { background: #d0d0d3; }
+.wbody { margin: 0; }
+.wbody iframe { inset: 0; width: 100%; height: 100%; }
+.wbody.face, .raised { background: #ececec; }
+.grip { background: none; }
+.btn { border-radius: 6px; background: #fff; border: .5px solid rgba(0,0,0,.25); box-shadow: 0 1px 1px rgba(0,0,0,.08); padding: 4px 14px; font: 13px var(--ui-font); }
+.btn:active, .btn.down { background: #e4e4e4; padding: 4px 14px; }
+.tab { border-radius: 6px; box-shadow: none; border: .5px solid rgba(0,0,0,.2); margin-right: 2px; background: #e4e4e4; }
+.tab.on { background: #fff; margin: 0 2px 0 0; padding: 3px 9px 2px; }
+.tabs { justify-content: center; }
+.tabpanel { box-shadow: none; border: .5px solid rgba(0,0,0,.15); border-radius: 8px; background: #f6f6f6; margin-top: 6px; }
+.well, .listbox { box-shadow: none; border: .5px solid rgba(0,0,0,.2); border-radius: 6px; }
+.listbox div.on { background: var(--sel); color: #fff; }
+
+/* the Dock */
+body.has-dock #dock { display: flex !important; position: fixed; left: 50%; bottom: 8px; transform: translateX(-50%); z-index: 650;
+  align-items: flex-end; gap: 6px; padding: 6px 8px; border-radius: 20px; background: rgba(255,255,255,.22);
+  backdrop-filter: blur(24px) saturate(1.6); border: .5px solid rgba(255,255,255,.35); box-shadow: 0 10px 30px rgba(0,0,0,.3); }
+.dk { position: relative; background: none; border: none; padding: 0; cursor: default; transition: transform .15s; }
+.dk:hover { transform: translateY(-8px) scale(1.18); }
+.dk .tile { width: 52px; height: 52px; border-radius: 13px; display: grid; place-items: center;
+  background: linear-gradient(160deg, #fdfdfd, #d9dde6); box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+.dk .dot { position: absolute; left: 50%; bottom: -5px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: transparent; }
+.dk.running .dot { background: rgba(255,255,255,.85); }
+.dksep { width: 1px; align-self: stretch; margin: 4px 4px; background: rgba(255,255,255,.4); }
+
+/* desktop icons: drive-like, labels with a soft shadow */
+.dicon .lbl { color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); font: 500 12px var(--ui-font); }
+.dicon.sel .img::after { display: none; }
+.dicon.sel .img { background: rgba(0,0,0,.25); border-radius: 6px; }
+.dicon.sel .lbl { background: var(--sel); border-radius: 4px; outline: none; }

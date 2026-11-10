@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Philibert</title>
+<link rel="icon" href="/live/philibert-p1.svg">
+<link href="/live/fonts/fonts.css" rel="stylesheet">
+<link href="/live/desktop/win95.css" rel="stylesheet" id="theme-css">
+</head>
+<body class="theme-win95 shell-taskbar family-win">
+
+<!-- boot splash: filled in per theme by desktop.js -->
+<div id="boot" hidden></div>
+
+<!-- Mac themes: the menu bar -->
+<div id="menubar" hidden>
+  <div id="mb-left"></div>
+  <div id="mb-right"><span id="mb-clock"></span><button id="mb-apps" type="button" title="Open windows"></button></div>
+</div>
+
+<!-- the desktop -->
+<div id="desk" class="wp-teal">
+  <div id="wallart"></div>
+  <!-- Windows 3.11: the Program Manager frame around the icons -->
+  <div id="progman" class="raised" hidden>
+    <div class="titlebar pm-title"><span class="tt">Philibert Program Manager</span></div>
+    <div class="pm-menu" id="pm-menu"></div>
+    <div class="pm-group"><div class="titlebar pm-gtitle"><span class="tt">Philibert</span></div><div class="pm-body"></div></div>
+  </div>
+  <div id="icons" role="list" aria-label="Desktop"></div>
+  <div id="minicons"></div>
+  <div id="windows"></div>
+</div>
+
+<!-- Windows themes: the taskbar -->
+<div id="taskbar">
+  <button id="start" class="btn" type="button" aria-haspopup="true" aria-expanded="false"><span id="start-mark"></span><b id="start-label">Philibert</b></button>
+  <div id="tasks"></div>
+  <div id="tray" class="sunk">
+    <button id="tray-e3" type="button" title="About Philibert - Esteef.Ai"></button>
+    <span id="parked" aria-label="Parked windows"></span>
+    <span id="clock">--:--</span>
+  </div>
+</div>
+
+<!-- start menu -->
+<div id="startmenu" class="raised" hidden>
+  <div class="sm-head" id="sm-head"></div>
+  <div class="sm-main">
+    <div class="band"><span><b>Philibert</b><i id="band-ver">95</i></span></div>
+    <ul id="sm-list"></ul>
+  </div>
+  <div class="sm-foot" id="sm-foot"></div>
+</div>
+<div id="flyout" class="raised" hidden></div>
+
+<!-- macOS: the Dock; phones: the home-screen dock -->
+<div id="dock" hidden></div>
+
+<!-- phones: status bar, navigation, recent apps -->
+<div id="phone" hidden>
+  <div id="ph-status"><span id="ph-time">9:41</span><span class="ph-island"></span>
+    <span class="ph-icons"><i class="sig"></i><i class="wifi"></i><i class="bat"><b></b></i></span></div>
+  <div id="ph-nav"><button id="ph-back" aria-label="Back">&#9664;</button><button id="ph-home" aria-label="Home">&#9679;</button>
+    <button id="ph-recents" aria-label="Recent apps">&#9632;</button></div>
+  <button id="ph-bar" aria-label="Go home"></button>
+  <div id="ph-cards" hidden></div>
+</div>
+
+<!-- the Commodore 64 screen -->
+<div id="c64" hidden>
+  <div class="c64-screen"><p>    **** PHILIBERT 64 BASIC V2 ****</p><p> 64K RAM SYSTEM  38911 BASIC BYTES FREE</p><p>&nbsp;</p><p>READY.</p>
+    <div id="c64-list"></div></div>
+</div>
+
+<!-- screen saver -->
+<canvas id="saver" hidden></canvas>
+
+<!-- shutting down -->
+<div id="safe" hidden><p id="safe-text">It's now safe to unplug your Philibert drive.</p></div>
+
+<script src="/live/desktop/icons.js"></script>
+<script src="/live/desktop/wallpapers.js"></script>
+<script src="/live/desktop/sounds.js"></script>
+<script src="/live/desktop/desktop.js"></script>
+</body>
+</html>
