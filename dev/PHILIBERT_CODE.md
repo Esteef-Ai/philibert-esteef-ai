@@ -103,9 +103,14 @@ Windows first. Mac later: OpenCode and Ollama run there, but the worker's proces
 
 ## 9. Build phases
 
-1. `dev/sync_code.py` + scrub/brand guard + tests (no installer yet; run from a dev folder).
-2. Shared paths: Philibert Code runs from `<Philibert>\code\` against Philibert's runtime, models and vault,
-   with its own `data\code\`.
+1. **Done 2026-11-09.** `dev/sync_code.py` + scrub/brand guard + `dev/test_sync_code.py`.
+2. **Done 2026-11-09.** Shared paths: `code\start.ps1` (+ `Start-Philibert-Code.bat`) runs `code\app` on
+   Philibert's Python, Ollama (shared when Philibert's is running, else its own, stopped on close), model
+   store and notes vault, with its own `data\code\`; refuses to start without Philibert. Left out at
+   build time (PATCHES in sync_code.py): remote devices and pairing (tools, endpoints, panel) and
+   Heretic (endpoints, panels); Philibert's and Philibert Code's program folders are write-protected.
+   `dev/test_code_start.py` runs it from a stand-in install. Extra packages for Setup to put in
+   `code\pylib`: `code/requirements.txt` (ruff, pillow, pywin32).
 3. "Reference a chat" in both apps.
 4. Setup for Philibert Code (find Philibert, hardware check, OpenCode + MinGit, model pull + tag).
 5. Update channel, desktop/Start icon (and a Philibert Code icon on Philibert's retro desktop when installed).

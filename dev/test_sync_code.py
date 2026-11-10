@@ -65,6 +65,11 @@ check("a folder is copied whole, binary files untouched", built.get("live/static
 check("the previous build is replaced, not merged", "old.txt" not in built, sorted(built))
 check("BUILD.json records the source", b'"Philibert Code"' in built.get("BUILD.json", b""), built.get("BUILD.json"))
 
+ok, lines, built = run(dict(GOOD, **{"app.py": GOOD["app.py"].replace("\n", "\r\n")}),
+                      rules=[("app.py", sc.L('PRODUCT = "NeuralDock"\nCONFIG'), 'PRODUCT = "Philibert Code"\nCONFIG', 1)])
+check("rules written with \\n match a CRLF file, which keeps CRLF", ok and b'PRODUCT = "Philibert Code"\r\nCONFIG'
+      in built.get("app.py", b"") and b"\n" not in built["app.py"].replace(b"\r\n", b""), (lines, built.get("app.py")))
+
 # -- personal data stops the build and nothing is written -----------------------------------------
 bad = dict(GOOD, **{"app.py": GOOD["app.py"] + "VAULT = r'G:\\!!Obsidian\\notes'\nOWNER = 'Steve'\n"})
 ok, lines, built = run(bad)
@@ -102,6 +107,19 @@ if sc.ND.is_dir():
         if ok:
             launcher = (out / "NeuralDock_launcher.py").read_text(encoding="utf-8")
             check("the launcher is Philibert Code", 'else "Philibert Code"' in launcher)
+            raw_l = (out / "NeuralDock_launcher.py").read_bytes()
+            check("the launcher keeps its CRLF line endings (no churn)", raw_l.count(b"\r\n") > 1000
+                  and raw_l.count(b"\n") == raw_l.count(b"\r\n"), raw_l.count(b"\n") - raw_l.count(b"\r\n"))
+            check("phase 2: the inside-Philibert switch and the drop lists are in",
+                  "IN_PHILIBERT = (not PORTABLE)" in launcher and "CODE_DROP_TOOLS = {" in launcher
+                  and "CODE_BLOCKED_API = (" in launcher)
+            check("phase 2: remote-device tools are never offered", "DEVICE_TOOL_SCHEMAS if device_snapshot()" not in launcher)
+            check("phase 2: device/pairing/Heretic endpoints are refused", "if path.startswith(CODE_BLOCKED_API):" in launcher)
+            check("phase 2: Philibert's and Philibert Code's program folders are protected",
+                  '"code/app", "code/tools", "code/pylib"' in launcher and "(PORTABLE or IN_PHILIBERT) and name in" in launcher)
+            check("phase 2: the shared notes vault is Philibert's", 'Path(os.environ["PHILIBERT_ROOT"]) / "data"' in launcher)
+            ui_t = (out / "NeuralDock_ui.html").read_text(encoding="utf-8")
+            check("phase 2: the Heretic and device panels are hidden", "Philibert Code: not included" in ui_t)
             have = {p.relative_to(out).as_posix() for p in out.rglob("*") if p.is_file()}
             check("coding ships: worker, foreman, playbooks", {"opencode_worker.py", "nd_foreman.py",
                   "prompts/foreman_worker_opencode.md"} <= have, sorted(have)[:10])

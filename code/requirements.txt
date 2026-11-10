@@ -1,0 +1,6 @@
+# Philibert Code's extra Python packages, installed by its Setup into code\pylib
+# (pip install --target code\pylib -r code\requirements.txt), on top of Philibert's runtime.
+# Philibert's runtime already has psutil, pywebview and faster-whisper.
+ruff        # lint diagnostics: the coding loop and the foreman's lint gate (python -m ruff)
+pillow      # design review screenshots, hidden-desktop captures, image handling
+pywin32     # hidden-desktop automation (win32gui, win32con)

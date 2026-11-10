@@ -50,6 +50,12 @@ OLLAMA_URL   = os.environ.get("ND_OLLAMA_URL") or "http://127.0.0.1:11434"
 # them ND is unchanged.
 PORTABLE = os.environ.get("ND_PORTABLE") == "1"
 PRODUCT  = "Philibert" if PORTABLE else "Philibert Code"
+# Philibert Code inside a Philibert install (code\start.ps1 sets PHILIBERT_ROOT): Philibert's
+# models, runtime and notes vault, its own data in data\code, and Philibert's program protected.
+IN_PHILIBERT = (not PORTABLE) and bool(os.environ.get("PHILIBERT_ROOT"))
+# Not part of Philibert Code: other devices (remote control) and Heretic.
+CODE_DROP_TOOLS = {"device_action", "list_devices"}
+CODE_BLOCKED_API = ("/api/device/", "/api/devices", "/api/pair_", "/api/heretic")
 # Not part of a pure assistant that travels between other people's computers.
 PORTABLE_DROP_TOOLS = {"generate_image", "run_shell", "install_app", "gui_action",
                        "hidden_desktop", "screen_capture", "device_action", "list_devices",
@@ -142,7 +148,8 @@ def _drive_root():
 # (2026-10-22) "fixed" E:\Philibert\app\nd_obsidian_memory.py, nd_retro_vault.py and
 # nd_memory_index.py - auto-approved - and broke the drive; it reached them as "E:app\..."
 # (Windows: the app folder in E:'s current directory).
-PROTECTED_DIRS = ("app", "setup", "runtime", "models", "installer", "brand", "Entertainment/emulator")
+PROTECTED_DIRS = ("app", "setup", "runtime", "models", "installer", "brand", "Entertainment/emulator",
+                  "code/app", "code/tools", "code/pylib")
 
 
 def protected_path(raw):
@@ -223,6 +230,9 @@ def load_config():
 
 def _portable_defaults():
     """Philibert: the vault lives on the drive, and the Internet starts OFF."""
+    if IN_PHILIBERT:                       # Philibert Code: Philibert's own notes vault
+        _config["obsidian_root"] = str(Path(os.environ["PHILIBERT_ROOT"]) / "data")
+        _config["obsidian_vault"] = "vault"
     if not PORTABLE:
         return
     _config["obsidian_root"] = str(_CONFIG_DIR)
@@ -13477,8 +13487,7 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
 
     active_tools = (TOOL_SCHEMAS
                     + (AGENT_TOOL_SCHEMAS if agent_mode else [])
-                    + (ROUTER_TOOL_SCHEMAS if routing else [])
-                    + (DEVICE_TOOL_SCHEMAS if device_snapshot() else []))
+                    + (ROUTER_TOOL_SCHEMAS if routing else []))
     if PORTABLE:
         _off = set() if internet_on() else {"web_search", "web_fetch"}
         active_tools = [t for t in active_tools
@@ -13614,11 +13623,13 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
             _phone_refused.add(getattr(_job_ctx, "phone_job", ""))
             return (f"[NOT AVAILABLE] {name} cannot be used from the phone: from the phone nothing on the "
                     f"computer can be changed. Tell the user to do that on the computer.")
+        if name in CODE_DROP_TOOLS:
+            return f"[NOT AVAILABLE] {name} is not part of {PRODUCT} - do not call it again."
         if PORTABLE and name in portable_drop():
             return (f"[NOT AVAILABLE] {name} is not part of {PRODUCT} and never will be - do not "
                     f"call it again. For drive sizes, memory or hardware call computer_info; for "
                     f"files use list_dir / read_file. Otherwise answer from what you know.")
-        if PORTABLE and name in ("write_file", "edit_file", "run_script", "delete_file", "move_file"):
+        if (PORTABLE or IN_PHILIBERT) and name in ("write_file", "edit_file", "run_script", "delete_file", "move_file"):
             _pa = dict(a or {})
             if name == "run_script":
                 _pa["path"] = script_path(_pa.get("path"))
@@ -15093,7 +15104,7 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                 t = _tier(c["name"])
                 if t == "green":
                     continue
-                if PORTABLE and c["name"] in portable_drop():
+                if (PORTABLE and c["name"] in portable_drop()) or c["name"] in CODE_DROP_TOOLS:
                     continue        # refused when it runs: never ask anyone to approve it
                                     # (each Approve came back "not available" - a loop of asks)
                 if getattr(_job_ctx, "tool_allow", None) is not None and c["name"] not in _job_ctx.tool_allow:
@@ -18738,6 +18749,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         body   = json.loads(self.rfile.read(length)) if length else {}
         path   = self.path
+        if path.startswith(CODE_BLOCKED_API):
+            self.send_json({"ok": False, "error": "not part of Philibert Code"}, 404)
+            return
 
         if path == "/api/ping":
             # Used by the pairing page and by device clients to test a token.

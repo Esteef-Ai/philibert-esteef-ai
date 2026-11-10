@@ -59,6 +59,52 @@ BRAND = [
 ]
 
 
+L = re.escape
+# Phase 2: what Philibert Code leaves out, and how it runs inside a Philibert install. Applied after
+# BRAND, with the same exact-count rule. ND3 is not edited for this - these edits exist only in the copy.
+PATCHES = [
+    # the switches the edits below use
+    ("NeuralDock_launcher.py", L('PRODUCT  = "Philibert" if PORTABLE else "Philibert Code"\n'),
+     'PRODUCT  = "Philibert" if PORTABLE else "Philibert Code"\n'
+     "# Philibert Code inside a Philibert install (code\\start.ps1 sets PHILIBERT_ROOT): Philibert's\n"
+     "# models, runtime and notes vault, its own data in data\\code, and Philibert's program protected.\n"
+     'IN_PHILIBERT = (not PORTABLE) and bool(os.environ.get("PHILIBERT_ROOT"))\n'
+     "# Not part of Philibert Code: other devices (remote control) and Heretic.\n"
+     'CODE_DROP_TOOLS = {"device_action", "list_devices"}\n'
+     'CODE_BLOCKED_API = ("/api/device/", "/api/devices", "/api/pair_", "/api/heretic")\n', 1),
+    # remote devices: never offered to the model, refused if called anyway, never asked about
+    ("NeuralDock_launcher.py", r"\n[ \t]+\+ \(DEVICE_TOOL_SCHEMAS if device_snapshot\(\) else \[\]\)\)", ")", 1),
+    ("NeuralDock_launcher.py", L("        if PORTABLE and name in portable_drop():\n"),
+     "        if name in CODE_DROP_TOOLS:\n"
+     '            return f"[NOT AVAILABLE] {name} is not part of {PRODUCT} - do not call it again."\n'
+     "        if PORTABLE and name in portable_drop():\n", 1),
+    ("NeuralDock_launcher.py", L('if PORTABLE and c["name"] in portable_drop():'),
+     'if (PORTABLE and c["name"] in portable_drop()) or c["name"] in CODE_DROP_TOOLS:', 1),
+    # their endpoints (devices, pairing, Heretic) answer "not here"
+    ("NeuralDock_launcher.py", L("        path   = self.path\n"),
+     "        path   = self.path\n"
+     "        if path.startswith(CODE_BLOCKED_API):\n"
+     '            self.send_json({"ok": False, "error": "not part of Philibert Code"}, 404)\n'
+     "            return\n", 1),
+    # inside Philibert: Philibert's program (and Philibert Code's own) is never written to
+    ("NeuralDock_launcher.py", L('PROTECTED_DIRS = ("app", "setup", "runtime", "models", "installer", "brand", "Entertainment/emulator")'),
+     'PROTECTED_DIRS = ("app", "setup", "runtime", "models", "installer", "brand", "Entertainment/emulator",\n'
+     '                  "code/app", "code/tools", "code/pylib")', 1),
+    ("NeuralDock_launcher.py", L('if PORTABLE and name in ("write_file", "edit_file", "run_script", "delete_file", "move_file"):'),
+     'if (PORTABLE or IN_PHILIBERT) and name in ("write_file", "edit_file", "run_script", "delete_file", "move_file"):', 1),
+    # inside Philibert: the one shared notes vault (chats stay separate, in data\code)
+    ("NeuralDock_launcher.py", L('    if not PORTABLE:\n        return\n    _config["obsidian_root"] = str(_CONFIG_DIR)\n'),
+     "    if IN_PHILIBERT:                       # Philibert Code: Philibert's own notes vault\n"
+     '        _config["obsidian_root"] = str(Path(os.environ["PHILIBERT_ROOT"]) / "data")\n'
+     '        _config["obsidian_vault"] = "vault"\n'
+     '    if not PORTABLE:\n        return\n    _config["obsidian_root"] = str(_CONFIG_DIR)\n', 1),
+    # the UI: no Heretic and no device pairing panels
+    ("NeuralDock_ui.html", L("</head>"),
+     "<style>/* Philibert Code: not included */ .sc:has(#heretic-model-list), .sc:has(#dev-list),"
+     " .cr:has(#d-heretic), .cc:has(#cs-heretic) { display: none !important; }</style>\n</head>", 1),
+]
+
+
 def _git(*args):
     return subprocess.run(["git", "--no-optional-locks", "-C", str(ND), *args],
                           capture_output=True, check=True).stdout
@@ -103,13 +149,13 @@ def brand(files, rules=BRAND):
     return problems
 
 
-def build(src, out, files=None, dirs=None, rules=BRAND):
+def build(src, out, files=None, dirs=None, rules=BRAND + PATCHES):
     """Stage, scrub, check and brand; replace `out` only when clean. -> (ok, report lines)."""
     rels = list(files if files is not None else FILES)
     for d in (dirs if dirs is not None else DIRS):
         rels += [r for r in src.listdir(d) if "__pycache__" not in r]
     rels = list(dict.fromkeys(rels))
-    problems, texts, blobs, missing, notes = [], {}, {}, [], []
+    problems, texts, blobs, missing, notes, crlf = [], {}, {}, [], [], set()
     for rel in rels:
         if NEVER.search(rel):
             problems.append(f"never shipped: {rel}")
@@ -125,6 +171,9 @@ def build(src, out, files=None, dirs=None, rules=BRAND):
         text = sync_app.scrub(raw.decode("utf-8"))
         for m in sync_app.PERSONAL.finditer(text):
             problems.append(f"personal: {rel}:{text.count(chr(10), 0, m.start()) + 1}: {m.group(0)}")
+        if "\r\n" in text:                      # rules are written with \n; the file keeps its own endings
+            crlf.add(rel)
+            text = text.replace("\r\n", "\n")
         texts[rel] = text
     # A listed file the source does not have (e.g. still uncommitted in ND3) is fine only when
     # nothing in this build uses it; otherwise the app would break at run time.
@@ -141,7 +190,8 @@ def build(src, out, files=None, dirs=None, rules=BRAND):
         return False, problems
     stage = Path(tempfile.mkdtemp(prefix="philibert_code_"))
     try:
-        for rel, data in list(blobs.items()) + [(r, t.encode("utf-8")) for r, t in texts.items()]:
+        for rel, data in list(blobs.items()) + [(r, (t.replace("\n", "\r\n") if r in crlf else t).encode("utf-8"))
+                                                for r, t in texts.items()]:
             p = stage / rel
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_bytes(data)
