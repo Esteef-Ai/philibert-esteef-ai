@@ -33,14 +33,81 @@ CLARIFY = """
 """
 REFEREE = "q36c-nd64k"
 RUNS = [
-    {"n": 4, "ws": ROOT / "wiztry4", "name": "Qwen3.6 35B as planner", "model": "q36c-nd64k", "plan": [], "rest": []},
-    {"n": 5, "ws": ROOT / "wiztry5", "name": "gpt-oss:120b as planner", "model": "gpt-oss:120b",
+    {"n": 6, "ws": ROOT / "wiztry6", "name": "Qwen3.6 35B as planner", "model": "q36c-nd64k", "plan": [], "rest": []},
+    {"n": 7, "ws": ROOT / "wiztry7", "name": "gpt-oss:120b as planner", "model": "gpt-oss:120b",
      "plan": ["--think", "high", "--ctx", "65536", "--max", "60000"], "rest": ["--think", "medium", "--ctx", "65536", "--max", "40000"]},
 ]
 DRY = "--dry" in sys.argv
 ENV = {**os.environ, "PYTHONIOENCODING": "utf-8"}
 results = {}
 started = time.strftime("%Y-%m-%d %H:%M")
+
+
+# The builder (OpenCode) runs shell commands with nobody watching. ND3's worker allows every command; a project
+# opencode.json in the build folder replaces that rule (checked: `opencode debug config` merges it over the worker's
+# file). Last matching rule wins: everything is allowed, then these are refused. It stops what happened on
+# 2026-11-11 (copying python.exe toward Program Files, PATHEXT edits); it is NOT a sandbox: python -c can still
+# do anything the user can.
+_VERBS = ["copy", "xcopy", "robocopy", "move", "del", "erase", "rmdir", "rd", "ren", "rename", "rm", "cp", "mv",
+          "mklink", "reg", "setx", "icacls", "takeown", "attrib", "taskkill", "shutdown", "schtasks", "runas",
+          "curl", "wget", "winget", "choco", "scoop", "npm", "pip"]
+_ANYWHERE = ["Copy-Item", "Move-Item", "Remove-Item", "Rename-Item", "Set-ItemProperty", "New-ItemProperty",
+             "Stop-Process", "Start-Process", "Invoke-WebRequest", "Invoke-RestMethod", "Start-BitsTransfer",
+             "SetEnvironmentVariable", "PATHEXT", "Program Files", "\\Windows\\", "git commit", "git reset",
+             "git checkout", "git clean", "git stash", "git push", "pip install", "pip uninstall"]
+SHELL_RULES = {"*": "allow"}
+for v in _VERBS:
+    for p in (f"{v} *", f"* {v} *", f"{v.upper()} *", f"* {v.upper()} *"):
+        SHELL_RULES[p] = "deny"
+for w in _ANYWHERE:
+    SHELL_RULES[f"*{w}*"] = "deny"
+    SHELL_RULES[f"*{w.lower()}*"] = "deny"
+OPENCODE_PROJECT = {"$schema": "https://opencode.ai/config.json", "permission": {"bash": SHELL_RULES}}
+OPENCODE = r"C:\Users\sskro\scoop\persist\nodejs-lts\bin\node_modules\opencode-ai\bin\opencode.exe"
+
+
+def prove_shell_rules():
+    """Before any build: a real OpenCode run in a scratch folder asks for a refused copy and an allowed dir.
+    -> (ok, text). The queue does not build if the copy gets through."""
+    d = HOME / "shell_rules_check"
+    shutil.rmtree(d, ignore_errors=True)
+    d.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q"], cwd=str(d))
+    (d / "a.txt").write_text("hello\n", encoding="utf-8")
+    (d / "opencode.json").write_text(json.dumps(OPENCODE_PROJECT, indent=1), encoding="utf-8")
+    cfg = d.parent / "shell_rules_cfg.json"
+    cfg.write_text(json.dumps({"$schema": "https://opencode.ai/config.json", "autoupdate": False, "share": "disabled",
+                               "model": "ollama/q36c-nd32k",
+                               "provider": {"ollama": {"npm": "@ai-sdk/openai-compatible", "name": "Ollama",
+                                                       "options": {"baseURL": "http://127.0.0.1:11434/v1"},
+                                                       "models": {"q36c-nd32k": {"name": "q36c-nd32k", "tool_call": True, "reasoning": False,
+                                                                                 "options": {"reasoningEffort": "none"}}}}},
+                               "permission": {"edit": "allow", "bash": "allow", "webfetch": "deny", "external_directory": "deny"}}),
+                   encoding="utf-8")
+    prompt = ("Use your shell tool to run these two commands exactly, one at a time, and report what each printed: "
+              "first `cmd /c copy a.txt b.txt`, then `cmd /c dir /b`. Do nothing else.")
+    try:
+        r = subprocess.run([OPENCODE, "run", "--format", "json"], input=prompt, cwd=str(d), capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=300, env={**ENV, "OPENCODE_CONFIG": str(cfg)})
+        events = r.stdout
+    except Exception as e:
+        return False, f"the check could not run: {e}"
+    copied = (d / "b.txt").exists()
+    tools = []
+    for line in events.splitlines():
+        try:
+            p = (json.loads(line).get("part") or {})
+        except ValueError:
+            continue
+        if p.get("type") == "tool":
+            st = p.get("state") or {}
+            tools.append(f"{json.dumps(st.get('input'))[:100]} -> {st.get('status')} {str(st.get('error') or '')[:100]}")
+    text = f"copy got through: {copied}; tool calls: {tools}"
+    if copied:
+        return False, text
+    if not any("copy" in t for t in tools):
+        return True, "INCONCLUSIVE (the model did not try the copy) - " + text
+    return True, text
 
 
 def log(msg):
@@ -124,6 +191,7 @@ def setup(run):
     for n in ("request.txt", "answers.md", "questions.md"):
         shutil.copy(SOURCE / ".studio" / n, ws / ".studio" / n)
     (ws / "SPEC.md").write_text((SOURCE / "SPEC.md").read_text(encoding="utf-8").rstrip() + "\n" + CLARIFY, encoding="utf-8")
+    (ws / "opencode.json").write_text(json.dumps(OPENCODE_PROJECT, indent=1), encoding="utf-8")   # the builder's shell rules
     subprocess.run(["git", "init", "-q"], cwd=str(ws), check=True)
     commit(ws, f"WizTry {run['n']}: Studio v2, {run['name']}")
     subprocess.run([BASE_PY, "-m", "venv", ".venv"], cwd=str(ws), check=True)
@@ -196,7 +264,7 @@ def build(run):
     out = stage(run, "check", rest=[], retries=0, model=REFEREE)
     results[run["n"]]["check"] = out[-1500:]
     for p in (ws.iterdir() if not DRY else []):   # tests must not leave anything behind in the project
-        if p.name not in (".git", ".studio", ".venv", ".foreman", ".gitignore", "SPEC.md", "plan.json", "tests"):
+        if p.name not in (".git", ".studio", ".venv", ".foreman", ".gitignore", "SPEC.md", "plan.json", "tests", "opencode.json"):
             log(f"removing what a test left behind: {p.name}")
             shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True)
     results[run["n"]]["planning_hours"] = round((time.time() - t0) / 3600, 1)
@@ -251,6 +319,11 @@ def scored(run):
 
 def report():
     L = [f"# Overnight Studio runs (started {started}, updated {time.strftime('%Y-%m-%d %H:%M')})", ""]
+    chk = HOME / "shell_rules_check.txt"
+    if chk.exists():
+        L += ["Builder shell rules check: " + chk.read_text(encoding="utf-8").strip(), ""]
+    if 0 in results:
+        L += [f"**{results[0]['phase']}**: {results[0].get('error')}", ""]
     for run in RUNS:
         r = results.get(run["n"])
         L += [f"## Run {run['n']}: {run['name']}  ({run['ws']})", ""]
@@ -286,6 +359,16 @@ def main():
     import ctypes
     ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001)   # no sleep while this process runs (ends with it)
     log(f"overnight queue started (pid {os.getpid()})" + (" DRY RUN" if DRY else ""))
+    if not DRY:
+        unload()
+        ok, text = prove_shell_rules()
+        log(f"shell rules check: {'OK' if ok else 'FAILED'} - {text}")
+        (HOME / "shell_rules_check.txt").write_text(text + "\n", encoding="utf-8")
+        if not ok:
+            log("the builder's shell rules did not hold - no build tonight")
+            results[0] = {"phase": "not started: the shell rules check failed", "error": text}
+            report()
+            return
     for run in RUNS:
         if only and run["n"] not in only:
             continue
