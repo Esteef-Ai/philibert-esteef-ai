@@ -130,8 +130,20 @@ def setup(run):
     subprocess.run([str(ws / ".venv" / "Scripts" / "python.exe"), "-m", "pip", "install", "-q", "pyinstaller==6.22.3"], cwd=str(ws), capture_output=True)
 
 
+def close_leftovers(ws):
+    """Programs a build started from its own folder (a test that ran the .exe, a window left open) lock files."""
+    if DRY:
+        return
+    ps = ("Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith('%s', 'OrdinalIgnoreCase') -and "
+          "$_.Path -notlike '*\\.venv\\*' } | ForEach-Object { $_.Path; Stop-Process -Id $_.Id -Force }" % str(ws))
+    r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True)
+    if r.stdout.strip():
+        log(f"closed programs left running from the build folder: {r.stdout.strip()}")
+
+
 def foreman(run, *args, timeout=4 * 3600 + 900):
     check_stop()
+    close_leftovers(run["ws"])
     unload()
     commit(run["ws"], f"before the foreman: {' '.join(args) or 'run'}")
     return sh([sys.executable, FOREMAN, "run", run["ws"] / "plan.json", *args], r"G:\!Ai\ND3", timeout=timeout, name=f"foreman run {' '.join(args)}")

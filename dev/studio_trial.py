@@ -142,7 +142,11 @@ def main(argv):
             if only and t["id"] != only:
                 continue
             prompt = S.TESTS.format(test=t["tests"], rules=rules, plan_summary=S.plan_summary(plan), task=S.task_text(t))
-            code = S.extract_python(ask(ws, f"tests_{t['id']}", prompt, model, think))
+            try:
+                code = S.extract_python(ask(ws, f"tests_{t['id']}", prompt, model, think))
+            except ValueError:                     # thought until the cap and wrote nothing: once more, no thinking
+                print(f"  {t['tests']}: no code in the reply - asking again without thinking", flush=True)
+                code = S.extract_python(ask(ws, f"tests_{t['id']}_nothink", prompt, model, False))
             (ws / t["tests"]).write_text(code, encoding="utf-8")
             try:
                 compile(code, t["tests"], "exec")
@@ -167,6 +171,12 @@ def main(argv):
             compile(code, name, "exec")
             (ws / name).write_text(code, encoding="utf-8")
             task["tests"] = list(dict.fromkeys(S.test_files(task) + [name]))
+            # every project file the acceptance test runs must be one this task may create (else the foreman
+            # removes it as a scratch file after every attempt and the task can never pass)
+            for ref in sorted(set(re.findall(r"WS\s*/\s*[\"']([\w./-]+\.py)[\"']", code))):
+                if not ref.startswith("tests/") and not any(ref in t2.get("files", []) for t2 in plan["tasks"]):
+                    task["files"].append(ref)
+                    print(f"  {task['id']} may now create {ref} (the acceptance test runs it)")
             task["context"] = list(dict.fromkeys(task.get("context", []) + [name]))
             print(f"  {name} -> {task['id']}: {code.count('check(')} check calls")
         (ws / "plan.json").write_text(json.dumps(plan, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
