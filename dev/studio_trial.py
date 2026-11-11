@@ -16,6 +16,7 @@ Every model call is logged to <ws>/.studio/log.jsonl (stage, seconds, tokens) wi
 --reuse (parse the saved reply again).
 """
 import json
+import os
 import re
 import subprocess
 import sys
@@ -38,12 +39,43 @@ def built_code(ws, plan):
     return "\n\n".join(f"--- {f} ---\n" + (ws / f).read_text(encoding="utf-8", errors="replace") for f in files)
 
 
+def crash_problem(ws, name):
+    """Run a test on the project as it is (empty, before its task). It must REPORT (end with 'N passed, M
+    failed'); a test that crashes before reporting is broken, never the not-yet-written code."""
+    vpy = ws / ".venv" / "Scripts" / "python.exe"
+    if not vpy.exists() or not (ws / name).exists():
+        return []
+    def untracked():
+        r = subprocess.run(["git", "ls-files", "--others", "--exclude-standard"], cwd=str(ws), capture_output=True, text=True)
+        return set(r.stdout.split("\n")) - {""}
+    before = untracked()
+    try:
+        r = subprocess.run([str(vpy), name], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           cwd=str(ws), timeout=120, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+        out = (r.stdout + r.stderr).strip()
+    except subprocess.TimeoutExpired:
+        out = None
+    left = sorted(rel for rel in untracked() - before if not rel.startswith((".studio/", "tests/")))
+    for rel in left:                              # only what this run created; uncommitted tests are kept
+        (ws / rel).unlink(missing_ok=True)
+    probs = [f"it leaves files in the project folder ({', '.join(left[:5])}): build test folders and outputs with "
+             "temp_tree() or tempfile"] if left else []
+    if out is None:
+        return probs + ["it does not finish within 120 seconds on the empty project"]
+    if re.search(r"\d+ passed, \d+ failed\s*$", out):
+        return probs
+    return probs + ["it crashes before reporting (the app's code does not exist yet, so every check must fail cleanly "
+            "inside try/except and finish() must still run). Its output ends with: " + out[-700:]]
+
+
 def clean_plan(plan):
     """Mechanical repairs every plan gets: tests are never task files; every task sees its tests and the spec."""
     for t in plan.get("tasks") or []:
         t["files"] = [x for x in t.get("files") or [] if not str(x).replace("\\", "/").startswith("tests/")]
         if isinstance(t.get("tests"), list) and len(t["tests"]) == 1:
             t["tests"] = t["tests"][0]
+        if not t.get("tests"):                     # a plan once gave a task no test file at all
+            t["tests"] = f"tests/test_{str(t.get('id', 'tx')).lower()}.py"
         t["context"] = list(dict.fromkeys(S.test_files(t) + ["SPEC.md"]))
 
 
@@ -187,7 +219,7 @@ def main(argv):
             for round_ in (1, 2):
                 f = ws / name
                 code = f.read_text(encoding="utf-8")
-                probs = S.test_problems(code)
+                probs = S.test_problems(code) + crash_problem(ws, name)
                 if not probs:
                     break
                 print(f"  {name}: " + "; ".join(probs), flush=True)
@@ -199,7 +231,7 @@ def main(argv):
                     print(f"    no usable fix ({e})")
                     break
                 f.write_text(new, encoding="utf-8")
-            left = S.test_problems((ws / name).read_text(encoding="utf-8"))
+            left = S.test_problems((ws / name).read_text(encoding="utf-8")) + crash_problem(ws, name)
             print(f"  {name}: " + ("clean" if not left else "STILL: " + "; ".join(left)), flush=True)
     elif stage == "review-tests":
         # argv[2]: comma-separated task ids (default all). What is already built is shown as the truth for names.

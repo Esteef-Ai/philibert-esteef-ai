@@ -372,6 +372,7 @@ TEST_LINT = [
     (r"types\.ModuleType\(", "it builds a fake module: use the real modules of the app"),
     (r"run\(\s*\[\s*[\"'][^\"']*\.(py|exe)[\"']",
      "it runs a script or exe as a command: use run([sys.executable, str(WS / 'name.py'), ...])"),
+    (r"^def test_\w*\(", "it is written for pytest: write a plain script with check() calls at the top level and finish() last"),
     (r"os\.symlink\(", "os.symlink needs admin rights here: make a junction with mklink /J"),
     (r"os\.chmod\(", "os.chmod cannot make a folder unreadable here: remove that case"),
     (r"[\[(,]\s*[\"']python3?[\"']\s*,", 'it runs a bare "python": use sys.executable'),

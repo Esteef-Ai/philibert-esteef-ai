@@ -33,8 +33,8 @@ CLARIFY = """
 """
 REFEREE = "q36c-nd64k"
 RUNS = [
-    {"n": 6, "ws": ROOT / "wiztry6", "name": "Qwen3.6 35B as planner", "model": "q36c-nd64k", "plan": [], "rest": []},
-    {"n": 7, "ws": ROOT / "wiztry7", "name": "gpt-oss:120b as planner", "model": "gpt-oss:120b",
+    {"n": 8, "ws": ROOT / "wiztry8", "name": "Qwen3.6 35B as planner", "model": "q36c-nd64k", "plan": [], "rest": []},
+    {"n": 9, "ws": ROOT / "wiztry9", "name": "gpt-oss:120b as planner", "model": "gpt-oss:120b",
      "plan": ["--think", "high", "--ctx", "65536", "--max", "60000"], "rest": ["--think", "medium", "--ctx", "65536", "--max", "40000"]},
 ]
 DRY = "--dry" in sys.argv
