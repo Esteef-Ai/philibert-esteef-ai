@@ -58,15 +58,33 @@ THE QUESTIONS AND THE USER'S ANSWERS:
 {answers}
 """
 
+FACTS = """FACTS ABOUT THIS COMPUTER (Windows 11, Python 3.11, a normal user without admin rights)
+- A directory junction is NOT a symlink to Python 3.11: DirEntry.is_symlink() returns False for it. To skip links and junctions: entry.is_symlink() or bool(entry.stat(follow_symlinks=False).st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT).
+- os.symlink() fails without admin rights; make a test link with subprocess.run(["cmd", "/c", "mklink", "/J", link, target]). os.chmod() cannot make a folder unreadable.
+- Programs are not on PATH: run Python as sys.executable and tools through it (sys.executable -m PyInstaller).
+- tkinter: Treeview exists only as tkinter.ttk.Treeview; there is no ttk.Toplevel (use tkinter.Toplevel). A Treeview tag colours the whole row. Update the window only from the main thread: a worker thread puts results on a queue.Queue and the main thread polls it with after().
+- A folder's size is the sum of everything beneath it, at every level."""
+
+
 PLAN = """You are the planner of Philibert Code. Turn the spec below into a build plan for a careful but \
 literal junior programmer (a local AI model). It builds ONE task at a time and sees only that task's brief, the \
 files it names and the project rules, never the whole spec. A separate step writes each task's test file \
 BEFORE any code exists, from the brief alone. So each brief must be complete and exact.
 
 RULES FOR THE PLAN
-- 4 to 8 tasks, in build order: pure logic first (data, calculations), then the command-line mode, then the \
-window, then packaging, then a last "make it presentable" task (window title, icon if asked, tidy look, README).
-- Each task creates or changes at most 3 files, never anything under tests/. List them all in "files".
+- 4 to 8 tasks, in build order. THE APP MUST RUN EARLY:
+  T01 builds the one engine and, if the spec has a command-line mode, that mode and the program's entry script: \
+after T01 the real program gives correct answers.
+  If the spec has a window, T02 is the WALKING SKELETON: the real entry script opens the real window with every \
+area placed and visible, the control that starts the work exists and works, the work runs in the background, and \
+the real results appear in the window in their simplest form. Every later task improves ONE feature of an app that \
+already runs. The last task is "make it presentable" (title, icon if asked, tidy look, README, packaging).
+- ONE SOURCE OF DATA. The engine returns one result object holding everything the app ever shows, including every \
+folder and file at every level with all the numbers the display needs. Windows and charts read that object; they \
+never walk the disk again and never compute the same thing a second way.
+- Field names are defined ONCE, in T01's brief, and every later brief uses exactly those names.
+- Each task creates or changes at most 4 files, never anything under tests/. List them all in "files", including \
+earlier files it must change to connect its feature.
 - Each task has exactly one test file "tests/test_<short_name>.py" (it does not exist yet).
 - The brief states the EXACT public API: module paths, class and function names, parameters and their types, \
 return values and their exact shape, dataclass fields, exact strings, column names, JSON keys, error behaviour, \
@@ -89,7 +107,13 @@ OUTPUT: one JSON object and nothing else, shaped exactly like this example (from
       "depends_on": [],
       "brief": "Create notely/store.py.\\n- @dataclass class Note: id: int, title: str, body: str, tags: list[str]\\n- load(path: str) -> list[Note]: reads a JSON list; a missing file returns []; ...\\n- ...",
       "done_when": ["tests/test_store.py prints 0 failed", "load() of a missing file returns []"]}}
-  ]}}
+  ],
+  "engine_task": "T01",
+  "window_task": null}}
+"engine_task" is the id of the task that builds the engine; "window_task" is the id of the walking-skeleton task, \
+or null if the app has no window.
+
+@@FACTS@@
 
 THE SPEC:
 {spec}
@@ -117,7 +141,14 @@ Then return the corrected plan. Keep what is right; add or split tasks where som
 tasks, at most 3 files each, one new test file each), and make every brief state the exact API. A window with many \
 behaviours should be split: layout and filling first, then the interactions. Follow speed advice the spec gives.
 
-OUTPUT: one JSON object and nothing else: the same shape as the plan, plus a key "coverage": a list of \
+5. The app must run EARLY: T01 gives correct real answers; the task named "window_task" opens the real window with \
+every area visible and real results in it. Later tasks improve a running app.
+6. ONE SOURCE OF DATA: if any task walks the disk (or fetches the data) a second time, or a display needs a field \
+the engine's result does not have, change the engine's result and remove the second walk.
+
+@@FACTS@@
+
+OUTPUT: one JSON object and nothing else: the same shape as the plan (keep "engine_task" and "window_task"), plus a key "coverage": a list of \
 {{"item": "<spec item, short>", "task": "<task id>"}} with one entry per spec feature and "Done means" line.
 
 THE SPEC:
@@ -143,12 +174,20 @@ sizes yourself). Never compute an expected value with the code under test.
 - 8 to 25 checks with clear labels. Cover every "done_when" line and the edge cases the brief names.
 - One failing check must not stop the others: wrap each risky call in try/except and check(..., False, e).
 - Fast: the whole file runs in under 60 seconds.
-- A window (tkinter): create it, call update() a few times, inspect widgets and canvas items, then destroy() it. \
-Never call mainloop(). Do not depend on exact pixel positions; check that things exist, are visible, have the \
-right text, and that the parts the brief names are drawn.
+- A window (tkinter): use the REAL window class and the REAL data classes of the app. Never fake or stub a module \
+of the app, never use Mock objects for it, never put anything in sys.modules. off_screen(root) keeps the window off \
+the desktop; pump(root, 0.3) lets it draw and handle events. Patch only what needs a person: \
+tkinter.filedialog.askdirectory, and mainloop if the code under test calls it. Never call mainloop() yourself. \
+Do not depend on exact pixel positions; check that things are placed (winfo_ismapped), have the right text, and \
+that the parts the brief names are drawn. event_generate cannot send Double-... events (send two presses instead) \
+and works only on a window that has been pumped.
+- Check real numbers, not just that a result exists: for folders, check sizes and counts at more than one level.
 - Packaging: run the build script with run(), then check that the program file exists and that its command-line \
 mode gives the right answer on a temp_tree folder.
-- Never write, change or delete anything outside the temporary folders and the project folder.
+- Never create, change or delete anything except inside temporary folders (use temp_tree or tempfile): the project \
+folder must be unchanged after the test.
+
+@@FACTS@@
 
 THE PROJECT RULES:
 {rules}
@@ -185,8 +224,19 @@ finish() at the end.
 
 THE SPEC (short): {spec}
 
+6. It fakes the app: it stubs a module of the app, uses Mock objects for it, or invents classes or fields the app \
+does not have. Rewrite it to use the real classes.
+7. It writes inside the project folder instead of a temporary folder.
+
+Where THE CODE ALREADY BUILT is shown, it is the truth for every name, field and argument of those finished parts.
+
+@@FACTS@@
+
 THE TASK:
 {task}
+
+THE CODE ALREADY BUILT:
+{built}
 
 THE TEST FILE {test}:
 ```python
@@ -234,6 +284,114 @@ check must not stop the file: build test data inside try blocks.
 If CODE: a HINT: line for the programmer, naming the exact fix.
 """
 
+ACCEPT_CORE = """You are the acceptance tester of Philibert Code. Write the test file {test}: it proves the REAL \
+PROGRAM gives correct answers, from the outside, the way a user runs it. No code exists yet. This test is written \
+once and every task of the build must keep it passing.
+
+- A plain script. Start with: from _t import check, finish, temp_tree, run, WS   (and import sys, json, os, tempfile)
+- Build one realistic folder with temp_tree, at least 3 levels deep, with round sizes, hidden files, a file with no \
+extension, an empty folder, a file directly in the root and upper-case extensions. Make a directory junction inside \
+it (see the facts) that points at one of its own folders.
+- Run the real entry script named in the plan with run([sys.executable, str(WS / "<entry script>"), ...]), writing \
+its output into a temporary folder.
+- Work out every expected number BY HAND in comments from the sizes you chose, then check EVERY value of the spec's \
+output: every total, every per-extension row, and every per-entry row with its size and counts. The junction's \
+contents must not be counted twice.
+- If a total or a row in the spec is ambiguous, choose the plain reading: an entry's size and counts include \
+everything beneath it.
+- check(label, ok, got) for each value, finish() last. Labels must not contain paths. Under 60 seconds.
+
+@@FACTS@@
+
+THE SPEC:
+{spec}
+
+THE PLAN:
+{plan_summary}
+
+THE TASK THAT BUILDS THE ENGINE:
+{task}
+
+Write only the Python file, in one ```python block.
+"""
+
+ACCEPT_WINDOW = """You are the acceptance tester of Philibert Code. Write the test file {test}: it proves the REAL \
+WINDOW opens and shows real results. No code exists yet. This test is written once and every later task must keep \
+it passing.
+
+- A plain script. Start with: from _t import check, finish, temp_tree, run, WS, off_screen, pump   (import tkinter)
+- Use the real entry the brief names for building the window. Nothing of the app may be faked, stubbed or mocked. \
+Patch only tkinter.filedialog.askdirectory to return the temporary folder, and mainloop if the app calls it: \
+replace mainloop with your own function that runs the checks and then destroys the window.
+- Make a small temp_tree, off_screen(root), start the work with the real control (invoke the real button or call \
+the real start method the brief names), then pump until the app reports it is finished (give up after 30 seconds).
+- Check: every area the spec names is placed (winfo_ismapped() and width over 50), and each area shows real data \
+from the temp_tree: a real file name appears in the tree or list, numbers are right for one folder at two levels, \
+the chart has drawn items, the status text is the finished text.
+- check(label, ok, got) for each, finish() last. The window must be destroyed before finish(). Labels must not \
+contain paths. Under 60 seconds.
+
+@@FACTS@@
+
+THE SPEC:
+{spec}
+
+THE PLAN:
+{plan_summary}
+
+THE TASK THAT OPENS THE WINDOW:
+{task}
+
+Write only the Python file, in one ```python block.
+"""
+
+TEST_FIX = """You are the test writer of Philibert Code. The test file below breaks these rules; correct them and \
+change nothing else:
+{problems}
+
+@@FACTS@@
+
+THE TASK:
+{task}
+
+THE TEST FILE {test}:
+```python
+{code}
+```
+
+Write the whole corrected file in one ```python block.
+"""
+
+# What a generated test must never do; each was seen stopping or fooling a real build.
+TEST_LINT = [
+    (r"sys\.modules\s*\[", "it puts a fake module in sys.modules: use the real modules of the app"),
+    (r"\b(MagicMock|Mock)\s*\(", "it uses Mock objects: use the real classes of the app"),
+    (r"^\s*class\s+(Fake|Mock|Dummy|Stub)\w*", "it defines a fake class: use the real classes of the app"),
+    (r"types\.ModuleType\(", "it builds a fake module: use the real modules of the app"),
+    (r"os\.symlink\(", "os.symlink needs admin rights here: make a junction with mklink /J"),
+    (r"os\.chmod\(", "os.chmod cannot make a folder unreadable here: remove that case"),
+    (r"[\[(,]\s*[\"']python3?[\"']\s*,", 'it runs a bare "python": use sys.executable'),
+    (r"[\[(,]\s*[\"']pyinstaller[\"']\s*,", "pyinstaller is not on PATH: use sys.executable, -m, PyInstaller"),
+    (r"\btk\.Treeview\b|\btkinter\.Treeview\b", "Treeview exists only in tkinter.ttk"),
+    (r"\bttk\.Toplevel\b", "there is no ttk.Toplevel: use tkinter.Toplevel"),
+    (r"event_generate\(\s*[\"']<(Double|Triple)", "event_generate cannot send Double/Triple events: send two presses"),
+    (r"\bWS\s*/[^\n]*\.(mkdir|write_text|write_bytes|touch)\(", "it writes inside the project folder: use a temporary folder"),
+    (r"(open\([^\n]*WS\b[^\n]*[\"'][wax]b?[\"'])", "it writes inside the project folder: use a temporary folder"),
+    (r"inspect\.getsource|\.read_text\([^)]*\)\s*\n[^\n]*\bin\b[^\n]*(def |class )", "it greps the source instead of testing behaviour"),
+]
+
+
+def test_problems(code):
+    """Rules a generated test breaks, found mechanically (no model needed)."""
+    out = []
+    for pat, why in TEST_LINT:
+        if re.search(pat, code, re.M) and why not in out:
+            out.append(why)
+    if "finish()" not in code:
+        out.append("it does not end with finish()")
+    return out
+
+
 T_HELPER = '''"""Shared helpers for the tests (written by Philibert Code Studio; do not edit)."""
 import os
 import re
@@ -275,6 +433,21 @@ def finish():
     passed = sum(_results)
     print(f"{passed} passed, {len(_results) - passed} failed", flush=True)
     sys.exit(0 if _results and passed == len(_results) else 1)
+
+
+def pump(root, seconds=0.3):
+    """Let a real tkinter window draw and handle events for a while."""
+    import time
+    end = time.time() + seconds
+    while time.time() < end:
+        root.update()
+        time.sleep(0.01)
+
+
+def off_screen(root, width=1000, height=700):
+    """Keep a real window off the desktop (it is still mapped, and events still work)."""
+    root.geometry(f"{width}x{height}+-4000+-4000")
+    pump(root, 0.3)
 
 
 class _Root(str):
@@ -319,6 +492,10 @@ def run(args, timeout=120):
     except subprocess.TimeoutExpired:
         return -1, f"timed out after {timeout}s"
 '''
+
+
+for _name in ("PLAN", "PLAN_REVIEW", "TESTS", "TEST_REVIEW", "ACCEPT_CORE", "ACCEPT_WINDOW", "TEST_FIX"):
+    globals()[_name] = globals()[_name].replace("@@FACTS@@", FACTS)
 
 
 def call_model(model, prompt, think=True, timeout=3600, url=OLLAMA, max_tokens=32000, num_ctx=None):
@@ -388,8 +565,8 @@ def plan_problems(plan):
     for t in tasks:
         tid = t.get("id", "?")
         files = t.get("files") or []
-        if len(files) > 3:
-            probs.append(f"{tid}: {len(files)} files (max 3)")
+        if len(files) > 4:
+            probs.append(f"{tid}: {len(files)} files (max 4)")
         if any(str(f).replace("\\", "/").startswith("tests/") for f in files):
             probs.append(f"{tid}: lists a file under tests/")
         test = t.get("tests")
@@ -405,6 +582,11 @@ def plan_problems(plan):
         if not t.get("done_when"):
             probs.append(f"{tid}: no done_when")
     return probs
+
+
+def test_files(t):
+    """A task's test files (one string in a fresh plan, a list once acceptance tests are attached)."""
+    return [t["tests"]] if isinstance(t.get("tests"), str) else list(t.get("tests") or [])
 
 
 def plan_summary(plan):

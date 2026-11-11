@@ -5,6 +5,10 @@
     python dev/studio_trial.py plan      <ws>                 -> <ws>/plan.json (+ problems)
     python dev/studio_trial.py review    <ws>                 a second call maps every spec item to a task and fixes the plan
     python dev/studio_trial.py tests     <ws> [T03]           -> <ws>/tests/test_*.py (+ tests/_t.py)
+    python dev/studio_trial.py accept    <ws>                 acceptance tests (real program, real window), attached to T01 and the window task
+    python dev/studio_trial.py lint-tests <ws>                rules no test may break, found mechanically, repaired by the model
+    python dev/studio_trial.py review-tests <ws> [T03,T04]    a model reviews the tests (against the built code, once there is some)
+    python dev/studio_trial.py dispute   <ws> T04             a stuck task: is the test or the code wrong?
     python dev/studio_trial.py check     <ws>                 the foreman's plan check + every test fails cleanly unbuilt
 
 Every model call is logged to <ws>/.studio/log.jsonl (stage, seconds, tokens) with the raw reply beside it.
@@ -12,6 +16,7 @@ Every model call is logged to <ws>/.studio/log.jsonl (stage, seconds, tokens) wi
 --reuse (parse the saved reply again).
 """
 import json
+import re
 import subprocess
 import sys
 import time
@@ -25,6 +30,21 @@ REUSE = False
 CTX = None
 MAXTOK = 32000
 FOREMAN = REPO / "code" / "app" / "nd_foreman.py"
+
+
+def built_code(ws, plan):
+    """The project's code as it is now: the truth for names once tasks have been built."""
+    files = sorted({f for t in plan["tasks"] for f in t.get("files") or [] if (ws / f).is_file() and f.endswith(".py")})
+    return "\n\n".join(f"--- {f} ---\n" + (ws / f).read_text(encoding="utf-8", errors="replace") for f in files)
+
+
+def clean_plan(plan):
+    """Mechanical repairs every plan gets: tests are never task files; every task sees its tests and the spec."""
+    for t in plan.get("tasks") or []:
+        t["files"] = [x for x in t.get("files") or [] if not str(x).replace("\\", "/").startswith("tests/")]
+        if isinstance(t.get("tests"), list) and len(t["tests"]) == 1:
+            t["tests"] = t["tests"][0]
+        t["context"] = list(dict.fromkeys(S.test_files(t) + ["SPEC.md"]))
 
 
 def opt(argv, name, default=None):
@@ -82,10 +102,7 @@ def main(argv):
     elif stage == "plan":
         spec = (ws / "SPEC.md").read_text(encoding="utf-8")
         plan = S.extract_json(ask(ws, "plan", S.PLAN.format(spec=spec), model, think))
-        for t in plan.get("tasks") or []:
-            if isinstance(t.get("tests"), list) and len(t["tests"]) == 1:
-                t["tests"] = t["tests"][0]
-            t["context"] = list(dict.fromkeys(([t["tests"]] if isinstance(t.get("tests"), str) else []) + ["SPEC.md"]))
+        clean_plan(plan)
         plan.update({"workspace": ".", "python": str(ws / ".venv" / "Scripts" / "python.exe"),
                      "model": "opencode/q36c-nd128k", "opencode_think": False, "alt_model": None,
                      "defaults": {"attempts": 3, "minutes": 30}})
@@ -105,10 +122,7 @@ def main(argv):
             t.pop("context", None)
         plan = S.extract_json(ask(ws, "review", S.PLAN_REVIEW.format(spec=spec, plan=json.dumps(bare, indent=1, ensure_ascii=False)),
                                   model, think))
-        for t in plan.get("tasks") or []:
-            if isinstance(t.get("tests"), list) and len(t["tests"]) == 1:
-                t["tests"] = t["tests"][0]
-            t["context"] = list(dict.fromkeys(([t["tests"]] if isinstance(t.get("tests"), str) else []) + ["SPEC.md"]))
+        clean_plan(plan)
         plan.update(keep)
         (ws / "plan.json").write_text(json.dumps(plan, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
         for t in plan.get("tasks") or []:
@@ -135,25 +149,70 @@ def main(argv):
                 print(f"  {t['tests']}: {code.count('check(')} check calls, compiles")
             except SyntaxError as e:
                 print(f"  {t['tests']}: SYNTAX ERROR {e}")
+    elif stage == "accept":
+        # the acceptance tests: written first, attached to the engine and window tasks, so the foreman's
+        # "nothing that passed may break" gate keeps them passing through every later task
+        plan = json.loads((ws / "plan.json").read_text(encoding="utf-8"))
+        spec = (ws / "SPEC.md").read_text(encoding="utf-8")
+        tasks = {t["id"]: t for t in plan["tasks"]}
+        engine = tasks.get(plan.get("engine_task")) or plan["tasks"][0]
+        window = tasks.get(plan.get("window_task"))
+        if window is None and plan.get("window_task", "?") is not None:
+            window = next((t for t in plan["tasks"][1:] if any(re.search(r"gui|window|\bui\b|view", x, re.I) for x in t["files"])), None)
+        for task, name, prompt in ((engine, "tests/test_accept_core.py", S.ACCEPT_CORE), (window, "tests/test_accept_window.py", S.ACCEPT_WINDOW)):
+            if task is None:
+                continue
+            code = S.extract_python(ask(ws, Path(name).stem, prompt.format(test=name, spec=spec, plan_summary=S.plan_summary(plan),
+                                                                           task=S.task_text(task)), model, think))
+            compile(code, name, "exec")
+            (ws / name).write_text(code, encoding="utf-8")
+            task["tests"] = list(dict.fromkeys(S.test_files(task) + [name]))
+            task["context"] = list(dict.fromkeys(task.get("context", []) + [name]))
+            print(f"  {name} -> {task['id']}: {code.count('check(')} check calls")
+        (ws / "plan.json").write_text(json.dumps(plan, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    elif stage == "lint-tests":
+        # rules a test must not break, found mechanically; the model repairs what is found (2 rounds at most)
+        plan = json.loads((ws / "plan.json").read_text(encoding="utf-8"))
+        for t, name in [(t, n) for t in plan["tasks"] for n in S.test_files(t)]:
+            for round_ in (1, 2):
+                f = ws / name
+                code = f.read_text(encoding="utf-8")
+                probs = S.test_problems(code)
+                if not probs:
+                    break
+                print(f"  {name}: " + "; ".join(probs), flush=True)
+                try:
+                    new = S.extract_python(ask(ws, f"lint_{f.stem}_{round_}", S.TEST_FIX.format(problems="\n".join("- " + p for p in probs), task=S.task_text(t),
+                                                                                                 test=name, code=code), model, think))
+                    compile(new, name, "exec")
+                except (ValueError, SyntaxError) as e:
+                    print(f"    no usable fix ({e})")
+                    break
+                f.write_text(new, encoding="utf-8")
+            left = S.test_problems((ws / name).read_text(encoding="utf-8"))
+            print(f"  {name}: " + ("clean" if not left else "STILL: " + "; ".join(left)), flush=True)
     elif stage == "review-tests":
+        # argv[2]: comma-separated task ids (default all). What is already built is shown as the truth for names.
         plan = json.loads((ws / "plan.json").read_text(encoding="utf-8"))
         only = set(argv[2].split(",")) if len(argv) > 2 else None
         spec = (ws / "SPEC.md").read_text(encoding="utf-8")
         keep = sd / "tests_before_review"
         keep.mkdir(exist_ok=True)
-        for t in plan["tasks"]:
+        built = built_code(ws, plan)
+        tag = "recheck" if built else "testreview"
+        for t, name in [(t, n) for t in plan["tasks"] for n in S.test_files(t)]:
             if only and t["id"] not in only:
                 continue
-            f = ws / t["tests"]
+            f = ws / name
             code = f.read_text(encoding="utf-8")
             (keep / f.name).write_text(code, encoding="utf-8")
-            reply = ask(ws, f"testreview_{t['id']}", S.TEST_REVIEW.format(spec=spec, task=S.task_text(t), test=t["tests"],
-                                                                          code=code), model, think)
+            reply = ask(ws, f"{tag}_{f.stem}", S.TEST_REVIEW.format(spec=spec, task=S.task_text(t), test=name, built=built or "(nothing yet)",
+                                                                    code=code), model, think)
             found = S.strip_think(reply).split("```")[0].strip()
-            print(f"  {t['tests']} - reviewer found:\n    " + found.replace("\n", "\n    ")[:2500])
+            print(f"  {name} - reviewer found:\n    " + found.replace("\n", "\n    ")[:2500])
             try:
                 new = S.extract_python(reply)
-                compile(new, t["tests"], "exec")
+                compile(new, name, "exec")
             except (ValueError, SyntaxError) as e:
                 print(f"    review gave no usable file ({e}) - the test stays as it was")
                 continue
@@ -164,32 +223,36 @@ def main(argv):
         tid = argv[2]
         plan = json.loads((ws / "plan.json").read_text(encoding="utf-8"))
         t = next(x for x in plan["tasks"] if x["id"] == tid)
-        state = json.loads((ws / ".foreman" / "state.json").read_text(encoding="utf-8"))
         rep = (ws / ".foreman" / "REPORT.md").read_text(encoding="utf-8")
         m = rep.split(f"### {tid} ", 1)
         failure = (m[1].split("Last failure:", 1)[1].split("Prompts:", 1)[0].strip("`\n ") if len(m) > 1 and
-                   "Last failure:" in m[1] else str(state)[:3000])[:6000]
-        files = sorted({f for x in plan["tasks"] for f in x.get("files") or [] if (ws / f).is_file()})
-        code = "\n\n".join(f"--- {f} ---\n" + (ws / f).read_text(encoding="utf-8", errors="replace") for f in files)
-        f = ws / t["tests"]
+                   "Last failure:" in m[1] else "(no failure text)")[:6000]
+        names = S.test_files(t)
+        name = next((n for n in names if Path(n).name in failure), names[0])
+        code = built_code(ws, plan)
+        f = ws / name
         old = f.read_text(encoding="utf-8")
         reply = ask(ws, f"dispute_{tid}", S.DISPUTE.format(
             tid=tid, spec=(ws / "SPEC.md").read_text(encoding="utf-8"), plan_summary=S.plan_summary(plan),
-            task=S.task_text(t), code=code[:60000], test=t["tests"], test_code=old, failure=failure), model, think)
+            task=S.task_text(t), code=code[:60000], test=name, test_code=old, failure=failure), model, think)
         body = S.strip_think(reply)
         print(body.split("```")[0].strip()[:2500])
         if "VERDICT: TEST" in body.upper().replace("**", ""):
             try:
                 new = S.extract_python(reply)
-                compile(new, t["tests"], "exec")
+                compile(new, name, "exec")
             except (ValueError, SyntaxError) as e:
                 print(f"  verdict TEST but no usable file ({e}) - the test stays as it was")
+                return
+            probs = S.test_problems(new)
+            if probs:
+                print(f"  verdict TEST but the repair breaks the test rules ({'; '.join(probs)}) - the test stays as it was")
                 return
             keep = sd / "tests_before_dispute"
             keep.mkdir(exist_ok=True)
             (keep / f.name).write_text(old, encoding="utf-8")
             f.write_text(new, encoding="utf-8")
-            print(f"  {t['tests']} repaired (old copy in {keep})")
+            print(f"  {name} repaired (old copy in {keep})")
     elif stage == "check":
         py = sys.executable
         r = subprocess.run([py, str(FOREMAN), "check", str(ws / "plan.json")], capture_output=True, text=True,
@@ -197,11 +260,13 @@ def main(argv):
         print(r.stdout[-4000:], r.stderr[-2000:])
         plan = json.loads((ws / "plan.json").read_text(encoding="utf-8"))
         vpy = str(ws / ".venv" / "Scripts" / "python.exe")
-        for t in plan["tasks"]:
-            r = subprocess.run([vpy, t["tests"]], capture_output=True, text=True, encoding="utf-8", errors="replace",
-                               cwd=str(ws), timeout=120)
+        for t, name in [(t, n) for t in plan["tasks"] for n in S.test_files(t)]:
+            r = subprocess.run([vpy, name], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               cwd=str(ws), timeout=180)
             out = (r.stdout + r.stderr).strip().splitlines()
-            print(f"  unbuilt {t['tests']}: exit {r.returncode}; " + (out[-1] if out else "(no output)"))
+            print(f"  unbuilt {name}: exit {r.returncode}; " + (out[-1] if out else "(no output)"))
+        left = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, cwd=str(ws)).stdout
+        print("files the tests left behind: " + (left.strip().replace("\n", " | ") or "none"))
     else:
         sys.exit(__doc__)
 
