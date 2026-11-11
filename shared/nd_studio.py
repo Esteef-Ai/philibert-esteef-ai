@@ -236,6 +236,7 @@ If CODE: a HINT: line for the programmer, naming the exact fix.
 
 T_HELPER = '''"""Shared helpers for the tests (written by Philibert Code Studio; do not edit)."""
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -253,7 +254,17 @@ _results = []
 _temps = []
 
 
+def _stable(label):
+    """Temp folder paths in a label become <tmp>: their random names would make the label new every run."""
+    s = str(label)
+    for d in sorted(_temps, key=len, reverse=True):
+        for form in {d, str(Path(d).resolve()), d.replace(os.sep, "/"), str(Path(d).resolve()).replace(os.sep, "/")}:
+            s = s.replace(form, "<tmp>")
+    return re.sub(r"[A-Za-z]:[^ ]*?pc_test_[A-Za-z0-9_#]+", "<tmp>", s)
+
+
 def check(label, ok, got=""):
+    label = _stable(label)
     _results.append(bool(ok))
     print(("  PASS  " if ok else "  FAIL  ") + str(label) + ("" if ok else f" - got {got!r}"[:400]), flush=True)
 
