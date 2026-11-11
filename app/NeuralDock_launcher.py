@@ -20394,12 +20394,12 @@ PHONE_REFUSED = ("I can't do that from your phone - from here I can only look th
                  "deleting anything has to be done on the computer. Nothing was changed.")
 
 
-def _phone_messages(raw):
-    """What the phone sends, cleaned: the last 20 user/assistant turns, text only."""
+def _phone_messages(raw, keep=20, chars=8000):
+    """What the phone sends, cleaned: the last `keep` user/assistant turns, text only."""
     out = []
-    for m in (raw or [])[-20:]:
+    for m in (raw or [])[-keep:]:
         if isinstance(m, dict) and m.get("role") in ("user", "assistant"):
-            out.append({"role": m["role"], "content": str(m.get("content") or "")[:8000]})
+            out.append({"role": m["role"], "content": str(m.get("content") or "")[:chars]})
     return out
 
 
@@ -20445,6 +20445,59 @@ def _phone_models():
     order = {"green": 0, "yellow": 1, "red": 2}
     out.sort(key=lambda x: (order[x["fit"]], -x["size"] if x["fit"] == "green" else x["size"]))
     return out
+
+
+def talk_prompt():
+    """Talk mode: everything the model writes is read aloud by the phone, often in the car."""
+    who = str(_config.get("user_name") or "").strip()
+    return ("You are Philibert by Esteef.Ai, talking out loud with " + (who or "the user") + " through their phone: a spoken "
+            "conversation, often while they are driving. Mostly it is a brainstorming session - help them think ideas "
+            "through and turn them into plans.\n"
+            "How to talk:\n"
+            "- Everything you write is read aloud. Plain spoken sentences only: no markdown, lists, headings, bullet "
+            "points, emoji, code or links.\n"
+            "- Short turns, like a person: usually two to five sentences. Longer only when they ask you to explain.\n"
+            "- Be a real thinking partner. Build on their idea, add one useful idea or angle of your own, and name a "
+            "risk or a gap when you see one. Be honest when an idea is weak, and say why.\n"
+            "- Usually end with ONE focused question that moves the idea or the plan forward. Never more than one "
+            "question at a time.\n"
+            "- Steps or options: say them as a short spoken sequence (first..., then..., and last...).\n"
+            "- They may be driving: never ask them to look at, read or type anything.\n"
+            "- What they say comes from speech recognition, so a word may be wrong - go by what they most likely meant.\n"
+            f"It is {time.strftime('%A %d %B %Y, %H:%M')} where they are.")
+
+
+SUMMARY_PROMPT = (
+    "You turn the transcript of a spoken brainstorming session into a written plan the person keeps. Write Markdown:\n"
+    "# <a short title for what the session was about>\n"
+    "## Summary\n(two or three sentences)\n"
+    "## Ideas and decisions\n(bullets: what was decided, and the ideas worth keeping)\n"
+    "## Plan\n(numbered, concrete next steps, in order)\n"
+    "## Open questions\n(bullets: what is still undecided or needs finding out)\n"
+    "Use only what was said in the conversation - do not invent details. Leave a section out if there is nothing for it. "
+    "The transcript came from speech recognition: fix obvious misheard words.")
+
+
+def _phone_talk_job(jid, model, messages, kind):
+    """A talk-mode turn (or the session's summary): straight to the model, streamed - no tools, no
+    memory scan, so the first words come as fast as the model can give them."""
+    _job_ctx.tool_allow = set()
+    _job_ctx.phone_job = jid
+    _job_ctx.cancel_check = lambda: jid in _chat_cancel
+    system = SUMMARY_PROMPT if kind == "summary" else talk_prompt()
+    with _lock:
+        _chat_status[jid] = {"stage": "thinking", "detail": "Thinking...", "pct": 10, "start": time.time()}
+    try:
+        out = ollama_chat(model, [{"role": "system", "content": system}] + messages, timeout=900,
+                          text_cb=lambda t: stream_append(jid, t))
+        if out.startswith("[Ollama error"):
+            _update_chat_job(jid, status="error", error=out[:400])
+        else:
+            _update_chat_job(jid, status="done", reply=out.strip())
+    except Exception as e:
+        _update_chat_job(jid, status="error", error=f"{type(e).__name__}: {e}"[:400])
+    finally:
+        _chat_cancel.discard(jid)
 
 
 def phone_app_device():
@@ -20580,7 +20633,14 @@ def _phone_serve(method, sub, body):
             default = next((m["tag"] for m in models if m["fit"] == "green"), models[0]["tag"] if models else "")
         return js({"ok": True, "models": models, "default": default})
     if op == "chat":
-        messages = _phone_messages(body.get("messages"))
+        kind = str(body.get("mode") or "")
+        if kind == "talk":
+            messages = _phone_messages(body.get("messages"), keep=60, chars=8000)
+        elif kind == "summary":
+            messages = _phone_messages(body.get("messages"), keep=1, chars=120000)
+        else:
+            kind = ""
+            messages = _phone_messages(body.get("messages"))
         if not messages or messages[-1]["role"] != "user" or not messages[-1]["content"].strip():
             return js({"ok": False, "msg": "Say something first."})
         want = str(body.get("model") or "")
@@ -20592,8 +20652,29 @@ def _phone_serve(method, sub, body):
             _chat_status[jid] = {"stage": "thinking", "detail": "Queued...", "pct": 3, "start": time.time()}
         _update_chat_job(jid, status="running", started=time.time(), model=model,
                          prompt=messages[-1]["content"][:400])
-        threading.Thread(target=_phone_chat_job, args=(jid, model, messages), daemon=True).start()
+        if kind:
+            threading.Thread(target=_phone_talk_job, args=(jid, model, messages, kind), daemon=True).start()
+        else:
+            threading.Thread(target=_phone_chat_job, args=(jid, model, messages), daemon=True).start()
         return js({"ok": True, "job": jid})
+    if op == "save_note":
+        # Talk mode's plan, kept: a NEW note in the Brainstorms folder (never changes an existing one) -
+        # the one thing the phone writes on the computer, and only when the person taps Save
+        o = obs()
+        if not o:
+            return js({"ok": False, "msg": "Philibert's notes aren't set up on the computer."})
+        text = str(body.get("body") or "").strip()[:200000]
+        if not text:
+            return js({"ok": False, "msg": "Nothing to save."})
+        import nd_notes
+        try:
+            r = nd_notes.create(str(o.vault), folder="Brainstorms",
+                                title=str(body.get("title") or "")[:120] or time.strftime("Brainstorm %Y-%m-%d %H%M"),
+                                body=text + "\n", on_event=lambda op_, p_: vault_event(op_, p_, "phone"))
+        except Exception as e:
+            return js({"ok": False, "msg": f"The note couldn't be saved ({e})."})
+        log(f"Phone talk mode: saved {r.get('id')}", "ok")
+        return js({"ok": True, "id": r.get("id"), "title": r.get("title")})
     if op == "poll":
         jid = str(body.get("job") or "")
         if not jid.startswith("ph"):
