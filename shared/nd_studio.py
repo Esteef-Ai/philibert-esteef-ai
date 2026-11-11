@@ -288,7 +288,8 @@ ACCEPT_CORE = """You are the acceptance tester of Philibert Code. Write the test
 PROGRAM gives correct answers, from the outside, the way a user runs it. No code exists yet. This test is written \
 once and every task of the build must keep it passing.
 
-- A plain script. Start with: from _t import check, finish, temp_tree, run, WS   (and import sys, json, os, tempfile)
+- A plain script. Its first line is: from _t import check, finish, temp_tree, run, WS
+  and the next lines import sys, json, os and tempfile.
 - Build one realistic folder with temp_tree, at least 3 levels deep, with round sizes, hidden files, a file with no \
 extension, an empty folder, a file directly in the root and upper-case extensions. Make a directory junction inside \
 it (see the facts) that points at one of its own folders.
@@ -319,7 +320,8 @@ ACCEPT_WINDOW = """You are the acceptance tester of Philibert Code. Write the te
 WINDOW opens and shows real results. No code exists yet. This test is written once and every later task must keep \
 it passing.
 
-- A plain script. Start with: from _t import check, finish, temp_tree, run, WS, off_screen, pump   (import tkinter)
+- A plain script. Its first line is: from _t import check, finish, temp_tree, run, WS, off_screen, pump
+  and the next line imports tkinter.
 - Use the real entry the brief names for building the window. Nothing of the app may be faked, stubbed or mocked. \
 Patch only tkinter.filedialog.askdirectory to return the temporary folder, and mainloop if the app calls it: \
 replace mainloop with your own function that runs the checks and then destroys the window.
