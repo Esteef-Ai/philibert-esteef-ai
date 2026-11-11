@@ -244,6 +244,11 @@ from pathlib import Path
 
 WS = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(WS))
+for _s in (sys.stdout, sys.stderr):      # models write non-ASCII labels (e.g. U+2011); a cp1252 pipe would crash
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 _results = []
 _temps = []
 
