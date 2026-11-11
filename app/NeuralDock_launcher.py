@@ -20456,6 +20456,9 @@ def talk_prompt():
             "How to talk:\n"
             "- Everything you write is read aloud. Plain spoken sentences only: no markdown, lists, headings, bullet "
             "points, emoji, code or links.\n"
+            "- Talk like a friend thinking out loud with them, not like an article: contractions, plain words, sentences "
+            "of different lengths, a natural reaction now and then (\"oh, I like that\", \"hmm, okay\", \"right\"). Never "
+            "start with \"Great question\" and never recap what they just said.\n"
             "- Short turns, like a person: usually two to five sentences. Longer only when they ask you to explain.\n"
             "- Be a real thinking partner. Build on their idea, add one useful idea or angle of your own, and name a "
             "risk or a gap when you see one. Be honest when an idea is weak, and say why.\n"
@@ -20464,6 +20467,9 @@ def talk_prompt():
             "- Steps or options: say them as a short spoken sequence (first..., then..., and last...).\n"
             "- They may be driving: never ask them to look at, read or type anything.\n"
             "- What they say comes from speech recognition, so a word may be wrong - go by what they most likely meant.\n"
+            "- A reply of yours ending in \"(interrupted)\" means they cut you off to steer: drop that thread and follow "
+            "what they say now. \"Never mind\", \"cancel that\" or \"forget that\" means let it go - say okay briefly "
+            "and ask what's next.\n"
             f"It is {time.strftime('%A %d %B %Y, %H:%M')} where they are.")
 
 
@@ -20492,6 +20498,9 @@ def _phone_talk_job(jid, model, messages, kind):
                           text_cb=lambda t: stream_append(jid, t))
         if out.startswith("[Ollama error"):
             _update_chat_job(jid, status="error", error=out[:400])
+        elif not out.strip() or out.strip() == "[No response]":
+            # (a thinking model that spent the whole answer thinking: 88 s, then nothing, 2026-11-10)
+            _update_chat_job(jid, status="error", error="That model gave no answer - try another model in the chat.")
         else:
             _update_chat_job(jid, status="done", reply=out.strip())
     except Exception as e:
@@ -20510,19 +20519,25 @@ def phone_app_device():
 
 def phone_hands_prompt(d):
     caps = "\n".join("  - " + cap_line(c) for c in d.get("capabilities", []))
-    return ("THE USER IS ON THEIR PHONE (" + d.get("name", "phone") + "), and the Philibert app on it is connected: "
-            "you can ACT ON THE PHONE with device_action, device \"phone\". Its actions (* = required):\n" + caps + "\n"
+    return ("RIGHT NOW YOU ARE ON THE USER'S PHONE: they are talking to you in the Philibert app on their "
+            + d.get("name", "phone") + " (Android). Your brain runs on their computer, but in this chat \"my phone\", "
+            "\"my alarms\", \"my apps\", \"my screen\", \"my texts\" or \"messages\", \"my notifications\", \"my battery\" "
+            "and \"where am I\" all mean THE PHONE. You find those out and do them with device_action (device \"phone\") - "
+            "never by looking in the computer's files.\n"
+            "The phone's actions (* = required):\n" + caps + "\n"
             "How to work the phone:\n"
-            "- A direct job (alarm, timer, text, call, open an app, flashlight, volume, media) is ONE device_action "
-            "call with the matching action. Do not list devices first - the list is above.\n"
-            "- To work inside an app: open_app, then read_screen, then tap / type_text / scroll using the numbers "
-            "read_screen gave, then read_screen again to check it worked. Keep going until the job is done.\n"
-            "- Say you did something only when the action's result says it worked. If the person declined it on the "
-            "phone, say so and stop.\n"
-            "- On the computer itself you can only look things up from here (notes and memory, Yo Teach, Band "
-            "Manager, files, the web); creating, changing or deleting anything ON THE COMPUTER has to be done there.\n"
-            f"It is {time.strftime('%A %d %B %Y, %H:%M')} on the computer (time zone {time.strftime('%Z')}) - "
-            "answer the time and date from this.\n")
+            "- A direct job (set an alarm or timer, text, call, open an app, flashlight, volume, media) is ONE device_action "
+            "call with the matching action. The list above is complete - do not call list_devices.\n"
+            "- Anything those actions don't cover - which alarms are set, an app's settings, what a message says, what is "
+            "on the screen: open_app the right app, then read_screen and read the answer off it; tap / scroll / type_text "
+            "using the numbers read_screen gave to go further, and read_screen again after each step. For example all "
+            "the alarms: open_app Clock, then read_screen (next_alarm alone gives the next one).\n"
+            "- Say you did or found something only when an action's result says so. If the person declined on the phone, "
+            "say so and stop.\n"
+            "- The computer: you can look things up there (notes and memory, Yo Teach, Band Manager, the web, and files "
+            "when they ask about files on the COMPUTER) but not change anything on it from here.\n"
+            f"It is {time.strftime('%A %d %B %Y, %H:%M')} now (time zone {time.strftime('%Z')}). Asked the time or date, "
+            "just say it.\n")
 
 
 def device_register(body, via=""):
@@ -20581,10 +20596,20 @@ def device_result(body):
     return {"ok": True}
 
 
+PC_FILE_TOOLS = {"list_dir", "read_file", "search_files", "find_definition", "find_references", "computer_info"}
+_ABOUT_PC = re.compile(r"\b(computer|pc|laptop|desktop|windows|drives?|files?|folders?|documents?|disk)\b", re.I)
+
+
 def _phone_chat_job(jid, model, messages):
     hands = phone_app_device()
     _job_ctx.phone_hands = hands
-    _job_ctx.tool_allow = PHONE_TOOLS | (PHONE_HAND_TOOLS if hands else set())
+    allow = PHONE_TOOLS | (PHONE_HAND_TOOLS if hands else set())
+    last = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
+    if hands and not _ABOUT_PC.search(last):
+        # "do I have any alarms?" searched the computer's AppData for alarm files (2026-11-10): with the
+        # phone in hand, the computer's files are only for questions that are about the computer
+        allow -= PC_FILE_TOOLS
+    _job_ctx.tool_allow = allow
     _job_ctx.phone_job = jid
     run_chat_job(jid, model, messages, None, False, set(), False, False, None)
 
