@@ -266,8 +266,27 @@ def finish():
     sys.exit(0 if _results and passed == len(_results) else 1)
 
 
+class _Root(str):
+    """A folder path that is a str (os.path.join, ==, str()) and also acts as a pathlib.Path."""
+    def __truediv__(self, other):
+        return Path(self) / other
+
+    def __fspath__(self):
+        return str(self)
+
+    def __getattr__(self, name):          # resolve(), exists(), iterdir(), name, parent ...
+        return getattr(Path(self), name)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
 def temp_tree(files):
-    """{relative path: size in bytes (int) or content (bytes); a path ending in / is an empty folder} -> folder."""
+    """{relative path: size in bytes (int) or content (bytes); a path ending in / is an empty folder} -> folder.
+    The folder is a str that also acts as a pathlib.Path: root / "a.txt", root.exists(), with temp_tree(...) as root."""
     root = tempfile.mkdtemp(prefix="pc_test_")
     _temps.append(root)
     for rel, v in files.items():
@@ -277,7 +296,7 @@ def temp_tree(files):
             continue
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(v if isinstance(v, bytes) else b"x" * int(v))
-    return root
+    return _Root(root)
 
 
 def run(args, timeout=120):
