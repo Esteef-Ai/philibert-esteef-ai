@@ -20678,10 +20678,32 @@ def _phone_serve(method, sub, body):
         _update_chat_job(jid, status="running", started=time.time(), model=model,
                          prompt=messages[-1]["content"][:400])
         if kind:
+            if kind == "talk":
+                try:
+                    import nd_voice
+                    nd_voice.warm(_drive_root())          # the voice ready by the time the answer is
+                except Exception:
+                    pass
             threading.Thread(target=_phone_talk_job, args=(jid, model, messages, kind), daemon=True).start()
         else:
             threading.Thread(target=_phone_chat_job, args=(jid, model, messages), daemon=True).start()
         return js({"ok": True, "job": jid})
+    if op == "voice_info":                 # Talk's natural voice (Kokoro on this computer), if installed
+        try:
+            import nd_voice
+            ok = nd_voice.available(_drive_root())
+            return js({"ok": True, "kokoro": ok, "voices": nd_voice.voices(_drive_root()) if ok else [],
+                       "default": nd_voice.DEFAULT_VOICE})
+        except Exception as e:
+            return js({"ok": True, "kokoro": False, "voices": [], "msg": str(e)[:200]})
+    if op == "speak":                      # one sentence -> audio/wav, for Talk on the phone
+        try:
+            import nd_voice
+            if not nd_voice.available(_drive_root()):
+                return js({"ok": False, "msg": "The natural voice isn't installed on the computer."}, 404)
+            return 200, "audio/wav", nd_voice.wav(_drive_root(), body.get("text"), body.get("voice"), body.get("speed"))
+        except Exception as e:
+            return js({"ok": False, "msg": f"{type(e).__name__}: {e}"[:300]}, 500)
     if op == "save_note":
         # Talk mode's plan, kept: a NEW note in the Brainstorms folder (never changes an existing one) -
         # the one thing the phone writes on the computer, and only when the person taps Save
