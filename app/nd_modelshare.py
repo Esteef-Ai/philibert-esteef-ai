@@ -164,13 +164,16 @@ class _Relay(BaseHTTPRequestHandler):
             code, ctype, out = fn(method, path[7:], data)
         except Exception as e:
             code, ctype, out = 500, "application/json", json.dumps({"ok": False, "msg": str(e)[:300]}).encode()
-        self.send_response(code)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(out)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("Referrer-Policy", "no-referrer")       # the key is in the address
-        self.end_headers()
-        self.wfile.write(out)
+        try:
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(out)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Referrer-Policy", "no-referrer")       # the key is in the address
+            self.end_headers()
+            self.wfile.write(out)
+        except OSError:                         # the phone hung up while it waited (the app's long poll)
+            self.close_connection = True
 
     def _sync(self, step, body, what):
         fn = getattr(self.owner, what, None) if self.owner else None

@@ -193,10 +193,18 @@ def portable_drop():
     try:
         import nd_imagegen
         if nd_imagegen.installed(_drive_root()):
-            return PORTABLE_DROP_TOOLS - {"generate_image"}
+            return PORTABLE_DROP_TOOLS - {"generate_image"} - _hands_tools()
     except Exception:
         pass
-    return PORTABLE_DROP_TOOLS
+    return PORTABLE_DROP_TOOLS - _hands_tools()
+
+
+PHONE_HAND_TOOLS = {"device_action", "list_devices"}
+
+
+def _hands_tools():
+    """The device tools, in a phone chat whose phone has the Philibert app connected."""
+    return PHONE_HAND_TOOLS if getattr(_job_ctx, "phone_hands", None) else set()
 _BACKUP_FILE = HERETIC_DIR / "neuraldock_config.json"  # legacy location
 _config = {}
 
@@ -268,7 +276,9 @@ def philibert_prompt():
            "notes shown to you do not clearly answer a question about them, call memory_search - never guess. "
            "You run from the user's drive on their own computer. Be warm, direct and "
            "brief: a simple question gets a short answer.\n")
-    if getattr(_job_ctx, "tool_allow", None) is not None:
+    if getattr(_job_ctx, "phone_hands", None):
+        out += phone_hands_prompt(_job_ctx.phone_hands)
+    elif getattr(_job_ctx, "tool_allow", None) is not None:
         # the phone chat: told up front, or a refused write came back as "the file has been created"
         out += ("THE USER IS ON THEIR PHONE, and from the phone you can only look things up (notes and memory, "
                 "Yo Teach, Band Manager, files, the web). You cannot create, change, save or delete anything from here: "
@@ -13486,7 +13496,7 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
         _prev_users = [str(m.get("content") or "") for m in messages[:-1] if m.get("role") == "user"]
         if getattr(_job_ctx, "tool_allow", None) is not None:      # the phone: read-only tools only
             active_tools = [t for t in active_tools if t.get("function", {}).get("name") in _job_ctx.tool_allow]
-        if not wants_tools(_last_user, _prev_users):
+        if not wants_tools(_last_user, _prev_users) and not getattr(_job_ctx, "phone_hands", None):
             log("A plain question - answered without the tool list, so the model thinks it through", "info")
             active_tools = []
     pending_images = []          # screen_capture output, attached to the next message
@@ -15096,6 +15106,9 @@ def process_ai_response_with_tools(model, messages, workspace=None, allow_all=Fa
                 if PORTABLE and c["name"] in portable_drop():
                     continue        # refused when it runs: never ask anyone to approve it
                                     # (each Approve came back "not available" - a loop of asks)
+                if c["name"] in _hands_tools():
+                    continue        # the phone acting on itself: the person is holding it, and the app
+                                    # asks there before anything that sends, calls or deletes
                 if getattr(_job_ctx, "tool_allow", None) is not None and c["name"] not in _job_ctx.tool_allow:
                     continue        # the phone: refused when it runs, never parked for an approval
                                     # nobody can give (asked for write_file, it waited for ever)
@@ -20434,8 +20447,91 @@ def _phone_models():
     return out
 
 
+def phone_app_device():
+    """The phone with the Philibert app connected (online), or None."""
+    for d in device_snapshot(include_offline=False):
+        if _devices.get(d["device_id"], {}).get("via") == "philibert_app":
+            return d
+    return None
+
+
+def phone_hands_prompt(d):
+    caps = "\n".join("  - " + cap_line(c) for c in d.get("capabilities", []))
+    return ("THE USER IS ON THEIR PHONE (" + d.get("name", "phone") + "), and the Philibert app on it is connected: "
+            "you can ACT ON THE PHONE with device_action, device \"phone\". Its actions (* = required):\n" + caps + "\n"
+            "How to work the phone:\n"
+            "- A direct job (alarm, timer, text, call, open an app, flashlight, volume, media) is ONE device_action "
+            "call with the matching action. Do not list devices first - the list is above.\n"
+            "- To work inside an app: open_app, then read_screen, then tap / type_text / scroll using the numbers "
+            "read_screen gave, then read_screen again to check it worked. Keep going until the job is done.\n"
+            "- Say you did something only when the action's result says it worked. If the person declined it on the "
+            "phone, say so and stop.\n"
+            "- On the computer itself you can only look things up from here (notes and memory, Yo Teach, Band "
+            "Manager, files, the web); creating, changing or deleting anything ON THE COMPUTER has to be done there.\n"
+            f"It is {time.strftime('%A %d %B %Y, %H:%M')} on the computer (time zone {time.strftime('%Z')}) - "
+            "answer the time and date from this.\n")
+
+
+def device_register(body, via=""):
+    """A device says who it is and what it can do. -> the reply it gets."""
+    did = (body.get("device_id") or "").strip() or uuid.uuid4().hex[:10]
+    with _lock:
+        prev = _devices.get(did, {})
+        _devices[did] = {
+            "name": body.get("name") or prev.get("name") or did,
+            "platform": (body.get("platform") or prev.get("platform") or "unknown").lower(),
+            "capabilities": (normalize_caps(body.get("capabilities")) or prev.get("capabilities") or []),
+            "last_seen": time.time(),
+            "registered": prev.get("registered", time.time()),
+            "via": via or prev.get("via", ""),
+        }
+        nm, plat, ncap = _devices[did]["name"], _devices[did]["platform"], len(_devices[did]["capabilities"])
+    if not prev:
+        log(f"Device paired: {nm} ({plat}) with {ncap} capabilities", "ok")
+        agent_audit("device", "meta", f"{nm} ({plat}) registered", "PAIRED")
+    return {"ok": True, "device_id": did, "poll_seconds": 25, "server": VERSION}
+
+
+def device_poll(body):
+    """Long-poll: held open until there is work for the device (or `wait` runs out)."""
+    did = (body.get("device_id") or "").strip()
+    try:
+        wait = min(float(body.get("wait", 25)), 55)
+    except (TypeError, ValueError):
+        wait = 25
+    with _lock:
+        if did not in _devices:
+            return None
+        _devices[did]["last_seen"] = time.time()
+    deadline = time.time() + wait
+    while time.time() < deadline:
+        with _lock:
+            q = _device_queue.get(did) or []
+            if q:
+                _devices[did]["last_seen"] = time.time()
+                return {"call": q.pop(0)}
+        time.sleep(0.25)
+    with _lock:
+        if did in _devices:
+            _devices[did]["last_seen"] = time.time()
+    return {"call": None}
+
+
+def device_result(body):
+    cid = body.get("call_id", "")
+    with _lock:
+        if cid in _device_res:
+            _device_res[cid] = {"done": True, "result": body.get("result")}
+        did = (body.get("device_id") or "").strip()
+        if did in _devices:
+            _devices[did]["last_seen"] = time.time()
+    return {"ok": True}
+
+
 def _phone_chat_job(jid, model, messages):
-    _job_ctx.tool_allow = PHONE_TOOLS
+    hands = phone_app_device()
+    _job_ctx.phone_hands = hands
+    _job_ctx.tool_allow = PHONE_TOOLS | (PHONE_HAND_TOOLS if hands else set())
     _job_ctx.phone_job = jid
     run_chat_job(jid, model, messages, None, False, set(), False, False, None)
 
@@ -20467,7 +20563,16 @@ def _phone_serve(method, sub, body):
     op = sub[4:]
     body = body or {}
     if op == "hello":
-        return js({"ok": True, "name": PRODUCT, "computer": socket.gethostname()})
+        return js({"ok": True, "name": PRODUCT, "computer": socket.gethostname(), "hands": bool(phone_app_device())})
+    # the Philibert Android app: pairs on this same address (Tailscale only, the key in it), then
+    # waits here for what the chat asks the phone to do (the device fabric, DEVICE FABRIC above)
+    if op == "device_register":
+        return js(device_register(body, via="philibert_app"))
+    if op == "device_poll":
+        r = device_poll(body)
+        return js(r) if r is not None else js({"ok": False, "error": "unknown device - register first"}, 404)
+    if op == "device_result":
+        return js(device_result(body))
     if op == "models":
         models = _phone_models()
         default = handler_model()
