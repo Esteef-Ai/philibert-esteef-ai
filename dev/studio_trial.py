@@ -8,7 +8,8 @@
     python dev/studio_trial.py check     <ws>                 the foreman's plan check + every test fails cleanly unbuilt
 
 Every model call is logged to <ws>/.studio/log.jsonl (stage, seconds, tokens) with the raw reply beside it.
---model TAG (default q36c-nd64k), --no-think, --reuse (parse the saved reply again).
+--model TAG (default q36c-nd64k), --no-think, --think LEVEL (low/medium/high, gpt-oss), --ctx N (num_ctx), --max N (output cap, default 32000),
+--reuse (parse the saved reply again).
 """
 import json
 import subprocess
@@ -21,6 +22,8 @@ sys.path.insert(0, str(REPO / "shared"))
 import nd_studio as S  # noqa: E402
 
 REUSE = False
+CTX = None
+MAXTOK = 32000
 FOREMAN = REPO / "code" / "app" / "nd_foreman.py"
 
 
@@ -39,7 +42,7 @@ def ask(ws, stage, prompt, model, think):
     if REUSE and (sd / f"{stage}.reply.txt").exists():      # parse the last reply again, no new call
         return (sd / f"{stage}.reply.txt").read_text(encoding="utf-8")
     print(f"[{time.strftime('%H:%M:%S')}] {stage}: asking {model} (think={think}) ...", flush=True)
-    text, secs, info = S.call_model(model, prompt, think=think)
+    text, secs, info = S.call_model(model, prompt, think=think, num_ctx=CTX, max_tokens=MAXTOK)
     (sd / f"{stage}.prompt.txt").write_text(prompt, encoding="utf-8")
     (sd / f"{stage}.reply.txt").write_text(text, encoding="utf-8")
     with open(sd / "log.jsonl", "a", encoding="utf-8") as f:
@@ -51,8 +54,13 @@ def ask(ws, stage, prompt, model, think):
 
 def main(argv):
     model = opt(argv, "--model", "q36c-nd64k")
-    global REUSE
+    level = opt(argv, "--think")
+    global REUSE, CTX, MAXTOK
+    CTX = int(opt(argv, "--ctx", 0)) or None
+    MAXTOK = int(opt(argv, "--max", 32000))
     think, REUSE = "--no-think" not in argv, "--reuse" in argv
+    if level:
+        think = level
     argv = [a for a in argv if a not in ("--no-think", "--reuse")]
     stage, ws = argv[0], Path(argv[1]).resolve()
     sd = ws / ".studio"

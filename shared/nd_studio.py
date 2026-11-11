@@ -286,11 +286,13 @@ def run(args, timeout=120):
 '''
 
 
-def call_model(model, prompt, think=True, timeout=3600, url=OLLAMA, max_tokens=32000):
+def call_model(model, prompt, think=True, timeout=3600, url=OLLAMA, max_tokens=32000, num_ctx=None):
     """One chat call. -> (answer text, seconds, info dict). max_tokens caps a thinking loop (one review once
-    thought for 62,000 tokens and never answered)."""
+    thought for 62,000 tokens and never answered). think: True/False, or "low"/"medium"/"high" for
+    models that take a level (gpt-oss). num_ctx: for a model without a context baked into its Modelfile."""
     body = {"model": model, "messages": [{"role": "user", "content": prompt}], "stream": False, "think": think,
-            "options": {"temperature": 0.3, "num_predict": max_tokens}, "keep_alive": "15m"}
+            "options": {"temperature": 0.3, "num_predict": max_tokens, **({"num_ctx": num_ctx} if num_ctx else {})},
+            "keep_alive": "15m"}
     t = time.time()
     req = urllib.request.Request(url + "/api/chat", data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
     r = json.loads(urllib.request.urlopen(req, timeout=timeout).read())
