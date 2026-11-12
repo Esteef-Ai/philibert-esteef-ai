@@ -337,6 +337,24 @@ def tweak(ws, name):
         text = (td / rel).read_text(encoding="utf-8")
         (ws / rel).write_text(fill(text, m), encoding="utf-8")
     plan["tasks"] += tw["tasks"]
+    # A tweak may change what the app is allowed to do (Delete ended "read-only"). The rules are in three places:
+    # the plan, the foreman's notes (seeded from the plan once, then never overwritten) and the spec.
+    notes = ws / ".foreman" / "notes" / "00 Rules.md"
+    for old, new in tw.get("rules") or []:
+        if old not in plan["rules"]:
+            sys.exit(f"the plan has no rule: {old[:70]}...")
+        plan["rules"][plan["rules"].index(old)] = new
+        if notes.exists():
+            text = notes.read_text(encoding="utf-8")
+            if old not in text:
+                sys.exit(f"{notes} does not have the rule: {old[:70]}... (edit it by hand, then run again)")
+            notes.write_text(text.replace(old, new), encoding="utf-8")
+    spec = (ws / "SPEC.md").read_text(encoding="utf-8")
+    for old, new in tw.get("spec") or []:
+        if old not in spec:
+            sys.exit(f"SPEC.md does not have: {old[:70]}...")
+        spec = spec.replace(old, new)
+    (ws / "SPEC.md").write_text(spec.rstrip("\n") + "\n" + (tw.get("spec_add") or ""), encoding="utf-8")
     (ws / "plan.json").write_text(json.dumps(plan, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     journal(ws, "studio_pack", f"tweak {tw['name']} added ({', '.join(t['id'] for t in tw['tasks'])}): {tw['title']}", why=tw.get("why"))
     status(ws)

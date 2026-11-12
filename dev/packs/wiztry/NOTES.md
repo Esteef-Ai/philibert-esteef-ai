@@ -62,3 +62,17 @@
   it was 53% before the two tweaks added tests at real size and on a mapped window).
 - A fresh build from this pack still builds the slow T02 layout first and replaces it in T09. That is the
   proven path; merging the briefs would be cleaner but is unproven.
+
+## 2026-11-12: tweak 03_tree_and_tools written (tweaks/03_tree_and_tools/)
+- The owner asked for the whole folder path when a block is clicked, a tree that cascades from the root, and
+  one WizTree-style tool of each kind. Reading the code showed the tree had never worked below its first
+  level and double-click zoom was never built: test_app.py only called select_node() and zoom() and looked at
+  the selection, never at where the row sat or whether a person could get there.
+- Tools chosen: Delete to the Recycle Bin (asked, guarded), Show in Explorer, Copy path, Export to CSV.
+- This ends "read-only" as a rule: the tweak changes the rule in the plan, in the foreman's notes and in the spec
+  (studio_pack.py tweak now does that from "rules", "spec" and "spec_add" in tweak.json).
+- Safety of the delete tests: the guard checks run first and the test stops before any real delete if one
+  fails; real deletes happen only inside a tempfile.mkdtemp() folder and only through the Recycle Bin
+  (each run leaves a few tiny pc_test files there). Explorer is never opened and tk_popup never called.
+- Lesson for every pack: test what a person does (open a row, click a block, press a button) and where the
+  result lands, not only that a method returns something.
