@@ -45,17 +45,22 @@ def drive(root, n=0):
         for w in walk(root):
             try:
                 if w.winfo_class() in ("Label", "TLabel"):
-                    out.append(str(w.cget("text")))
+                    var = str(w.cget("textvariable") or "")          # a status line is often bound to a variable
+                    out.append(str(w.getvar(var)) if var else str(w.cget("text")))
             except tk.TclError:
                 pass
         return out
     buttons = [w for w in walk(root) if w.winfo_class() in ("Button", "TButton")]
     names = [str(b.cget("text")) for b in buttons]
     result["buttons"] = names
-    start = next((b for b in buttons if re.search(r"scan|select|folder|browse|open", str(b.cget("text")), re.I)), None)
-    result["started_with"] = str(start.cget("text")) if start is not None else None
-    if start is not None:
-        start.invoke()
+    # pick the folder first (Browse, Select, Open...), then press Scan if the app has one (wiztry11 needs both)
+    pick = next((b for b in buttons if re.search(r"select|folder|browse|open", str(b.cget("text")), re.I)), None)
+    scan = next((b for b in buttons if re.search(r"scan", str(b.cget("text")), re.I)), None)
+    order = [b for b in (pick, scan) if b is not None]
+    result["started_with"] = " then ".join(str(b.cget("text")) for b in order) or None
+    for b in order:
+        b.invoke()
+        pump(root, 0.3)
     end = time.time() + 60
     while time.time() < end and not any(re.search(r"\bfiles?\b.* in ", t) for t in label_text()):
         root.update()
@@ -79,6 +84,7 @@ def once(root):                      # a nested mainloop() (an app calling it fr
 tk.Misc.mainloop = lambda self, n=0: once(self.winfo_toplevel())
 tk.mainloop = lambda n=0: once(tk._default_root)
 sys.argv = [entry]
+sys.path.insert(0, __import__("os").path.dirname(__import__("os").path.abspath(entry)))      # as `python entry.py` does
 try:
     runpy.run_path(entry, run_name="__main__")
 except SystemExit:

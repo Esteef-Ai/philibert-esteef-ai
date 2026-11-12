@@ -23,3 +23,13 @@
   showed: no read-only file in the fixture (a scanner that skipped read-only files would pass), and human()
   is never checked at exactly 1024. Most other misses are pixel paddings in the treemap that change nothing
   a user would notice. Details: VERIFY.json.
+
+## 2026-11-12: the clean baseline (C:\PCodeTest\wiztry11)
+- 6 of 6 tasks passed on the first attempt, 32 minutes, no help, restricted builder shell
+  (OpenCode + `q36c-nd128k`, thinking off). Report on the fixture 5 of 5; 119 checks pass including the exe.
+- The window scans, fills the folder tree and draws the treemap (255 blocks, 9 colors).
+- DEFECT the tests do not see, in this build AND in `reference/`: the File Types list starts with no width
+  (the tree pane takes the whole row; the list has its 10 rows but is 1 pixel wide until the splitter is
+  dragged). Cause: the panes are added without weights. To fix in the pack: T05's brief must give the two top
+  panes weights, and test_app.py must check the list's width on a mapped, off-screen window (it tests a
+  withdrawn window today, where nothing has a size).
