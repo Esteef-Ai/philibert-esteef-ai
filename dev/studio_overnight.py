@@ -360,7 +360,7 @@ def report():
             for k, v in (s.get("tests") or {}).items():
                 L.append(f"  - {k}: {v}")
         L.append("")
-    (HOME / "REPORT.md").write_text("\n".join(L), encoding="utf-8")
+    (HOME / ("REPORT_dry.md" if DRY else "REPORT.md")).write_text("\n".join(L), encoding="utf-8")
 
 
 def main():
