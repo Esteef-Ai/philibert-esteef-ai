@@ -3,27 +3,52 @@
  "title": "Big folders do not freeze the window",
  "why": "Owner's report on the wiztry11 exe, 2026-11-12 (after tweak 01): Browse works, but scanning hung the app and it had to be force-closed. Measured: the treemap layout is quadratic (2,000 files in one folder 0.01 s, 8,000 0.13 s, 32,000 2.1 s; 300,000 would be minutes) and it runs on the main thread, also on every resize; with thousands of entries it produces slivers too thin to draw (211 file blocks for 50,000 files). While scanning, the status line shows no count, so a long scan looks dead. by_ext is computed on the main thread by walking the whole tree again. Also found: the File Types list keeps only its last color swatch image (the others are garbage-collected and show blank).",
  "proved": "2026-11-12: on a patched scratch copy both tests pass three runs in a row (14 + 15 checks) and every old test still passes; C:\\Windows (199,000 files): draw_treemap 0.1 s and 4,491 blocks, was 3.2 s and 478 blocks. On the wiztry11 build the tests fail for the reasons above.",
- "tests": ["tests/test_treemap_big.py", "tests/test_window_big.py"],
+ "tests": [
+  "tests/test_treemap_big.py",
+  "tests/test_window_big.py"
+ ],
  "tasks": [
   {
    "id": "T09",
    "title": "A treemap layout that scales",
-   "depends_on": ["T02"],
-   "files": ["wiztry/treemap.py"],
-   "context": ["tests/test_treemap_big.py", "tests/test_treemap.py", "wiztry/scanner.py"],
+   "depends_on": [
+    "T02"
+   ],
+   "files": [
+    "wiztry/treemap.py",
+    "wiztry/app.py"
+   ],
+   "context": [
+    "tests/test_treemap_big.py",
+    "tests/test_treemap.py",
+    "tests/test_app.py",
+    "wiztry/scanner.py"
+   ],
    "tests": "tests/test_treemap_big.py",
-   "minutes": 40,
-   "brief": "The layout takes minutes on a folder with 300,000 files, and with thousands of entries it makes slivers too thin to draw. Two changes in wiztry/treemap.py; squarify()'s and layout()'s arguments and return values stay exactly as they are, and every check in tests/test_treemap.py must keep passing.\n\n1. Replace _squarify_impl with the standard squarified algorithm, in ONE pass with running totals. No list slicing, no pop(0), no list copies, no sum() over a row or over the remainder inside a loop: those made it quadratic. Delete the helpers it no longer needs (_all_equal, _grid_layout, _next_row, _row_ar, _worst_ar).\n   scale = w * h / total turns a size into an area in pixels. Keep an index i into sizes. While items remain and w > 0 and h > 0: side = min(w, h). Start a row with item i: row_sum = its area, lo = hi = its area, worst = max(side*side*hi / row_sum**2, row_sum**2 / (side*side*lo)). Try the next item j: with new_sum, new_lo, new_hi compute new_worst the same way; if new_worst > worst stop the row, otherwise take the item and go on. Then thick = row_sum / side. If w >= h the row is a column at the left: each item gets (x, cy, thick, area / thick) with cy running down from y; then x += thick and w -= thick. Otherwise it is a row along the top: each item gets (cx, y, area / thick, thick) with cx running right from x; then y += thick and h -= thick. Return the rectangles in the order of sizes.\n\n2. layout() must only lay out children that can be seen, and must not inflate them. With children = the node's children of size > 0 and total_size = their sum: need = min_px * min_px * total_size / (w * h). Keep only the children with size >= need (a block needs at least min_px by min_px of area). If more than MAX_CHILDREN = 4000 are left (a module constant), keep the 4000 largest. If none are left return []. Sort the kept ones largest first. rest = total_size minus the sum of the kept sizes. If rest > 0, insert rest as ONE extra entry into the list of sizes at the place its size puts it (before the first size smaller than it, or at the end), call squarify, and throw that entry's rectangle away, so every kept child keeps its true share of the area. The rest of layout() (the min_px test on each rectangle, going into folders with the 1 px inset, depth) stays as it is."
+   "minutes": 45,
+   "brief": "The layout takes minutes on a folder with 300,000 files, and with thousands of entries it makes slivers too thin to draw. Two changes in wiztry/treemap.py and one in wiztry/app.py; squarify()'s and layout()'s arguments and return values stay exactly as they are, and every check in tests/test_treemap.py must keep passing.\n\n1. Replace _squarify_impl with the standard squarified algorithm, in ONE pass with running totals. No list slicing, no pop(0), no list copies, no sum() over a row or over the remainder inside a loop: those made it quadratic. Delete the helpers it no longer needs (_all_equal, _grid_layout, _next_row, _row_ar, _worst_ar).\n   scale = w * h / total turns a size into an area in pixels. Keep an index i into sizes. While items remain and w > 0 and h > 0: side = min(w, h). Start a row with item i: row_sum = its area, lo = hi = its area, worst = max(side*side*hi / row_sum**2, row_sum**2 / (side*side*lo)). Try the next item j: with new_sum, new_lo, new_hi compute new_worst the same way; if new_worst > worst stop the row, otherwise take the item and go on. Then thick = row_sum / side. If w >= h the row is a column at the left: each item gets (x, cy, thick, area / thick) with cy running down from y; then x += thick and w -= thick. Otherwise it is a row along the top: each item gets (cx, y, area / thick, thick) with cx running right from x; then y += thick and h -= thick. Return the rectangles in the order of sizes.\n\n2. layout() must only lay out children that can be seen, and must not inflate them. With children = the node's children of size > 0 and total_size = their sum: need = min_px * min_px * total_size / (w * h). Keep only the children with size >= need (a block needs at least min_px by min_px of area). If more than MAX_CHILDREN = 4000 are left (a module constant), keep the 4000 largest. If none are left return []. Sort the kept ones largest first. rest = total_size minus the sum of the kept sizes. If rest > 0, insert rest as ONE extra entry into the list of sizes at the place its size puts it (before the first size smaller than it, or at the end), call squarify, and throw that entry's rectangle away, so every kept child keeps its true share of the area. The rest of layout() (the min_px test on each rectangle, going into folders with the 1 px inset, depth) stays as it is.\n\n3. One change in wiztry/app.py, in draw_treemap() ONLY (touch nothing else in that file). The new layout returns many more blocks, and the old cap there (a ladder that calls layout again with min_px 5, 7, 10, 15) then ends with no file blocks at all, which fails tests/test_app.py (\"50,000 files stay within the 20,000-block cap\"). Replace the ladder by: ONE call layout(self.view, 0, 0, cw, ch); if there are more than MAX_BLOCKS = 8000 file blocks (a module constant in app.py), keep the 8000 with the largest area (width * height) and drop the other file blocks; folder blocks are all kept. Then draw exactly as now. Every check in tests/test_app.py must keep passing: run it too before you finish."
   },
   {
    "id": "T10",
    "title": "The window stays alive on big folders",
-   "depends_on": ["T08", "T09"],
-   "files": ["wiztry/app.py"],
-   "context": ["wiztry/scanner.py", "wiztry/treemap.py", "tests/test_window_big.py", "tests/test_app.py", "tests/test_window_use.py"],
+   "depends_on": [
+    "T08",
+    "T09"
+   ],
+   "files": [
+    "wiztry/app.py"
+   ],
+   "context": [
+    "wiztry/scanner.py",
+    "wiztry/treemap.py",
+    "tests/test_window_big.py",
+    "tests/test_app.py",
+    "tests/test_window_use.py"
+   ],
    "tests": "tests/test_window_big.py",
    "minutes": 40,
-   "brief": "Scanning a drive made the window hang. Five changes in wiztry/app.py; everything else about the window stays, and every check in tests/test_app.py and tests/test_window_use.py must keep passing.\n\n1. Count while scanning. start_scan sets self.scan_count = 0. The scan thread calls timed_scan(path, progress) from wiztry.scanner (it returns (top, skipped, seconds)), where progress(n) only stores n in self.scan_count (a plain attribute: the thread never touches tkinter). While the result is not there, the after() loop sets the status to f\"Scanning... {self.scan_count:,} files\" whenever self.scan_count is above 0 (plain \"Scanning...\" before that).\n\n2. No second walk on the main thread. Still in the scan thread, after the scan: by_ext = summary(top)[\"by_ext\"] (summary is in wiztry.scanner). The thread stores (top, skipped, seconds, by_ext) for the main thread. Delete _get_by_ext, _accumulate_ext and _timed_scan.\n\n3. A public method show_result(self, top, skipped, secs, by_ext), run on the main thread by the after() loop once the result is there (after it has set busy False and enabled Scan). It does what the end of the scan does today: self.top = top, self.view = top, self.nodes = {}, self.colors = color_map(by_ext), empty and fill the tree (top row open, as now), fill the File Types list from by_ext, draw the treemap, and set the status to f\"{top.files:,} files, {top.folders:,} folders, {human(top.size)} in {secs:.1f} s\". It must work when called directly with a tree made in memory, and it must not walk the whole tree.\n\n4. Swatches. The File Types list keeps only its last PhotoImage (self.types.image = img), so every other swatch is garbage-collected and shows blank. Keep them all: self.swatches = [] when the list is emptied, self.swatches.append(img) for every row.\n\n5. The block cap in draw_treemap. Replace the ladder that raises min_px (it ends with no file blocks at all) by: ONE call layout(self.view, 0, 0, cw, ch); if there are more than MAX_BLOCKS = 8000 file blocks (a module constant), keep the 8000 with the largest area (width * height) and drop the other file blocks; folder blocks are all kept. Then draw as now."
+   "brief": "Scanning a drive made the window hang. Four changes in wiztry/app.py; everything else about the window stays, and every check in tests/test_app.py and tests/test_window_use.py must keep passing.\n\n1. Count while scanning. start_scan sets self.scan_count = 0. The scan thread calls timed_scan(path, progress) from wiztry.scanner (it returns (top, skipped, seconds)), where progress(n) only stores n in self.scan_count (a plain attribute: the thread never touches tkinter). While the result is not there, the after() loop sets the status to f\"Scanning... {self.scan_count:,} files\" whenever self.scan_count is above 0 (plain \"Scanning...\" before that).\n\n2. No second walk on the main thread. Still in the scan thread, after the scan: by_ext = summary(top)[\"by_ext\"] (summary is in wiztry.scanner). The thread stores (top, skipped, seconds, by_ext) for the main thread. Delete _get_by_ext, _accumulate_ext and _timed_scan.\n\n3. A public method show_result(self, top, skipped, secs, by_ext), run on the main thread by the after() loop once the result is there (after it has set busy False and enabled Scan). It does what the end of the scan does today: self.top = top, self.view = top, self.nodes = {}, self.colors = color_map(by_ext), empty and fill the tree (top row open, as now), fill the File Types list from by_ext, draw the treemap, and set the status to f\"{top.files:,} files, {top.folders:,} folders, {human(top.size)} in {secs:.1f} s\". It must work when called directly with a tree made in memory, and it must not walk the whole tree.\n\n4. Swatches. The File Types list keeps only its last PhotoImage (self.types.image = img), so every other swatch is garbage-collected and shows blank. Keep them all: self.swatches = [] when the list is emptied, self.swatches.append(img) for every row.\n\nThe block cap in draw_treemap (MAX_BLOCKS) was already changed by T09: leave it as it is."
   }
- ]
+ ],
+ "fixed": "2026-11-12: first cut had the block-cap change in T10; T09 then could not pass (attempt 1, 29 min, broke test_app.py). Lesson: prove each task of a tweak ALONE, in order, not only the tweak as a whole."
 }
