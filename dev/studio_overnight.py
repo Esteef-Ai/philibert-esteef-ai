@@ -313,7 +313,8 @@ def referee(run, tid):
     try:
         unload()
         stage(run, "dispute", tid, rest=[], model=REFEREE, timeout=3600)
-    except RuntimeError as e:
+        stage(run, "lint-tests", rest=[], model=REFEREE)   # a referee rewrite gets the same checks (run 10: one
+    except RuntimeError as e:                              # started writing cli_test_output.json into the project)
         log(f"referee on {tid}: {e}")
     commit(run["ws"], f"referee on {tid}")
     if not DRY:

@@ -70,8 +70,14 @@ def drive(root, n=0):
                           for w in walk(root) if w.winfo_class() == "Canvas"]
     json.dump(result, open(out, "w", encoding="utf-8"), indent=1)
     root.destroy()
-tk.Misc.mainloop = lambda self, n=0: drive(self.winfo_toplevel())
-tk.mainloop = lambda n=0: drive(tk._default_root)
+_driving = []
+def once(root):                      # a nested mainloop() (an app calling it from a button) must not re-drive
+    if _driving:
+        return
+    _driving.append(1)
+    drive(root)
+tk.Misc.mainloop = lambda self, n=0: once(self.winfo_toplevel())
+tk.mainloop = lambda n=0: once(tk._default_root)
 sys.argv = [entry]
 try:
     runpy.run_path(entry, run_name="__main__")
@@ -90,6 +96,10 @@ def find_entry(ws):
             return ws / name
     for p in ws.glob("*/__main__.py"):
         return p
+    for name in ("main.py", "app.py", "cli.py"):          # a package's entry script (run 10: wiztry/main.py)
+        for p in ws.glob(f"*/{name}"):
+            if p.parent.name not in (".venv", "tests", "build", "dist"):
+                return p
     return None
 
 

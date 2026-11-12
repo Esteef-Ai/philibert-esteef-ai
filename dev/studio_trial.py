@@ -39,6 +39,37 @@ def built_code(ws, plan):
     return "\n\n".join(f"--- {f} ---\n" + (ws / f).read_text(encoding="utf-8", errors="replace") for f in files)
 
 
+def static_problems(ws, name):
+    """Bugs in the test's own source, whatever path it takes when run: undefined names (ruff F821; run 10's
+    test_tree.py exited early on the empty project, so its NameError on line 55 never ran) and a run() result
+    unpacked into other than (code, output) (run 9's acceptance test: `_, _, rc = run(...)`, unpassable)."""
+    import ast
+    probs = []
+    f = ws / name
+    try:
+        tree = ast.parse(f.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError) as e:
+        return [f"it does not parse: {e}"]
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Assign) and isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name)
+                and node.value.func.id == "run" and isinstance(node.targets[0], (ast.Tuple, ast.List))
+                and len(node.targets[0].elts) != 2):
+            probs.append(f"line {node.lineno} unpacks run() into {len(node.targets[0].elts)} names; run() returns "
+                         "exactly (exit code, stdout + stderr)")
+    for cmd in ([sys.executable, "-m", "ruff"], [r"C:\Heretic\venv\Scripts\python.exe", "-m", "ruff"]):
+        try:
+            r = subprocess.run([*cmd, "check", "--select", "F821", "--output-format", "concise", "--no-cache", str(f)],
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if "No module named ruff" in r.stderr:
+            continue
+        for m in re.finditer(r":(\d+):\d+: F821 (.+)", r.stdout):
+            probs.append(f"line {m.group(1)}: {m.group(2).strip()} (import it or define it)")
+        break
+    return probs
+
+
 def crash_problem(ws, name):
     """Run a test on the project as it is (empty, before its task). It must REPORT (end with 'N passed, M
     failed'); a test that crashes before reporting is broken, never the not-yet-written code."""
@@ -219,7 +250,7 @@ def main(argv):
             for round_ in (1, 2):
                 f = ws / name
                 code = f.read_text(encoding="utf-8")
-                probs = S.test_problems(code) + crash_problem(ws, name)
+                probs = S.test_problems(code) + static_problems(ws, name) + crash_problem(ws, name)
                 if not probs:
                     break
                 print(f"  {name}: " + "; ".join(probs), flush=True)
@@ -231,7 +262,7 @@ def main(argv):
                     print(f"    no usable fix ({e})")
                     break
                 f.write_text(new, encoding="utf-8")
-            left = S.test_problems((ws / name).read_text(encoding="utf-8")) + crash_problem(ws, name)
+            left = S.test_problems((ws / name).read_text(encoding="utf-8")) + static_problems(ws, name) + crash_problem(ws, name)
             print(f"  {name}: " + ("clean" if not left else "STILL: " + "; ".join(left)), flush=True)
     elif stage == "review-tests":
         # argv[2]: comma-separated task ids (default all). What is already built is shown as the truth for names.
