@@ -473,19 +473,32 @@ class _Root(str):
         return False
 
 
-def temp_tree(files):
-    """{relative path: size in bytes (int) or content (bytes); a path ending in / is an empty folder} -> folder.
+def temp_tree(files=None, more=None):
+    """{relative path: content} -> a temporary folder, deleted at exit.
+    A value is a size in bytes (int), the content (bytes or str), an empty folder (None, {} or a path ending
+    in /), or a sub-folder (a dict of the same kind). temp_tree(folder, files) puts the files into that folder.
     The folder is a str that also acts as a pathlib.Path: root / "a.txt", root.exists(), with temp_tree(...) as root."""
-    root = tempfile.mkdtemp(prefix="pc_test_")
-    _temps.append(root)
-    for rel, v in files.items():
-        p = Path(root) / rel
-        if rel.endswith("/"):
-            p.mkdir(parents=True, exist_ok=True)
-            continue
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(v if isinstance(v, bytes) else b"x" * int(v))
+    if more is not None:                     # temp_tree(folder, files)
+        root, files = str(files), more
+        os.makedirs(root, exist_ok=True)
+    else:
+        root = tempfile.mkdtemp(prefix="pc_test_")
+        _temps.append(root)
+    _fill(Path(root), files or {})
     return _Root(root)
+
+
+def _fill(base, files):
+    for rel, v in files.items():
+        p = base / rel
+        if rel.endswith("/") or v is None or (isinstance(v, dict) and not v):
+            p.mkdir(parents=True, exist_ok=True)
+        elif isinstance(v, dict):
+            p.mkdir(parents=True, exist_ok=True)
+            _fill(p, v)
+        else:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(v if isinstance(v, bytes) else v.encode("utf-8") if isinstance(v, str) else b"x" * int(v))
 
 
 def run(args, timeout=120):
