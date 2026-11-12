@@ -139,6 +139,44 @@
    "done_when": [
     "tests/test_build.py prints 0 failed"
    ]
+  },
+  {
+   "id": "T07",
+   "title": "Folder paths as people type them",
+   "depends_on": [
+    "T04"
+   ],
+   "files": [
+    "wiztry/scanner.py",
+    "wiztry/cli.py"
+   ],
+   "context": [
+    "tests/test_roots.py",
+    "tests/test_scanner.py",
+    "tests/test_cli.py"
+   ],
+   "tests": "tests/test_roots.py",
+   "minutes": 20,
+   "brief": "Typing C: and scanning must scan the drive, not the folder the program was started from (os.path.abspath(\"C:\") is the current folder on C:).\n- wiztry/scanner.py: add clean_root(path: str) -> str. Strip spaces, then one pair of surrounding double quotes, then spaces again. Nothing left -> return \"\". Turn forward slashes into backslashes. Exactly a drive letter and a colon (\"C:\" or \"c:\") -> that drive's root, upper-case, with the backslash (\"C:\\\\\"). Anything else -> os.path.abspath of it (that also drops a trailing backslash, except on a drive root). It never checks that the folder exists.\n- scan() calls clean_root on its root in place of os.path.abspath, so every caller gets it.\n- wiztry/cli.py: use clean_root in place of os.path.abspath for --scan.\n- Change nothing else: every check in tests/test_scanner.py and tests/test_cli.py must keep passing."
+  },
+  {
+   "id": "T08",
+   "title": "A window that works as opened",
+   "depends_on": [
+    "T05",
+    "T07"
+   ],
+   "files": [
+    "wiztry/app.py"
+   ],
+   "context": [
+    "wiztry/scanner.py",
+    "tests/test_window_use.py",
+    "tests/test_app.py"
+   ],
+   "tests": "tests/test_window_use.py",
+   "minutes": 30,
+   "brief": "Three faults a person hits in the first minute. Fix them in wiztry/app.py and change nothing else about how the window works; every check in tests/test_app.py must keep passing.\n1. Browse does nothing. The code calls tk.filedialog, which does not exist until tkinter.filedialog is imported: add `import tkinter.filedialog` at the top and call tkinter.filedialog.askdirectory(parent=self). Make the method public: browse(). The Browse... button calls it. If the dialog returns \"\" (Cancel), change nothing. Otherwise put clean_root(answer) in self.path_var (the dialog answers with forward slashes; the box shows backslashes) and start the scan at once, the same way the Scan button does.\n2. The Scan button. Take clean_root(self.path_var.get()) (from wiztry.scanner). Empty -> start nothing and set self.status to \"Type a folder or press Browse... first\". Not an existing folder (os.path.isdir) -> start nothing and set self.status to f\"Folder not found: {path}\". Otherwise write the cleaned path back into self.path_var and call start_scan(path).\n3. With no start_path, the path box starts with the system drive's root: os.environ.get(\"SystemDrive\", \"C:\") + \"\\\\\". App(start_path) with a path keeps that path, as now.\n4. The File Types list starts 1 pixel wide because the panes were added to the ttk.PanedWindows without weights. Give them weights: in the vertical one, the top row weight=2 and the treemap weight=3; in the horizontal one, the tree weight=3 and the File Types list weight=1. At 1200x800 the list must be at least 250 px wide, the tree at least 500 px and the wider of the two, the treemap at least 250 px high.\nTo look at sizes yourself, never show the window on the desktop: app.geometry(\"1200x800+-4000+-4000\"), then app.update() for half a second, then read winfo_width()."
   }
  ]
 }

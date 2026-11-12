@@ -1,1 +1,1 @@
-"""WizTry: a portable, read-only disk space analyzer."""
+"""WizTry - portable read-only disk space analyzer."""

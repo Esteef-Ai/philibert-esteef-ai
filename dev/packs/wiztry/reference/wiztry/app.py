@@ -1,24 +1,26 @@
-"""T05: tkinter + ttk window for WizTry."""
+"""WizTry GUI application - tkinter window with treemap, tree view and file-type list."""
+
 import os
 import threading
 import tkinter as tk
-from tkinter import filedialog, ttk
+import tkinter.filedialog
+from tkinter import ttk
 
-from wiztry.scanner import timed_scan, summary
+from wiztry.scanner import Node, clean_root, scan
+from wiztry.filetypes import OTHER, PALETTE, color_map, ext_rows, human
 from wiztry.treemap import layout
-from wiztry.filetypes import color_map, ext_rows, human
 
 
-def bar(pct: float) -> str:
-    """Render pct as 10 block cells (full block, light block) plus the percentage."""
-    full = round(pct / 10)
+def bar(pct):
+    """Return a 10-cell progress bar string for a percentage value."""
+    full = int(round(pct / 10))
     full = max(0, min(10, full))
     light = 10 - full
-    return "\u2588" * full + "\u2591" * light + f" {pct:5.1f}%"
+    return "\u2588" * full + "\u2591" * light + " " + f"{pct:5.1f}%"
 
 
-def shade(color: str, k: float) -> str:
-    """Darken (k < 1) or lighten (k > 1) a hex color."""
+def shade(color, k):
+    """Darken (k < 1) or lighten (k > 1) a hex color string."""
     r = int(color[1:3], 16)
     g = int(color[3:5], 16)
     b = int(color[5:7], 16)
@@ -27,492 +29,496 @@ def shade(color: str, k: float) -> str:
         g = int(g * k)
         b = int(b * k)
     else:
-        r = min(255, int(r + (255 - r) * (k - 1)))
-        g = min(255, int(g + (255 - g) * (k - 1)))
-        b = min(255, int(b + (255 - b) * (k - 1)))
+        r = int(r + (255 - r) * (k - 1))
+        g = int(g + (255 - g) * (k - 1))
+        b = int(b + (255 - b) * (k - 1))
+    r = min(255, max(0, r))
+    g = min(255, max(0, g))
+    b = min(255, max(0, b))
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
-class App(tk.Tk):
-    """The WizTry main window."""
+def _timed_scan(root):
+    """Scan root and return (top, skipped, elapsed_seconds)."""
+    import time
+    start = time.perf_counter()
+    top, skipped = scan(root)
+    elapsed = time.perf_counter() - start
+    return top, skipped, elapsed
 
-    def __init__(self, start_path: str = "") -> None:
-        """Create the App window, optionally starting at start_path."""
+
+def _get_by_ext(top):
+    """Build a by_ext dict from a Node tree."""
+    by_ext = {}
+    _accumulate_ext(top, by_ext)
+    return by_ext
+
+
+def _accumulate_ext(node, by_ext):
+    """Accumulate file sizes and counts by extension."""
+    if not node.is_dir:
+        from wiztry.scanner import ext_of
+        ext = ext_of(node.name)
+        if ext not in by_ext:
+            by_ext[ext] = {"size": 0, "files": 0}
+        by_ext[ext]["size"] += node.size
+        by_ext[ext]["files"] += node.files
+    else:
+        for child in node.children:
+            _accumulate_ext(child, by_ext)
+
+
+class App(tk.Tk):
+    """Main WizTry application window."""
+
+    def __init__(self, start_path=""):
         super().__init__()
         self.title("WizTry")
         self.geometry("1200x800")
 
-        # Try vista theme, fallback to clam
-        try:
-            style = ttk.Style()
-            style.theme_use("vista")
-        except tk.TclError:
-            style = ttk.Style()
-            style.theme_use("clam")
-
-        self.path_var = tk.StringVar(value=start_path)
-        self.status = tk.StringVar(value="")
         self.busy = False
-        self._scan_result = None  # (top, skipped, seconds)
+        self.top = None
+        self.view = None
+        self.nodes = {}
+        self.blocks = {}
+        self.colors = {}
+        self.scan_result = None
+        self.scan_secs = 0.0
 
-        # Toolbar
+        default_path = os.environ.get("SystemDrive", "C:") + "\\"
+        self.path_var = tk.StringVar(value=default_path if not start_path else start_path)
+        self.status = tk.StringVar()
+
+        self._build_toolbar()
+        self._build_panes()
+
+        self._resize_id = None
+
+    def _build_toolbar(self):
+        """Create the toolbar frame with path entry and buttons."""
         toolbar = ttk.Frame(self)
-        toolbar.pack(fill=tk.X, padx=4, pady=4)
+        toolbar.pack(side=tk.TOP, fill=tk.X, padx=4, pady=4)
 
-        path_entry = ttk.Entry(toolbar, textvariable=self.path_var)
-        path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
+        ttk.Entry(toolbar, textvariable=self.path_var).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
 
-        browse_btn = ttk.Button(toolbar, text="Browse...", command=self._browse)
-        browse_btn.pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Button(toolbar, text="Browse...", command=self.browse).pack(side=tk.LEFT, padx=(0, 4))
 
         self.scan_btn = ttk.Button(toolbar, text="Scan", command=self._on_scan)
         self.scan_btn.pack(side=tk.LEFT, padx=(0, 4))
 
-        top_btn = ttk.Button(toolbar, text="Top", command=self.zoom_top)
-        top_btn.pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Button(toolbar, text="Top", command=self.zoom_top).pack(side=tk.LEFT, padx=(0, 4))
 
-        status_label = ttk.Label(toolbar, textvariable=self.status)
-        status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Label(toolbar, textvariable=self.status).pack(side=tk.LEFT, padx=(4, 0))
 
-        # Vertical Panedwindow
-        v_paned = ttk.PanedWindow(self, orient=tk.VERTICAL)
-        v_paned.pack(fill=tk.BOTH, expand=True)
+    def _build_panes(self):
+        """Create the vertical PanedWindow with tree, types and canvas."""
+        self._pw = ttk.PanedWindow(self, orient=tk.VERTICAL)
+        self._pw.pack(fill=tk.BOTH, expand=True)
 
-        # Horizontal paned for tree + types - must be inside a Frame
-        h_frame = ttk.Frame(v_paned)
-        v_paned.add(h_frame, weight=1)
-        h_paned = ttk.PanedWindow(h_frame, orient=tk.HORIZONTAL)
-        h_paned.pack(fill=tk.BOTH, expand=True)
+        self._hp = ttk.PanedWindow(self._pw, orient=tk.HORIZONTAL)
+        self._pw.add(self._hp, weight=1)
 
-        # Tree view
-        tree_col = ttk.Frame(h_paned)
-        tree_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        tree_frame = ttk.Frame(self._hp)
+        self._hp.add(tree_frame, weight=3)
 
-        self.tree = ttk.Treeview(tree_col, columns=("pct", "size", "items", "files", "folders", "modified"),
-                                 show="tree headings")
+        tree_scroll = ttk.Scrollbar(tree_frame)
+        tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.tree = ttk.Treeview(
+            tree_frame,
+            columns=("pct", "size", "items", "files", "folders", "modified"),
+            yscrollcommand=tree_scroll.set,
+            selectmode="extended",
+        )
         self.tree.heading("#0", text="Name")
-        self.tree["columns"] = ("pct", "size", "items", "files", "folders", "modified")
-        self.tree.heading("pct", text="% of Parent")
-        self.tree.heading("size", text="Size")
-        self.tree.heading("items", text="Items")
-        self.tree.heading("files", text="Files")
-        self.tree.heading("folders", text="Folders")
-        self.tree.heading("modified", text="Modified")
-        self.tree.column("pct", width=100, minwidth=60)
-        self.tree.column("size", width=80, minwidth=50)
-        self.tree.column("items", width=60, minwidth=40)
-        self.tree.column("files", width=60, minwidth=40)
-        self.tree.column("folders", width=60, minwidth=40)
-        self.tree.column("modified", width=140, minwidth=80)
+        for col, txt in zip(self.tree["columns"], ("% of Parent", "Size", "Items", "Files", "Folders", "Modified")):
+            self.tree.heading(col, text=txt)
+        self.tree.column("#0", width=180)
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        tree_scroll.config(command=self.tree.yview)
+
         self.tree.bind("<<TreeviewOpen>>", self._on_tree_open)
-        self.tree.bind("<Double-1>", self._on_tree_double)
+        self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         self.tree.bind("<Button-1>", self._on_tree_click)
+        self.tree.bind("<ButtonRelease-1>", self._on_tree_release)
 
-        # Types view
-        types_frame = ttk.Frame(h_paned)
-        types_col = ttk.Frame(types_frame)
-        types_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        types_frame = ttk.Frame(self._hp)
+        self._hp.add(types_frame, weight=1)
 
-        self.types = ttk.Treeview(types_col, columns=("size", "pct", "files"), show="tree headings")
+        types_scroll = ttk.Scrollbar(types_frame)
+        types_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.types = ttk.Treeview(
+            types_frame,
+            columns=("size", "pct", "files"),
+            yscrollcommand=types_scroll.set,
+        )
         self.types.heading("#0", text="Extension")
         self.types.heading("size", text="Size")
         self.types.heading("pct", text="%")
         self.types.heading("files", text="Files")
-        self.types.column("size", width=80, minwidth=50)
-        self.types.column("pct", width=60, minwidth=40)
-        self.types.column("files", width=60, minwidth=40)
+        self.types.column("#0", width=100)
         self.types.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # Canvas for treemap
-        self.canvas = tk.Canvas(self, bg="white", highlightthickness=0)
-        v_paned.add(self.canvas, weight=2)
+        types_scroll.config(command=self.types.yview)
 
-        self.blocks: dict = {}
-        self.top = None
-        self.view = None
-        self.colors: dict = {}
-        self.tooltip_label = None
-        self._resize_id = None
-        self._nodes: dict = {}
+        canvas_frame = ttk.Frame(self._pw)
+        self._pw.add(canvas_frame, weight=3)
 
-        self.canvas.bind("<Motion>", self._on_mouse_move)
+        self.canvas = tk.Canvas(canvas_frame, bg="white", highlightthickness=0)
+        self.canvas.pack(fill=tk.BOTH, expand=True)
+
+        self.canvas.bind("<Motion>", self._on_motion)
         self.canvas.bind("<Button-1>", self._on_canvas_click)
 
-        # Debounced resize handler
-        self.canvas.bind("<Configure>", self._on_resize)
+        self._tooltip_label = None
 
-    def _browse(self) -> None:
-        """Open a folder selection dialog."""
-        path = filedialog.askdirectory(initialdir=self.path_var.get())
-        if path:
-            self.path_var.set(path)
+        self.bind("<Configure>", self._on_resize)
 
-    def start_scan(self, path: str) -> None:
-        """Start a background scan of path."""
+    def browse(self):
+        """Open a folder selection dialog and start scanning the chosen folder."""
+        path = tk.filedialog.askdirectory(parent=self)
+        if path == "":
+            return
+        cleaned = clean_root(path)
+        self.path_var.set(cleaned)
+        self.start_scan(cleaned)
+
+    def _on_scan(self):
+        """Queue a scan of the path in the entry."""
+        path = clean_root(self.path_var.get())
+        if not path:
+            self.status.set("Type a folder or press Browse... first")
+            return
+        if not os.path.isdir(path):
+            self.status.set(f"Folder not found: {path}")
+            return
+        self.path_var.set(path)
+        self.start_scan(path)
+
+    def start_scan(self, path):
+        """Start scanning *path* in a background thread."""
         if self.busy:
             return
         self.busy = True
         self.scan_btn.config(state="disabled")
-        self._scan_result = None
+        self.status.set("Scanning...")
+        self.canvas.delete("all")
+        self.blocks = {}
+        self.tree.delete(*self.tree.get_children())
+        self.scan_result = None
+        self.scan_secs = 0.0
 
         def _worker():
-            top, skipped, seconds = timed_scan(path)
-            self._scan_result = (top, skipped, seconds)
+            top, skipped, secs = _timed_scan(path)
+            self.scan_result = (top, skipped, secs)
 
         threading.Thread(target=_worker, daemon=True).start()
         self._poll_scan()
 
-    def _poll_scan(self) -> None:
-        """Check if background scan has completed, update UI."""
-        if self._scan_result is not None:
-            top, skipped, seconds = self._scan_result
-            self.busy = False
-            self.scan_btn.config(state="normal")
-            self._fill_tree(top)
-            self._fill_types(top)
-            self.draw_treemap(top)
-            total_files = top.files
-            total_folders = top.folders
-            total_size = top.size
-            self.status.set(f"{total_files:,} files, {total_folders:,} folders, {human(total_size)} in {seconds:.1f} s")
+    def _poll_scan(self):
+        """Poll for scan completion and update the UI."""
+        if self.scan_result is None:
+            self.after(10, self._poll_scan)
             return
-        if self.busy:
-            self.status.set("Scanning...")
-        self.after(50, self._poll_scan)
 
-    def _fill_tree(self, top) -> None:
-        """Fill the tree view with the scan results."""
+        top, skipped, secs = self.scan_result
+        self.scan_result = None
+        self.busy = False
+        self.scan_btn.config(state="normal")
+        self.scan_secs = secs
+
         self.top = top
         self.view = top
-        self._nodes = {}
-        # Insert the scanned folder as the single root item
-        root_iid = self.tree.insert("", "end", text=top.name, open=True,
-                                     values=("100.0%", human(top.size), str(top.folders + top.files + 1),
-                                             str(top.files), str(top.folders), ""))
-        self._nodes[root_iid] = top
-        # Populate its children
-        self._populate_children(root_iid, top)
+        self.nodes = {}
 
-    def _populate_children(self, parent: str, node) -> None:
-        """Populate children of parent node in the tree."""
-        for child in node.children:
-            pct = f"{child.size / node.size * 100:.1f}%" if node.size > 0 else "0.0%"
-            iid = self.tree.insert(parent, "end", text=child.name, open=False,
-                                   values=(pct, human(child.size), str(child.folders + child.files + 1),
-                                           str(child.files), str(child.folders), ""))
-            if child.is_dir and child.folders > 0:
-                self.tree.insert(iid, "end", text="")
-            self._nodes[iid] = child
+        by_ext = _get_by_ext(top)
+        self.colors = color_map(by_ext)
 
-    def _fill_types(self, top) -> None:
-        """Fill the types tree view."""
-        self.types.delete(*self.types.get_children(""))
-        s = summary(top, 0, 0)
-        self.colors = color_map(s["by_ext"])
-        rows = ext_rows(s["by_ext"])
-        self._swatches = {}
+        self._fill_tree(top)
+        self._fill_types(by_ext)
+        self.draw_treemap()
+
+        total_files = top.files
+        total_folders = top.folders
+        total_size = top.size
+        self.status.set(f"{total_files:,} files, {total_folders:,} folders, {human(total_size)} in {secs:.1f} s")
+
+    def _fill_tree(self, parent):
+        """Fill tree rows for all children of *parent* node."""
+        if parent is None:
+            return
+
+        # Show top-level root row
+        if parent is self.top and not self.tree.get_children():
+            item = self.tree.insert("", tk.END, text=parent.name, open=True, values=self._row_values(parent))
+            self.nodes[item] = parent
+            for child in parent.children:
+                self._insert_tree_item(item, child)
+        else:
+            for child in parent.children:
+                item = self.tree.insert(parent, tk.END, text=child.name, open=False, values=self._row_values(child))
+                self.nodes[item] = child
+
+    def _insert_tree_item(self, parent, node):
+        """Insert a single tree item for *node* under *parent*."""
+        item = self.tree.insert(parent, tk.END, text=node.name, open=False, values=self._row_values(node))
+        self.nodes[item] = node
+
+    def _row_values(self, node):
+        """Return the tuple of column values for *node*."""
+        total = self.top.size if self.top else 1
+        pct = (node.size / total * 100) if total else 0.0
+        items_count = node.files + node.folders
+        modified = ""
+        if node.mtime:
+            import datetime
+            dt = datetime.datetime.fromtimestamp(node.mtime)
+            modified = dt.strftime("%Y-%m-%d %H:%M")
+        return (f"{pct:.1f}%", human(node.size), str(items_count), str(node.files),
+                str(node.folders) if node.is_dir else "", modified)
+
+    def _fill_types(self, by_ext):
+        """Fill the file-types tree with rows sorted by size descending."""
+        self.types.delete(*self.types.get_children())
+        rows = ext_rows(by_ext)
+        self.colors = color_map(by_ext)
         for row in rows:
             ext = row["ext"]
+            size = row["size"]
+            pct = row["pct"]
+            files = row["files"]
             color = row["color"]
-            img = tk.PhotoImage(width=12, height=12)
-            img.put(color, (0, 0, 11, 11))
-            self.types.insert("", "end", text=ext, values=(human(row["size"]), f"{row['pct']:.1f}%", row["files"]),
-                              image=img)
-            self._swatches[id(img)] = img
 
-    def draw_treemap(self, top) -> None:
-        """Draw the treemap on the canvas."""
+            # Create a 12x12 color swatch image
+            img = tk.PhotoImage(width=12, height=12)
+            img.put(color, (0, 0, 12, 12))
+
+            item = self.types.insert("", tk.END, text=f" {ext}", values=(human(size), f"{pct:.1f}%", str(files)))
+            self.types.set(item, "size", human(size))
+            self.types.set(item, "pct", f"{pct:.1f}")
+            self.types.set(item, "files", str(files))
+            self.types.item(item, image=img)
+            self.types.image = img  # keep reference
+
+    def draw_treemap(self):
+        """Clear the canvas and draw the squarified treemap for self.view."""
         self.canvas.delete("all")
         self.blocks = {}
 
-        canvas_w = self.canvas.winfo_width()
-        canvas_h = self.canvas.winfo_height()
-        if canvas_w < 10 or canvas_h < 10:
-            canvas_w, canvas_h = 800, 300
+        cw = self.canvas.winfo_width()
+        ch = self.canvas.winfo_height()
+        if cw < 10 or ch < 10:
+            cw, ch = 800, 300
 
-        self.view = top
+        if self.view is None:
+            return
+
+        blocks = layout(self.view, 0, 0, cw, ch)
+
+        # Cap at 20000 blocks by raising min_px
         min_px = 3
-        total_files = top.files
-        if total_files > 20000:
-            min_px = max(min_px, total_files // 20000 + 1)
+        if len(blocks) > 20000:
+            blocks = layout(self.view, 0, 0, cw, ch, min_px=5)
+            if len(blocks) > 20000:
+                blocks = layout(self.view, 0, 0, cw, ch, min_px=7)
+                if len(blocks) > 20000:
+                    blocks = layout(self.view, 0, 0, cw, ch, min_px=10)
+                    if len(blocks) > 20000:
+                        blocks = layout(self.view, 0, 0, cw, ch, min_px=15)
 
-        # layout() returns children of the node (not the node itself)
-        laid = layout(top, 0, 0, canvas_w, canvas_h, min_px=min_px)
+        # Separate folders and files
+        folder_items = [(d, child, rect) for child, rect, d in blocks if child.is_dir]
+        file_items = [(d, child, rect) for child, rect, d in blocks if not child.is_dir]
 
-        # Cap at 20,000 files
-        file_count = sum(1 for n, _, _ in laid if not n.is_dir)
-        if file_count > 20000:
-            kept = []
-            fc = 0
-            for n, r, d in laid:
-                if not n.is_dir:
-                    if fc >= 20000:
-                        continue
-                    fc += 1
-                kept.append((n, r, d))
-            laid = kept
-
-        # Build a quick lookup: node -> rect
-        node_rect = {}
-        for n, r, d in laid:
-            if r is not None:
-                node_rect[n] = r
-
-        def draw_node(node, rect):
-            """Draw a single node (folder gray or file block)."""
-            if rect is None:
-                return
-            rx, ry, rw, rh = rect
-            if node.is_dir:
-                # Draw folder gray fill
-                self.canvas.create_rectangle(rx, ry, rx + rw, ry + rh, fill="#c8c8c8", outline="")
-            else:
-                ext = os.path.splitext(node.name)[1].lower()
-                base_color = self.colors.get(ext, "#a0a0a0")
-                outlined = shade(base_color, 0.6)
-                item = self.canvas.create_rectangle(rx, ry, rx + rw, ry + rh, fill=base_color, outline=outlined)
-                self.blocks[item] = node
-                # Draw cushion lines on top of the fill
-                if rw > 4 and rh > 4:
-                    light_color = shade(base_color, 1.45)
-                    dark_color = shade(base_color, 0.75)
-                    self.canvas.create_line(rx, ry, rx + rw, ry, fill=light_color, width=1)
-                    self.canvas.create_line(rx, ry, rx, ry + rh, fill=light_color, width=1)
-                    self.canvas.create_line(rx + rw - 1, ry, rx + rw - 1, ry + rh, fill=dark_color, width=1)
-                    self.canvas.create_line(rx, ry + rh - 1, rx + rw, ry + rh - 1, fill=dark_color, width=1)
-
-        def draw_children(node, rect):
-            """Draw a folder's gray fill, then its file children, then recurse into folder children."""
-            if rect is None:
-                return
-            # Draw folder gray first
-            rx, ry, rw, rh = rect
+        # Draw folder gray fills first (so small files leave gray, not white)
+        for depth, child, (rx, ry, rw, rh) in folder_items:
             self.canvas.create_rectangle(rx, ry, rx + rw, ry + rh, fill="#c8c8c8", outline="")
-            # Draw file children (on top of gray)
-            for child in node.children:
-                if child.size <= 0:
-                    continue
-                child_rect = node_rect.get(child)
-                if child_rect is None:
-                    continue
-                if not child.is_dir:
-                    draw_node(child, child_rect)
-            # Recurse into folder children
-            for child in node.children:
-                if child.is_dir and child.size > 0:
-                    child_rect = node_rect.get(child)
-                    if child_rect is not None:
-                        draw_children(child, child_rect)
 
-        # Draw the top-level children (layout returns children of top, not top itself)
-        for child in top.children:
-            if child.size <= 0:
-                continue
-            child_rect = node_rect.get(child)
-            if child_rect is None:
-                continue
-            if child.is_dir:
-                draw_children(child, child_rect)
-            else:
-                draw_node(child, child_rect)
+        # Draw files on top
+        for depth, child, (rx, ry, rw, rh) in file_items:
+            ext = os.path.splitext(child.name)[1].lower()
+            base_color = self.colors.get(ext, OTHER)
+            outline = shade(base_color, 0.6)
+            rect_item = self.canvas.create_rectangle(rx, ry, rx + rw, ry + rh, fill=base_color, outline=outline)
+            self.blocks[rect_item] = child
 
-        # Draw folder outlines last (on top of everything)
-        for n, r, d in laid:
-            if n.is_dir and r is not None:
-                rx, ry, rw, rh = r
-                self.canvas.create_rectangle(rx, ry, rx + rw, ry + rh, fill="", outline="#707070")
+            # Cushion lines (after the fill, on top)
+            if rw > 4 and rh > 4:
+                light = shade(base_color, 1.45)
+                dark = shade(base_color, 0.75)
+                self.canvas.create_line(rx, ry, rx + rw, ry, fill=light)
+                self.canvas.create_line(rx, ry, rx, ry + rh, fill=light)
+                self.canvas.create_line(rx, ry + rh, rx + rw, ry + rh, fill=dark)
+                self.canvas.create_line(rx + rw, ry, rx + rw, ry + rh, fill=dark)
 
-    def _on_scan(self) -> None:
-        """Handle scan button click."""
-        path = self.path_var.get().strip()
-        if path:
-            self.start_scan(path)
+        # Draw folder outlines on top of everything
+        for depth, child, (rx, ry, rw, rh) in folder_items:
+            self.canvas.create_rectangle(rx, ry, rx + rw, ry + rh, outline="#707070", fill="")
 
-    def _on_tree_open(self, event) -> None:
-        """Handle tree node expansion (lazy load children)."""
-        item = self.tree.focus()
-        if not item:
-            return
-        node = self._nodes.get(item)
-        if not node or not node.is_dir:
-            return
-        children = self.tree.get_children(item)
-        if children and not children[0].strip():
-            self.tree.delete(*children)
-            for child in node.children:
-                if child.is_dir and child.folders > 0:
-                    child_iid = self.tree.insert(item, "end", text=child.name, open=False)
-                    self.tree.insert(child_iid, "end", text="")
-                else:
-                    child_iid = self.tree.insert(item, "end", text=child.name, open=False)
-                self._nodes[child_iid] = child
-
-    def _on_tree_double(self, event) -> None:
-        """Handle double-click on tree node."""
-        item = self.tree.focus()
-        if not item:
-            return
-        node = self._nodes.get(item)
-        if node and node.is_dir:
-            self.zoom(node)
-
-    def _on_tree_click(self, event) -> None:
-        """Handle single click on tree node."""
-        pass
-
-    def _on_mouse_move(self, event) -> None:
-        """Show tooltip on mouse move over canvas."""
-        node = self.node_at(event.x, event.y)
-        if node:
-            tip = f"{node.path}\n{human(node.size)}"
-        else:
-            tip = ""
-
-        if self.tooltip_label is None:
-            self.tooltip_label = tk.Label(self.canvas, text=tip, bg="yellow", fg="black",
-                                          font=("TkDefaultFont", 8), relief="solid", borderwidth=1)
-            self.tooltip_label.place_forget()
-
-        if tip:
-            x = event.x + 15
-            y = event.y - 25
-            cw = self.canvas.winfo_width()
-            ch = self.canvas.winfo_height()
-            if x + 200 > cw:
-                x = event.x - 200
-            if y < 0:
-                y = event.y + 15
-            self.tooltip_label.config(text=tip)
-            self.tooltip_label.place(x=x, y=y)
-        else:
-            self.tooltip_label.place_forget()
-
-    def _on_canvas_click(self, event) -> None:
-        """Handle canvas click - select node in tree."""
-        node = self.node_at(event.x, event.y)
-        if node:
-            self.select_node(node)
-
-    def _on_resize(self, event) -> None:
-        """Handle window resize with debounce."""
-        if self._resize_id:
-            self.after_cancel(self._resize_id)
-        self._resize_id = self.after(150, lambda: self._do_resize(event))
-
-    def _do_resize(self, event) -> None:
-        """Actually perform the resize redraw."""
-        if self.view:
-            self.draw_treemap(self.view)
-        self._resize_id = None
-
-    def node_at(self, x: int, y: int):
-        """Find the file Node under point (x, y), or None."""
-        for item, node in self.blocks.items():
-            coords = self.canvas.coords(item)
-            if coords:
-                rx0, ry0, rx1, ry1 = coords
-                if rx0 <= x <= rx1 and ry0 <= y <= ry1:
-                    return node
+    def node_at(self, x, y):
+        """Return the Node of the file block at point (x, y), or None."""
+        items = self.canvas.find_overlapping(x, y, x, y)
+        for item in items:
+            if item in self.blocks:
+                return self.blocks[item]
         return None
 
-    def tooltip_text_at(self, x: int, y: int) -> str:
-        """Return tooltip text for point (x, y), or empty string."""
+    def tooltip_text_at(self, x, y):
+        """Return tooltip text for point (x, y) or empty string."""
         node = self.node_at(x, y)
-        if node:
-            return f"{node.path}\n{human(node.size)}"
-        return ""
-
-    def select_node(self, node) -> str:
-        """Select node in the tree, return the item id."""
-        # Walk up from node to root, collecting the path
-        path_nodes = []
-        cur = node
-        while cur is not None:
-            path_nodes.append(cur)
-            cur = cur.parent if hasattr(cur, 'parent') else None
-        path_nodes.reverse()
-
-        # Walk down from root, expanding/inserting as needed
-        root_iid = self.tree.get_children("")
-        if not root_iid:
+        if node is None:
             return ""
-        parent_iid = root_iid[0]
+        return f"{node.path}\n{human(node.size)}"
 
-        # The root of the tree is app.top
-        # We need to find each node in the tree structure
-        for i in range(1, len(path_nodes)):  # skip root (app.top)
-            target = path_nodes[i]
-            # Look for the target among parent's children
-            found_iid = None
+    def _on_motion(self, event):
+        """Show tooltip on mouse motion over the canvas."""
+        text = self.tooltip_text_at(event.x, event.y)
+        if self._tooltip_label is None or text == "":
+            if self._tooltip_label is not None:
+                self._tooltip_label.destroy()
+                self._tooltip_label = None
+            return
+        if text:
+            if self._tooltip_label is None:
+                self._tooltip_label = tk.Label(self, text=text, bg="yellow", relief="solid", borderwidth=1,
+                                                 font=("TkDefaultFont", 8))
+            self._tooltip_label.place(x=event.x + 15, y=event.y + 15)
 
-            # First check already-populated children
-            for child_iid in self.tree.get_children(parent_iid):
-                nd = self._nodes.get(child_iid)
-                if nd and nd.path == target.path:
-                    found_iid = child_iid
+    def _on_canvas_click(self, event):
+        """Select the node at the click position."""
+        node = self.node_at(event.x, event.y)
+        if node is not None and not node.is_dir:
+            self.select_node(node)
+
+    def select_node(self, node):
+        """Open parent rows, select and show the row for *node*, return the item id."""
+        # Walk up to find the item ids and build the path
+        path_items = []
+        current = node
+        while current is not None and current.parent is not None:
+            parent = current.parent
+            # Find the tree item for parent
+            parent_iid = None
+            for iid, n in self.nodes.items():
+                if n is parent:
+                    parent_iid = iid
                     break
+            if parent_iid is None:
+                # Parent not in tree - insert it
+                parent_iid = self.tree.insert("", tk.END, text=parent.name, open=False, values=self._row_values(parent))
+                self.nodes[parent_iid] = parent
+            path_items.append((parent_iid, current))
+            current = parent
 
-            if not found_iid and parent_iid in self._nodes:
-                parent_node = self._nodes[parent_iid]
-                # Populate children from the scan tree
-                for child in parent_node.children:
-                    if child.path == target.path:
-                        pct = f"{child.size / parent_node.size * 100:.1f}%" if parent_node.size > 0 else "0.0%"
-                        found_iid = self.tree.insert(parent_iid, "end", text=child.name, open=False,
-                                                     values=(pct, human(child.size), str(child.folders + child.files + 1),
-                                                             str(child.files), str(child.folders), ""))
-                        self._nodes[found_iid] = child
-                        if child.is_dir and child.folders > 0:
-                            self.tree.insert(found_iid, "end", text="")
+        # Open parent rows (fill placeholders)
+        for parent_iid, child_node in reversed(path_items):
+            if not self.tree.item(parent_iid, "open"):
+                self._open_placeholder(parent_iid)
+
+        # Find the item for the node itself
+        target_iid = None
+        for iid, n in self.nodes.items():
+            if n is node:
+                target_iid = iid
+                break
+
+        if target_iid is None:
+            # Node not in tree - insert it under its parent
+            parent_iid = None
+            for iid, n in self.nodes.items():
+                if n is node.parent:
+                    parent_iid = iid
+                    break
+            if parent_iid is None:
+                return None
+            target_iid = self.tree.insert(parent_iid, tk.END, text=node.name, open=False, values=self._row_values(node))
+            self.nodes[target_iid] = node
+
+        self.tree.selection_set(target_iid)
+        self.tree.see(target_iid)
+        self.tree.focus(target_iid)
+        return target_iid
+
+    def _open_placeholder(self, item):
+        """Open a placeholder folder row by inserting its children."""
+        node = self.nodes.get(item)
+        if node is None or not node.is_dir:
+            return
+        if node.children:
+            self.tree.item(item, open=True)
+            for child in node.children:
+                found = False
+                for kid in self.tree.get_children(item):
+                    if self.nodes.get(kid) is child:
+                        found = True
                         break
-                    # Check if child might contain target
-                    if child.is_dir and target.path.startswith(child.path):
-                        pct = f"{child.size / parent_node.size * 100:.1f}%" if parent_node.size > 0 else "0.0%"
-                        found_iid = self.tree.insert(parent_iid, "end", text=child.name, open=False,
-                                                     values=(pct, human(child.size), str(child.folders + child.files + 1),
-                                                             str(child.files), str(child.folders), ""))
-                        self._nodes[found_iid] = child
-                        if child.is_dir and child.folders > 0:
-                            self.tree.insert(found_iid, "end", text="")
-                        break
+                if not found:
+                    kid = self.tree.insert(item, tk.END, text=child.name, open=False,
+                                           values=self._row_values(child))
+                    self.nodes[kid] = child
+            self.tree.item(item, open=True)
 
-            if not found_iid:
-                return ""
-
-            # Expand parent and set children
-            children = self.tree.get_children(parent_iid)
-            if children:
-                self.tree.set_children(parent_iid, *children)
-            self.tree.see(parent_iid)
-            parent_iid = found_iid
-
-        # Select the final item
-        self.tree.selection_set(parent_iid)
-        self.tree.see(parent_iid)
-        return parent_iid
-
-    def zoom(self, node) -> None:
-        """Zoom into a folder node."""
+    def zoom(self, node):
+        """Zoom the treemap to show *node*'s children."""
         self.view = node
-        self.draw_treemap(node)
+        self.canvas.delete("all")
+        self.blocks = {}
+        self.draw_treemap()
 
-    def zoom_top(self) -> None:
-        """Zoom back to the root."""
-        self.view = self.top
-        self.draw_treemap(self.top)
+    def zoom_top(self):
+        """Zoom back to the root view."""
+        if self.top is not None:
+            self.view = self.top
+            self.canvas.delete("all")
+            self.blocks = {}
+            self.draw_treemap()
 
-    @property
-    def nodes(self) -> dict:
-        """Return the node dictionary."""
-        return self._nodes
+    def _on_tree_open(self, event):
+        """Handle tree expansion: fill in children for a folder."""
+        item = self.tree.focus()
+        node = self.nodes.get(item)
+        if node is None or not node.is_dir:
+            return
+        if self.tree.item(item, "open"):
+            return
+        # Insert children
+        for child in node.children:
+            kid = self.tree.insert(item, tk.END, text=child.name, open=False, values=self._row_values(child))
+            self.nodes[kid] = child
+        self.tree.item(item, open=True)
 
-    @nodes.setter
-    def nodes(self, val: dict) -> None:
-        self._nodes = val
+    def _on_tree_select(self, event):
+        """Handle tree selection - only for folders."""
+        pass
+
+    def _on_tree_click(self, event):
+        """Handle single click on tree row - only select, don't change view."""
+        pass
+
+    def _on_tree_release(self, event):
+        """Handle release on tree row - keep view on a folder."""
+        pass
+
+    def _on_resize(self, event):
+        """Debounced window resize handler."""
+        if self._resize_id is not None:
+            self.after_cancel(self._resize_id)
+        self._resize_id = self.after(150, self._do_resize)
+
+    def _do_resize(self):
+        """Actually redraw on resize."""
+        self._resize_id = None
+        if self.view is not None:
+            self.draw_treemap()
 
 
-def main() -> None:
-    """Entry point for the GUI application."""
+def main():
+    """Entry point: create and run the App."""
     app = App()
     app.mainloop()
+
+
+if __name__ == "__main__":
+    main()
