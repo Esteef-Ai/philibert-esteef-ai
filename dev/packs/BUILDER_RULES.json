@@ -1,0 +1,25 @@
+{
+ "about": "Working rules every builder gets, whatever the pack. studio_pack.py adds them to a workspace's plan (conventions) and to the foreman's notes, so they are in every task prompt. Each rule says why: a rule with its reason gets applied to cases it does not name. Keep this short - it is paid for in every prompt. The foreman's own 'How to work' text already covers: read the test first, change only your files, never edit tests, run the tests before finishing.",
+ "all": [
+  "Follow the brief's numbered steps and its algorithm as written. They were tried against every test before you got them; an approach you invent has been tried against nothing. If a step looks wrong or impossible, say which step and why instead of replacing it.",
+  "If no code could satisfy a check (the test calls a helper wrongly, contradicts itself, or needs a file you may not change), stop: name the test, the line and the reason in your reply. Working around it burns the attempt and hides the real fault from the planner.",
+  "When a check fails, find the cause before you edit: print the actual value and read the code that produced it. Never special-case the test's numbers or adjust a result afterwards to match; that passes one check and breaks the next.",
+  "After three edits that leave the same check failing, stop trying variations. Read the brief and the test again from the top: the misunderstanding is usually there, not in the last line you changed.",
+  "Make the smallest change that does the task. Do not rename, reformat or reorganize code the task did not ask about: older tests and later tasks depend on it as it is.",
+  "A loop over the data stays linear: inside it, no sum(), min(), max(), sorted(), list slicing, list copies or pop(0) on that same data. Keep a running total and an index. Real inputs here are hundreds of thousands of items, and one such call makes a second of work into minutes.",
+  "Import every submodule in the file that calls it (`import tkinter.filedialog`, `import os.path`, `import xml.etree.ElementTree`). `import package` alone does not provide `package.sub`; it only seems to when something else imported it first.",
+  "Run Python as `.venv\\Scripts\\python.exe`. The tests are plain scripts that print PASS and FAIL lines: run them as scripts, not with pytest.",
+  "When you run the program to look at what it does, send its output to the system temp folder (a full path under %TEMP%). A bare file name writes into the project folder and fails the attempt.",
+  "Work inside the project folder and leave the machine as it is: no installs, no PATH or settings changes, nothing copied into system folders. A refused shell command is an answer; do not look for another way to do the same thing.",
+  "Before you finish, read your own change (`git diff`): every changed line belongs to this task, and no debug prints, commented-out code or half-done experiment is left."
+ ],
+ "kinds": {
+  "windows-app": [
+   "A feature exists when a person can reach it: for each one, the event must be bound (command=..., .bind(\"<Double-1>\", ...)) to the code. A method that nothing calls is not a feature.",
+   "Slow work (a scan, a pass over the whole result, a big layout) runs in a worker thread that never touches tkinter; it only sets plain attributes that the main thread reads in an after() loop, which also shows a count. Work on the window's thread freezes the window.",
+   "Never put a window, dialog or menu on the person's desktop while you work, and never call anything that waits for a person (mainloop, tk_popup, messagebox, filedialog): the build stalls until the time runs out. To look at a window, keep it off-screen: app.geometry(\"1200x800+-4000+-4000\"), app.update() for half a second, then read winfo_width().",
+   "Tk details that pass tests and fail in use: keep every tk.PhotoImage in a list (an image without a reference shows blank); give the panes of a ttk.PanedWindow weights (without them a pane can start with no width); call mainloop() once, in the entry point.",
+   "Windows paths: \"C:\" alone is the current folder on C:, not the drive (use \"C:\\\"); a file dialog answers with forward slashes; a folder junction is not a symlink to Python (test st_file_attributes & 0x400 before following a folder)."
+  ]
+ }
+}

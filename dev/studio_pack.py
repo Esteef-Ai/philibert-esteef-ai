@@ -9,6 +9,7 @@ where the build stands; .studio/journal.jsonl says who did what.
     python dev/studio_pack.py new <pack> <workspace>                  a fresh workspace, ready to build
     python dev/studio_pack.py build <workspace> [--max-hours 6] [--rounds 1]   the unattended build (YOU launch it)
     python dev/studio_pack.py tweak <workspace> <tweak>               add a tweak (new tasks + their tests) to a built workspace
+    python dev/studio_pack.py rules <workspace>                       add the shared builder rules (packs/BUILDER_RULES.json)
     python dev/studio_pack.py status <workspace>                      rewrite .studio/HANDOFF.md
     python dev/studio_pack.py note <workspace> "<who>" "<what>"       add a line to the journal
 
@@ -304,6 +305,7 @@ def new(pack, ws):
     gi.write_text(have.rstrip() + "".join(f"\n{x}" for x in (".venv/", ".foreman/", "__pycache__/", "*.pyc", "*.spec", ".nd_backups/")
                                           if x not in have) + "\n", encoding="utf-8")
     git(ws, "init", "-q")
+    builder_rules(ws, m)
     journal(ws, "studio_pack", f"workspace made from pack {m['name']}")
     git(ws, "add", "-A")
     git(ws, "commit", "-q", "-m", f"{m['title']}: the plan and its tests, from pack {m['name']}")
@@ -314,6 +316,27 @@ def new(pack, ws):
     git(ws, "add", "-A")
     git(ws, "commit", "-q", "-m", "handoff: nothing built yet")
     print(f"ready: {ws}\nbuild it with:\n  \"{sys.executable}\" \"{Path(__file__).resolve()}\" build \"{ws}\"")
+
+
+def builder_rules(ws, m):
+    """The shared working rules (packs/BUILDER_RULES.json) -> the workspace's plan conventions and the foreman's
+    notes, so every task prompt carries them. Adds only what is missing; returns how many were added."""
+    ws = Path(ws)
+    src = json.loads((PACKS / "BUILDER_RULES.json").read_text(encoding="utf-8"))
+    want = list(src["all"]) + list((src.get("kinds") or {}).get(m.get("kind"), []))
+    plan = json.loads((ws / "plan.json").read_text(encoding="utf-8"))
+    conv = plan.setdefault("conventions", [])
+    add = [r for r in want if r not in conv]
+    if add:
+        conv += add
+        (ws / "plan.json").write_text(json.dumps(plan, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    notes = ws / ".foreman" / "notes" / "10 Conventions.md"      # seeded from the plan once; never rewritten by the foreman
+    if notes.exists():
+        text = notes.read_text(encoding="utf-8")
+        more = [r for r in want if r not in text]
+        if more:
+            notes.write_text(text.rstrip("\n") + "\n" + "".join(f"- {r}\n" for r in more), encoding="utf-8")
+    return len(add)
 
 
 def tweak(ws, name):
@@ -356,11 +379,46 @@ def tweak(ws, name):
         spec = spec.replace(old, new)
     (ws / "SPEC.md").write_text(spec.rstrip("\n") + "\n" + (tw.get("spec_add") or ""), encoding="utf-8")
     (ws / "plan.json").write_text(json.dumps(plan, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    builder_rules(ws, m)
     journal(ws, "studio_pack", f"tweak {tw['name']} added ({', '.join(t['id'] for t in tw['tasks'])}): {tw['title']}", why=tw.get("why"))
     status(ws)
     git(ws, "add", "-A")
     git(ws, "commit", "-q", "-m", f"tweak {tw['name']}: {tw['title']} (tasks and tests, nothing built yet)")
     print(f"added {', '.join(t['id'] for t in tw['tasks'])} to {ws}\nbuild them with:\n  \"{sys.executable}\" \"{Path(__file__).resolve()}\" build \"{ws}\"")
+
+
+def probe_problems(score):
+    """The score, read the way a person would complain: each line is something a user would hit."""
+    out = []
+    kit = score.get("kit") or {}
+    if kit.get("of") and kit.get("score") != kit.get("of"):
+        wrong = [k for k, ok in (kit.get("detail") or {}).items() if not ok]
+        out.append(f"the report on the fixture is wrong in: {', '.join(wrong) or kit.get('error')}")
+    w = score.get("window")
+    if w is None:
+        return out
+    if not w.get("opened"):
+        return out + ["the window did not open: " + str(w.get("error") or "")[-300:]]
+    for e in w.get("errors") or []:
+        out.append(f"a button raised an error (invisible in the exe): {e}")
+    if w.get("filedialog_imported") is False:
+        out.append("the app never imports tkinter.filedialog: its folder dialog cannot work")
+    if not w.get("labels"):
+        out.append("no status text appeared after a scan was started")
+    for i, t in enumerate(w.get("trees") or [], 1):
+        if not t.get("mapped") or t.get("w", 0) < 50 or t.get("h", 0) < 50:
+            out.append(f"list {i} is not visible ({t.get('w')}x{t.get('h')} pixels)")
+        elif not t.get("rows"):
+            out.append(f"list {i} is empty after the scan")
+    for i, c in enumerate(w.get("canvases") or [], 1):
+        if not c.get("mapped") or c.get("w", 0) < 50 or c.get("h", 0) < 50:
+            out.append(f"drawing area {i} is not visible ({c.get('w')}x{c.get('h')} pixels)")
+        elif not c.get("items"):
+            out.append(f"drawing area {i} is empty after the scan")
+    for t, r in (score.get("tests") or {}).items():
+        if not str(r).endswith(", 0 failed") or str(r).startswith("0 passed"):
+            out.append(f"{t}: {r}")
+    return out
 
 
 def status(ws):
@@ -409,6 +467,9 @@ def status(ws):
               f"- Report on the fixture: {(s.get('kit') or {}).get('score')} of {(s.get('kit') or {}).get('of')} {(s.get('kit') or {}).get('detail') or ''}",
               f"- Window: opened={w.get('opened')}, status after a scan={w.get('labels')}, lists={w.get('trees')}, treemap={w.get('canvases')}",
               "- Tests: " + "; ".join(f"{k} {v}" for k, v in (s.get("tests") or {}).items())]
+        found = probe_problems(s)
+        L += ["", "### What the scripted run found wrong" if found else "### The scripted run found nothing wrong (it is not a person: open the app too)"]
+        L += [f"- {x}" for x in found]
     done = st and all((st.get(t["id"]) or {}).get("status") == "passed" for t in plan["tasks"])
     L += ["", "## Next step"]
     if not st:
@@ -522,6 +583,17 @@ def main():
         sys.exit(build(a[1], hours, rounds))
     elif cmd == "tweak":
         tweak(a[1], a[2])
+    elif cmd == "rules":
+        ws = Path(a[1])
+        if git(ws, "status", "--porcelain").stdout.strip():
+            sys.exit("the workspace has uncommitted changes - commit or undo them first")
+        n = builder_rules(ws, json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8")))
+        if n:
+            journal(ws, "studio_pack", f"{n} shared builder rules added to the plan (packs/BUILDER_RULES.json)")
+            status(ws)
+            git(ws, "add", "-A")
+            git(ws, "commit", "-q", "-m", f"plan: {n} shared builder rules")
+        print(f"{n} rules added")
     elif cmd == "status":
         status(a[1])
         print(Path(a[1]) / ".studio" / "HANDOFF.md")

@@ -93,3 +93,40 @@ RTX 5070 Ti 16 GB, Ryzen 7 9800X3D (16 threads), 64 GB RAM (125 GB commit), big 
 | Workspaces | `C:\PCodeTest\wiztryN`; each pack build has `.studio/HANDOFF.md` and `.studio/journal.jsonl` |
 | WizTry fixtures and the first reference | `G:\WIZTRY\fixture`, `fixture_big`, `G:\WIZTRY\foreman` |
 | Foreman, OpenCode worker | `G:\!Ai\ND3\nd_foreman.py`, `opencode_worker.py` |
+
+## What a complete local coding tool still needs (added 2026-11-12)
+Written from what makes Claude Code useful day to day, set against what this project has measured. In the
+order I would build them. Each line says why it is worth it here.
+
+1. **A review pass before a task is accepted.** Today a task is accepted on green tests alone, and three
+   times green tests hid a broken app. A second model pass reads the diff next to the brief and answers
+   fixed questions (is every feature bound to an event, is anything slow on the window's thread, was the
+   brief's algorithm followed, does anything delete or leave the project folder). It cannot fix, only send
+   the task back with a reason. This needs the foreman (the owner's copy), so it is the owner's call.
+2. **The scripted look as a gate, not only a score.** `studio_score.py` already opens the window, presses
+   the buttons and reads sizes and errors; the handoff now lists what it found wrong in words. Next: after
+   every window task, not only at the end, and a finding becomes a task automatically.
+3. **Shared builder rules** (DONE 2026-11-12: `packs/BUILDER_RULES.json`, added to every workspace by
+   `new`, `tweak` and `rules`). Keep it short; add a rule only when a build shows the need, with its reason.
+4. **Plain-words tweaks.** The owner says what is wrong; a model turns that into a measured cause, tests
+   and tasks. Claude does this now. It is the first planning job to hand to a local model, because the app
+   and its tests already exist: the model writes tests against real code, the easy direction.
+5. **Questions before a plan.** A new app starts with the few questions whose answers change the design
+   (who uses it, what must never happen, what size of input). `studio_trial.py` has this stage; packs skip
+   it because Claude asks in chat.
+6. **More kinds of app.** A website, a web app (server and page), a networking tool. Each kind needs its
+   own scripted look: a page loaded headless and its DOM read; a server started and called. `PACK.json`
+   already has an `acceptance` block for this; `studio_score.py` must read it instead of knowing WizTry.
+7. **A quick mode.** One small change to an existing project without a pack: the request, one task, one
+   test written after the change, the same gates. Most day-to-day use of a coding tool is this.
+8. **A second opinion for hard tasks.** The foreman can give a task's last attempt to another model
+   (`alt_model`). With a second machine or card that can be a different, larger model; on one card it
+   costs a model swap, so only for tasks that are already stuck.
+9. **The pack library as the planner's examples.** Each finished pack is a worked example. Finding the
+   most similar one for a new request is a small embedding job (the 4 GB server can do it).
+10. **A look for the owner.** The Studio window: import a pack, watch the build, read the handoff, press
+    "this is wrong" on the running app. Until then the loop runs through chat.
+
+Not worth building: a sandbox stronger than the shell rules (the builder runs Python, which can do anything
+the user can; the answer is the guarded-function rule and a person launching builds), and parallel builders
+on one card (they would only take turns).
