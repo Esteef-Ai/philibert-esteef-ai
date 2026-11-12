@@ -24,12 +24,15 @@ that does not exist yet.
 ### Track 1: useful now (Claude plans, local builds)
 1. DONE 2026-11-12: plan packs. `dev/studio_pack.py` (verify / new / build / status / note), first pack
    `dev/packs/wiztry/`.
-2. NEXT: the clean baseline. `C:\PCodeTest\wiztry11` is laid out and READY. The owner launches:
-   `"C:\Heretic\venv\Scripts\python.exe" "G:\!Ai\Philibert\dev\studio_pack.py" build "C:\PCodeTest\wiztry11"`
-   Then read `C:\PCodeTest\wiztry11\.studio\HANDOFF.md`. This is the first unhelped run of this pack with the
-   restricted builder shell; its result is the ceiling for everything local planners are compared with.
-3. Tweak mode: after a build, follow-up edits through the builder with SPEC.md, plan.json and the handoff as
-   context. Each tweak is a one-task plan with its own test, so the foreman's gates still apply.
+2. DONE 2026-11-12: the clean baseline. `C:\PCodeTest\wiztry11`: 6 of 6 tasks on the first attempt, 32 minutes,
+   no help, report 5 of 5. But the owner found the exe unusable in the first minute (Browse dead, "C:" scanned
+   the wrong folder, File Types list 1 pixel wide): green tests are not a working app. The scorer's probe now
+   catches all three kinds (button errors, pane sizes, a folder picked before Scan).
+3. IN PROGRESS: tweak mode. A tweak is a folder in the pack (`tweaks/<name>/`: tweak.json + tests) holding new
+   tasks; `studio_pack.py tweak <workspace> <name>` adds them to a built workspace and the foreman builds only
+   those, with every old test still guarding. First tweak: `01_usable_window` (T07, T08), applied to wiztry11,
+   waiting for the owner to launch `studio_pack.py build "C:\PCodeTest\wiztry11"`. After it passes: the owner
+   tries the exe again; then fold the tweak into the pack and refresh `reference/`.
 4. Packs for the owner's other app kinds: a website, a web app (server + page), a networking tool. Each new
    kind needs its own acceptance check (a page: load it headless and look at the DOM; a server: start it and
    call it). `studio_score.py` is WizTry-specific today (fixture, expected.json): generalize it from

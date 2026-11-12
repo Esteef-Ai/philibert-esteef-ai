@@ -17,7 +17,7 @@ EXPECTED = Path(r"G:\WIZTRY\kit\expected.json")
 ENV = {**os.environ, "PYTHONIOENCODING": "utf-8"}
 
 PROBE = r'''
-import json, re, runpy, sys, time, tkinter as tk, tkinter.filedialog as fd
+import json, re, runpy, sys, time, tkinter as tk
 from tkinter import ttk
 entry, target, out = sys.argv[1:4]
 result = {"opened": False, "error": None}
@@ -39,7 +39,14 @@ def drive(root, n=0):
     result["opened"] = True
     root.geometry("1100x760+-4000+-4000")
     pump(root, 0.6)
-    fd.askdirectory = lambda *a, **k: target
+    # The probe must not import tkinter.filedialog itself: an app that calls tk.filedialog without importing it
+    # (wiztry11: Browse did nothing) would then work here and nowhere else. Errors in buttons are collected.
+    fdm = sys.modules.get("tkinter.filedialog")
+    result["filedialog_imported"] = fdm is not None
+    if fdm is not None:
+        fdm.askdirectory = lambda *a, **k: target
+    result["errors"] = []
+    root.report_callback_exception = lambda exc, val, tb: result["errors"].append(repr(val)[:300])
     def label_text():
         out = []
         for w in walk(root):

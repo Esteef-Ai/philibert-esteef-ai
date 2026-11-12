@@ -8,6 +8,7 @@ where the build stands; .studio/journal.jsonl says who did what.
     python dev/studio_pack.py verify <pack> [--full] [--mutants 30]   is the pack sound? (minutes, no model)
     python dev/studio_pack.py new <pack> <workspace>                  a fresh workspace, ready to build
     python dev/studio_pack.py build <workspace> [--max-hours 6] [--rounds 1]   the unattended build (YOU launch it)
+    python dev/studio_pack.py tweak <workspace> <tweak>               add a tweak (new tasks + their tests) to a built workspace
     python dev/studio_pack.py status <workspace>                      rewrite .studio/HANDOFF.md
     python dev/studio_pack.py note <workspace> "<who>" "<what>"       add a line to the journal
 
@@ -315,6 +316,35 @@ def new(pack, ws):
     print(f"ready: {ws}\nbuild it with:\n  \"{sys.executable}\" \"{Path(__file__).resolve()}\" build \"{ws}\"")
 
 
+def tweak(ws, name):
+    """Tweak mode: a change to an app that is already built. A tweak is a folder in the pack (tweaks/<name>/:
+    tweak.json + tests/) holding new tasks and the tests that judge them. They are added to the workspace's plan;
+    the foreman keeps finished tasks finished and builds only the new ones, with every old test still guarding."""
+    ws = Path(ws)
+    m = json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8"))
+    td = Path(name) if Path(name).is_dir() else Path(m["pack_dir"]) / "tweaks" / name
+    tw = json.loads((td / "tweak.json").read_text(encoding="utf-8"))
+    if git(ws, "status", "--porcelain").stdout.strip():
+        sys.exit("the workspace has uncommitted changes - commit or undo them first")
+    plan = json.loads((ws / "plan.json").read_text(encoding="utf-8"))
+    have = {t["id"] for t in plan["tasks"]}
+    clash = [t["id"] for t in tw["tasks"] if t["id"] in have]
+    if clash:
+        sys.exit(f"the plan already has {', '.join(clash)} (is this tweak applied already?)")
+    for rel in tw.get("tests") or []:
+        if (ws / rel).exists():
+            sys.exit(f"{rel} already exists in the workspace")
+        text = (td / rel).read_text(encoding="utf-8")
+        (ws / rel).write_text(fill(text, m), encoding="utf-8")
+    plan["tasks"] += tw["tasks"]
+    (ws / "plan.json").write_text(json.dumps(plan, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    journal(ws, "studio_pack", f"tweak {tw['name']} added ({', '.join(t['id'] for t in tw['tasks'])}): {tw['title']}", why=tw.get("why"))
+    status(ws)
+    git(ws, "add", "-A")
+    git(ws, "commit", "-q", "-m", f"tweak {tw['name']}: {tw['title']} (tasks and tests, nothing built yet)")
+    print(f"added {', '.join(t['id'] for t in tw['tasks'])} to {ws}\nbuild them with:\n  \"{sys.executable}\" \"{Path(__file__).resolve()}\" build \"{ws}\"")
+
+
 def status(ws):
     """Rewrite .studio/HANDOFF.md: everything the next agent (or person) needs to carry on, from the disk alone."""
     ws = Path(ws)
@@ -368,6 +398,10 @@ def status(ws):
     elif done:
         L += ["Every task passed. Look at the app itself (run it; the score above is from a scripted run), then record it in "
               "the pack's NOTES.md. If this build is better than the pack's `reference/`, replace that."]
+    elif not stuck:
+        todo = [t["id"] for t in plan["tasks"] if (st.get(t["id"]) or {}).get("status") != "passed"]
+        L += [f"Tasks waiting to be built: {', '.join(todo)}. The user starts the build (agents must not launch unattended builds):", "",
+              f"    {me} build \"{ws}\""]
     else:
         L += ["1. Read the stuck sections above and decide: is the test wrong, the brief unclear, or the task too big?",
               f"2. A wrong test or brief is fixed in the PACK (`{m['pack_dir']}`), with a line in its NOTES.md; then copy the "
@@ -468,6 +502,8 @@ def main():
     elif cmd == "build":
         hours, rounds = float(opt(a, "--max-hours", 6)), int(opt(a, "--rounds", 1))
         sys.exit(build(a[1], hours, rounds))
+    elif cmd == "tweak":
+        tweak(a[1], a[2])
     elif cmd == "status":
         status(a[1])
         print(Path(a[1]) / ".studio" / "HANDOFF.md")

@@ -33,3 +33,12 @@
   dragged). Cause: the panes are added without weights. To fix in the pack: T05's brief must give the two top
   panes weights, and test_app.py must check the list's width on a mapped, off-screen window (it tests a
   withdrawn window today, where nothing has a size).
+
+## 2026-11-12: tweak 01_usable_window (tweaks/01_usable_window/)
+- The owner opened the wiztry11 exe: Browse did nothing; typing C: and pressing Scan scanned the folder the
+  exe was started from. Causes and fixes are in tweak.json ("why"). Two new tasks, T07 and T08, with 33 checks.
+- Lesson for every window pack: the tests must (a) check sizes on a mapped, off-screen window, never a
+  withdrawn one; (b) collect button errors with report_callback_exception; (c) never import a module on the
+  app's behalf before checking the app imported it (tkinter.filedialog).
+- When the tweak has built cleanly: fold it into the pack (T01/T04/T05 briefs, the two test files, a new
+  reference from wiztry11) and run verify.
