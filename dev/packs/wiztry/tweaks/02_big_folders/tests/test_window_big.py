@@ -1,7 +1,9 @@
 """T10: the window never freezes on a big folder: it counts while it scans and shows the result quickly."""
 import re
+import faulthandler
 import time
 
+faulthandler.dump_traceback_later(60, exit=True)      # a layout that hangs must fail fast, not hang the test
 from _t import FIXTURE_BIG, check, finish
 
 try:

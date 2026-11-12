@@ -1,6 +1,8 @@
 """T09: the treemap layout stays fast on folders with hundreds of thousands of files (it once took minutes)."""
+import faulthandler
 import time
 
+faulthandler.dump_traceback_later(60, exit=True)      # a layout that hangs must fail fast, not hang the test
 from _t import check, finish
 
 try:
