@@ -42,3 +42,12 @@
   app's behalf before checking the app imported it (tkinter.filedialog).
 - When the tweak has built cleanly: fold it into the pack (T01/T04/T05 briefs, the two test files, a new
   reference from wiztry11) and run verify.
+
+## 2026-11-12: tweak 01 folded in; tweak 02_big_folders written
+- Tweak 01 built in 3 minutes (T07, T08 first attempt). Folded into the pack: 8 tasks, 152 checks, reference
+  refreshed from wiztry11. The owner confirmed Browse works.
+- The owner then scanned a drive and the window hung. Cause and numbers are in tweaks/02_big_folders/tweak.json.
+  The treemap's squarify, written by the builder in T02, passed every test and was still quadratic and
+  produced slivers at scale: the fixture has 91 files, and nothing tested size. Lesson for every pack: test
+  each algorithm at the size real use will give it, with a time limit.
+- Known and accepted: Tk needs about 0.6 to 0.9 s to paint 8,000 blocks the first time. A pause, not a hang.
