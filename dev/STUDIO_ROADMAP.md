@@ -61,7 +61,7 @@ RTX 5070 Ti 16 GB, Ryzen 7 9800X3D (16 threads), 64 GB RAM (125 GB commit), big 
 | CPU threads | The judge, which needs no model: tests, lint, the planted-bug check (8 at a time), the window probe |
 | The disk | Memory between sprints: packs, reference builds, HANDOFF.md and the journal per workspace, the foreman's lessons, every model reply under `.studio/`. A growing pack library is also the local planner's set of worked examples |
 | Time | Quality. Tests are the judge, so more tries are safe: `build --rounds N` gives stuck tasks fresh attempts. Later: build a task two or three times and keep the best |
-| The second PC | Not used yet. If it has a graphics card it can hold the reviewer so reviews run beside builds; without one it can still be the clean machine for "the exe runs with no Python" |
+| The second PC (EsteefServer, 4 GB card) | Not used yet. 4 GB is too small for a reviewer worth trusting (a 4B model at most). Its jobs: the clean machine for "the exe runs with no Python", and later a small embedding model to find the most similar pack for the planner |
 | A second graphics card (on the shopping list) | The largest single step: the reviewer or planner loaded beside the builder, no more shifts |
 | Claude | The architect, in sprints: writes packs, reads handoffs, fixes wrong tests in the pack. Every sprint leaves the pack better |
 
