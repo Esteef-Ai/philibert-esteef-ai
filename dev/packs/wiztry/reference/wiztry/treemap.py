@@ -35,135 +35,62 @@ def squarify(sizes, x, y, w, h):
 def _squarify_impl(sizes, x, y, w, h):
     """Internal squarified layout for non-zero sizes."""
     result = []
-    remaining = list(sizes)
-    remaining_total = sum(remaining)
+    total = sum(sizes)
+    if total <= 0:
+        return []
+    scale = w * h / total
+    n = len(sizes)
+    i = 0
+    remaining_total = total
 
-    while remaining and remaining_total > 0 and w > 0 and h > 0:
-        # When all remaining items are equal, use a grid layout for better aspect ratios.
-        if len(remaining) >= 4 and _all_equal(remaining):
-            result.extend(_grid_layout(remaining, x, y, w, h))
-            break
-
-        # Try both split directions and pick the one with better worst AR
-        row_h, rem_h = _next_row(list(remaining), remaining_total, h, w)
-        row_v, rem_v = _next_row(list(remaining), remaining_total, w, h)
-
-        worst_h = _worst_ar(row_h, sum(row_h), h, w, remaining_total) if row_h else float('inf')
-        worst_v = _worst_ar(row_v, sum(row_v), w, h, remaining_total) if row_v else float('inf')
-
-        if worst_v <= worst_h:
-            row, remaining = row_v, rem_v
-            row_sum = sum(row)
-            if row_sum == 0:
+    while i < n and remaining_total > 0 and w > 0 and h > 0:
+        side = min(w, h)
+        # row_sum is the area (in pixels) of the row
+        row_sum = sizes[i] * scale
+        lo = row_sum
+        hi = row_sum
+        worst = max(side * side * hi / row_sum ** 2, row_sum ** 2 / (side * side * lo))
+        row = [i]
+        j = i + 1
+        while j < n:
+            new_sum = row_sum + sizes[j] * scale
+            new_lo = min(lo, sizes[j] * scale)
+            new_hi = max(hi, sizes[j] * scale)
+            new_worst = max(side * side * new_hi / new_sum ** 2, new_sum ** 2 / (side * side * new_lo))
+            if new_worst > worst:
                 break
-            row_height = row_sum / remaining_total * h
-            cur_y = y
-            for s in row:
-                rh = s / row_sum * row_height
-                result.append((x, cur_y, w, rh))
-                cur_y += rh
-            y += row_height
-            h -= row_height
+            row.append(j)
+            row_sum = new_sum
+            lo = new_lo
+            hi = new_hi
+            worst = new_worst
+            j += 1
+
+        thick = row_sum / side
+        if w >= h:
+            cur = y
+            for k in row:
+                area = sizes[k] * scale
+                result.append((x, cur, thick, area / thick))
+                cur += area / thick
+            x += thick
+            w -= thick
         else:
-            row, remaining = row_h, rem_h
-            row_sum = sum(row)
-            if row_sum == 0:
-                break
-            row_width = row_sum / remaining_total * w
-            cur_x = x
-            for s in row:
-                rw = s / row_sum * row_width
-                result.append((cur_x, y, rw, h))
-                cur_x += rw
-            x += row_width
-            w -= row_width
+            cur = x
+            for k in row:
+                area = sizes[k] * scale
+                result.append((cur, y, area / thick, thick))
+                cur += area / thick
+            y += thick
+            h -= thick
 
-        remaining_total = sum(remaining)
+        remaining_total -= row_sum / scale
+        i = j
 
     return result
 
 
-def _all_equal(sizes):
-    """Check if all sizes are approximately equal."""
-    if not sizes:
-        return True
-    first = sizes[0]
-    return all(abs(s - first) < 1e-9 * max(abs(first), 1) for s in sizes)
-
-
-def _grid_layout(sizes, x, y, w, h):
-    """Lay out equal-sized items in a grid pattern."""
-    n = len(sizes)
-    # Try all possible grid dimensions and pick the one with best worst AR
-    best_rects = []
-    best_worst_ar = float('inf')
-    for rows in range(1, n + 1):
-        cols = n / rows
-        if abs(cols - round(cols)) > 1e-9:
-            continue
-        cols = int(round(cols))
-        cell_w = w / cols
-        cell_h = h / rows
-        worst = max(max(cell_w / cell_h, cell_h / cell_w) for _ in range(n))
-        if worst < best_worst_ar:
-            best_worst_ar = worst
-            best_rects = []
-            for r in range(rows):
-                for c in range(cols):
-                    best_rects.append((x + c * cell_w, y + r * cell_h, cell_w, cell_h))
-    return best_rects
-
-
-def _next_row(sizes, remaining_total, fixed_dim, box_dim):
-    """Pick the next row using the squarified algorithm.
-
-    Add items while the worst aspect ratio does not get worse.
-    fixed_dim: the dimension that stays constant for all items in this row.
-    box_dim: the box dimension in the split direction.
-    """
-    row = []
-    while sizes:
-        s = sizes[0]
-        test = row + [s]
-        test_sum = sum(test)
-        if row:
-            worst_new = _worst_ar(test, test_sum, fixed_dim, box_dim, remaining_total)
-            worst_old = _worst_ar(row, sum(row), fixed_dim, box_dim, remaining_total)
-            if worst_new > worst_old:
-                break
-            # When worst AR is equal (e.g., equal sizes), stop when the row
-            # aspect ratio starts getting worse (more elongated than square).
-            row_ar_old = _row_ar(sum(row), remaining_total, fixed_dim, box_dim)
-            row_ar_new = _row_ar(test_sum, remaining_total, fixed_dim, box_dim)
-            if row_ar_new > row_ar_old:
-                break
-            # Additional heuristic: stop when the row would be too long
-            # (more than 2x the fixed dimension), to encourage grid layouts.
-            row_dim_new = test_sum / remaining_total * box_dim
-            if row_dim_new > fixed_dim * 2:
-                break
-        row.append(sizes.pop(0))
-    return row, sizes
-
-
-def _row_ar(row_sum, remaining_total, fixed_dim, box_dim):
-    """Return the aspect ratio of the entire row."""
-    row_dim = row_sum / remaining_total * box_dim
-    if row_dim <= 0 or fixed_dim <= 0:
-        return float('inf')
-    return max(row_dim / fixed_dim, fixed_dim / row_dim)
-
-
-def _worst_ar(row, row_sum, fixed_dim, box_dim, remaining_total):
-    """Return the worst (max) aspect ratio for items in a row."""
-    worst = 0.0
-    for s in row:
-        item_dim = s / remaining_total * box_dim
-        if item_dim <= 0 or fixed_dim <= 0:
-            continue
-        ar = max(item_dim / fixed_dim, fixed_dim / item_dim)
-        worst = max(worst, ar)
-    return worst
+MAX_CHILDREN = 4000
 
 
 def layout(node, x, y, w, h, min_px=3, depth=0):
@@ -184,10 +111,44 @@ def layout(node, x, y, w, h, min_px=3, depth=0):
     if w < min_px or h < min_px:
         return result
 
-    sizes = [c.size for c in children]
+    # Filter children that can be seen (need at least min_px x min_px area)
+    need = min_px * min_px * total_size / (w * h)
+    kept = [c for c in children if c.size >= need]
+
+    # Cap at MAX_CHILDREN
+    if len(kept) > MAX_CHILDREN:
+        kept = sorted(kept, key=lambda c: -c.size)[:MAX_CHILDREN]
+
+    if not kept:
+        return result
+
+    # Compute rest: total_size minus the sum of kept sizes
+    kept_total = sum(c.size for c in kept)
+    rest = total_size - kept_total
+
+    # Build list of (child, size) sorted largest first
+    kept_sorted = sorted(kept, key=lambda c: -c.size)
+    sizes = [c.size for c in kept_sorted]
+
+    # Insert rest as one extra entry at the right position
+    if rest > 0:
+        # Find insertion point: before first size smaller than rest
+        ins = 0
+        for s in sizes:
+            if s < rest:
+                break
+            ins += 1
+        sizes.insert(ins, rest)
+
     rects = squarify(sizes, x, y, w, h)
 
-    for child, rect in zip(children, rects):
+    # Determine which rect index corresponds to rest (if inserted)
+    rest_rect_idx = None
+    if rest > 0:
+        rest_rect_idx = ins
+
+    for idx, child in enumerate(kept_sorted):
+        rect = rects[idx]
         if rect is None:
             continue
         rx, ry, rw, rh = rect
@@ -195,7 +156,7 @@ def layout(node, x, y, w, h, min_px=3, depth=0):
             continue
         result.append((child, (rx, ry, rw, rh), depth))
 
-    for child, rect in zip(children, rects):
+    for child, rect in zip(kept_sorted, rects):
         if rect is None:
             continue
         rx, ry, rw, rh = rect

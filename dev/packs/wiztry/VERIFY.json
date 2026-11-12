@@ -1,20 +1,9 @@
 {
- "when": "2026-11-12 13:47",
+ "when": "2026-11-12 18:09",
  "bugs_tried": 30,
- "caught": 17,
+ "caught": 28,
  "not_caught": [
-  "wiztry/treemap.py line 132: Gt -> GtE",
-  "wiztry/treemap.py line 113: Add -> Sub",
-  "wiztry/treemap.py line 194: Lt -> LtE",
-  "wiztry/treemap.py line 138: Gt -> GtE",
-  "wiztry/treemap.py line 41: Gt -> GtE",
-  "wiztry/scanner.py line 8: 1024 -> 1025",
-  "wiztry/filetypes.py line 18: Lt -> LtE",
-  "wiztry/treemap.py line 184: Lt -> LtE",
-  "wiztry/treemap.py line 113: Add -> Sub",
-  "wiztry/filetypes.py line 14: Lt -> LtE",
-  "wiztry/treemap.py line 202: And -> Or",
-  "wiztry/filetypes.py line 14: 1024 -> 1025",
-  "wiztry/treemap.py line 143: 2 -> 3"
+  "wiztry/treemap.py line 134: Gt -> GtE",
+  "wiztry/treemap.py line 111: Lt -> LtE"
  ]
 }

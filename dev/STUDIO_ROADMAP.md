@@ -28,11 +28,16 @@ that does not exist yet.
    no help, report 5 of 5. But the owner found the exe unusable in the first minute (Browse dead, "C:" scanned
    the wrong folder, File Types list 1 pixel wide): green tests are not a working app. The scorer's probe now
    catches all three kinds (button errors, pane sizes, a folder picked before Scan).
-3. IN PROGRESS: tweak mode. A tweak is a folder in the pack (`tweaks/<name>/`: tweak.json + tests) holding new
-   tasks; `studio_pack.py tweak <workspace> <name>` adds them to a built workspace and the foreman builds only
-   those, with every old test still guarding. First tweak: `01_usable_window` (T07, T08), applied to wiztry11,
-   waiting for the owner to launch `studio_pack.py build "C:\PCodeTest\wiztry11"`. After it passes: the owner
-   tries the exe again; then fold the tweak into the pack and refresh `reference/`.
+3. DONE 2026-11-12: tweak mode. A tweak is a folder in the pack (`tweaks/<name>/`: tweak.json + tests) holding
+   new tasks; `studio_pack.py tweak <workspace> <name>` adds them to a built workspace and the foreman builds
+   only those, with every old test still guarding. Two tweaks done on wiztry11 from the owner's reports
+   (01_usable_window: 3 minutes; 02_big_folders: 38 minutes), both folded into the pack: 10 tasks, 181 checks,
+   93% of planted bugs caught. The loop that works: the owner uses the exe and says what is wrong; Claude
+   measures the cause, writes tests that fail for that cause, proves them on a patched scratch copy (each task
+   alone, in order), writes the tasks; the local builder builds; the owner tries again.
+   Rules this taught: test every algorithm at the size real use gives it, with a time limit and a watchdog;
+   window tests use a mapped off-screen window and collect button errors; the scorer and the tests must never
+   import a module on the app's behalf.
 4. Packs for the owner's other app kinds: a website, a web app (server + page), a networking tool. Each new
    kind needs its own acceptance check (a page: load it headless and look at the DOM; a server: start it and
    call it). `studio_score.py` is WizTry-specific today (fixture, expected.json): generalize it from

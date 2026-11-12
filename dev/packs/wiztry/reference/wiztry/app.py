@@ -38,34 +38,13 @@ def shade(color, k):
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
-def _timed_scan(root):
+def _timed_scan(root, progress=None, cancel=None):
     """Scan root and return (top, skipped, elapsed_seconds)."""
     import time
     start = time.perf_counter()
-    top, skipped = scan(root)
+    top, skipped = scan(root, progress, cancel)
     elapsed = time.perf_counter() - start
     return top, skipped, elapsed
-
-
-def _get_by_ext(top):
-    """Build a by_ext dict from a Node tree."""
-    by_ext = {}
-    _accumulate_ext(top, by_ext)
-    return by_ext
-
-
-def _accumulate_ext(node, by_ext):
-    """Accumulate file sizes and counts by extension."""
-    if not node.is_dir:
-        from wiztry.scanner import ext_of
-        ext = ext_of(node.name)
-        if ext not in by_ext:
-            by_ext[ext] = {"size": 0, "files": 0}
-        by_ext[ext]["size"] += node.size
-        by_ext[ext]["files"] += node.files
-    else:
-        for child in node.children:
-            _accumulate_ext(child, by_ext)
 
 
 class App(tk.Tk):
@@ -209,10 +188,16 @@ class App(tk.Tk):
         self.tree.delete(*self.tree.get_children())
         self.scan_result = None
         self.scan_secs = 0.0
+        self.scan_count = 0
+
+        def progress(n):
+            self.scan_count = n
 
         def _worker():
-            top, skipped, secs = _timed_scan(path)
-            self.scan_result = (top, skipped, secs)
+            top, skipped, secs = _timed_scan(path, progress)
+            from wiztry.scanner import summary
+            by_ext = summary(top)["by_ext"]
+            self.scan_result = (top, skipped, secs, by_ext)
 
         threading.Thread(target=_worker, daemon=True).start()
         self._poll_scan()
@@ -220,20 +205,26 @@ class App(tk.Tk):
     def _poll_scan(self):
         """Poll for scan completion and update the UI."""
         if self.scan_result is None:
+            if self.scan_count > 0:
+                self.status.set(f"Scanning... {self.scan_count:,} files")
             self.after(10, self._poll_scan)
             return
 
-        top, skipped, secs = self.scan_result
+        top, skipped, secs, by_ext = self.scan_result
         self.scan_result = None
         self.busy = False
         self.scan_btn.config(state="normal")
         self.scan_secs = secs
 
+        self.show_result(top, skipped, secs, by_ext)
+
+    def show_result(self, top, skipped, secs, by_ext):
+        """Display scan results on the main thread from a tree built in memory."""
         self.top = top
         self.view = top
         self.nodes = {}
+        self.tree.delete(*self.tree.get_children())
 
-        by_ext = _get_by_ext(top)
         self.colors = color_map(by_ext)
 
         self._fill_tree(top)
@@ -282,6 +273,7 @@ class App(tk.Tk):
     def _fill_types(self, by_ext):
         """Fill the file-types tree with rows sorted by size descending."""
         self.types.delete(*self.types.get_children())
+        self.swatches = []
         rows = ext_rows(by_ext)
         self.colors = color_map(by_ext)
         for row in rows:
@@ -294,13 +286,14 @@ class App(tk.Tk):
             # Create a 12x12 color swatch image
             img = tk.PhotoImage(width=12, height=12)
             img.put(color, (0, 0, 12, 12))
+            self.swatches.append(img)
 
             item = self.types.insert("", tk.END, text=f" {ext}", values=(human(size), f"{pct:.1f}%", str(files)))
             self.types.set(item, "size", human(size))
             self.types.set(item, "pct", f"{pct:.1f}")
             self.types.set(item, "files", str(files))
             self.types.item(item, image=img)
-            self.types.image = img  # keep reference
+            self.types.image = img
 
     def draw_treemap(self):
         """Clear the canvas and draw the squarified treemap for self.view."""
@@ -315,18 +308,17 @@ class App(tk.Tk):
         if self.view is None:
             return
 
+        MAX_BLOCKS = 8000
         blocks = layout(self.view, 0, 0, cw, ch)
 
-        # Cap at 20000 blocks by raising min_px
-        min_px = 3
-        if len(blocks) > 20000:
-            blocks = layout(self.view, 0, 0, cw, ch, min_px=5)
-            if len(blocks) > 20000:
-                blocks = layout(self.view, 0, 0, cw, ch, min_px=7)
-                if len(blocks) > 20000:
-                    blocks = layout(self.view, 0, 0, cw, ch, min_px=10)
-                    if len(blocks) > 20000:
-                        blocks = layout(self.view, 0, 0, cw, ch, min_px=15)
+        # Cap file blocks at MAX_BLOCKS by keeping the largest area ones
+        if len(blocks) > MAX_BLOCKS:
+            folder_blocks = [b for b in blocks if b[0].is_dir]
+            file_blocks = [b for b in blocks if not b[0].is_dir]
+            # Keep MAX_BLOCKS largest file blocks by area
+            file_blocks.sort(key=lambda b: b[1][2] * b[1][3], reverse=True)
+            file_blocks = file_blocks[:MAX_BLOCKS]
+            blocks = folder_blocks + file_blocks
 
         # Separate folders and files
         folder_items = [(d, child, rect) for child, rect, d in blocks if child.is_dir]

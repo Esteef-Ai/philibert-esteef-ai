@@ -51,3 +51,14 @@
   produced slivers at scale: the fixture has 91 files, and nothing tested size. Lesson for every pack: test
   each algorithm at the size real use will give it, with a time limit.
 - Known and accepted: Tk needs about 0.6 to 0.9 s to paint 8,000 blocks the first time. A pause, not a hang.
+
+## 2026-11-12: tweak 02 folded in
+- Built on wiztry11 in 38 minutes: T09 on its second attempt (the first failed two checks of its own test),
+  T10 on its first. An earlier launch was stopped: the first cut of the tweak had the block-cap change in
+  T10, so T09 could not pass alone. Lesson, now a rule: prove each task of a tweak alone, in order.
+- Measured on C:\Windows (199,000 files): the status line counts every 2,000 files; longest freeze 1.5 s
+  (was about 7 s); 3,664 file blocks (was 478). The owner tested the exe and asked for the fold.
+- The pack now: 10 tasks, 181 checks, reference = wiztry11 at T10. verify: 28 of 30 planted bugs caught (93%;
+  it was 53% before the two tweaks added tests at real size and on a mapped window).
+- A fresh build from this pack still builds the slow T02 layout first and replaces it in T09. That is the
+  proven path; merging the briefs would be cleaner but is unproven.
