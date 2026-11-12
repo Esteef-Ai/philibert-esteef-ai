@@ -1,0 +1,144 @@
+{
+ "project": "WizTry",
+ "goal": "WizTry is a portable, read-only disk space analyzer in the style of WizTree (diskanalyzer.com): pick a folder, scan it fast, and see where the space went in a folder tree, a file-type list and a squarified treemap. Python 3.11 with tkinter, standard library only in the app; PyInstaller packs it into one dist\\WizTry.exe. It never deletes, moves, renames or writes anything it scans.",
+ "workspace": ".",
+ "model": "opencode/q36c-nd128k",
+ "opencode_think": false,
+ "alt_model": null,
+ "defaults": {
+  "attempts": 3,
+  "minutes": 30
+ },
+ "rules": [
+  "Read-only: the app never deletes, moves, renames or writes any file it scans.",
+  "Standard library only in wiztry/ (tkinter, os, stat, threading, json, argparse, dataclasses, datetime, time). PyInstaller is only for build.bat.",
+  "Names, signatures, return values, column names and exact strings are the ones in the brief and the tests.",
+  "Import between modules as `from wiztry.<module> import <names>`; never copy code from another module.",
+  "Tkinter is only touched from the main thread. A background thread may set plain attributes; the main thread polls them with after()."
+ ],
+ "conventions": [
+  "Python 3.11: type hints on public functions, one-line docstring on every public function and class.",
+  "Four-space indents, double quotes, lines under 120 characters.",
+  "Run a task's test with: .venv\\Scripts\\python.exe tests\\<file>.py (it prints PASS/FAIL lines; the fixture folders are {FIXTURE} and {FIXTURE_BIG}).",
+  "Scratch files and experiments go in the system temp folder, never in the project folder."
+ ],
+ "tasks": [
+  {
+   "id": "T01",
+   "title": "The scanner",
+   "files": [
+    "wiztry/__init__.py",
+    "wiztry/scanner.py"
+   ],
+   "context": [
+    "tests/test_scanner.py"
+   ],
+   "tests": "tests/test_scanner.py",
+   "brief": "Create the package (wiztry/__init__.py with a one-line docstring) and wiztry/scanner.py.\n- REPARSE_POINT = 0x400.\n- @dataclass(eq=False) class Node: name: str, path: str, is_dir: bool, size: int = 0, files: int = 0, folders: int = 0, mtime: float = 0.0, children: list (default empty), parent: Node | None = None (repr=False). A folder's size/files/folders cover everything inside it; a file has files=1.\n- ext_of(name) -> lower-case extension with its dot (os.path.splitext), or \"(none)\".\n- scan(root, progress=None, cancel=None) -> (top Node, skipped). root = os.path.abspath(root); top.name = its last path part. Walk with an explicit stack and os.scandir (never os.walk). For each entry use e.stat(follow_symlinks=False): skip it entirely if st.st_file_attributes & REPARSE_POINT (junctions and symlinks are neither followed nor counted); a folder (stat.S_ISDIR) becomes a Node pushed on the stack; a file becomes a Node with size=st_size, files=1. Set mtime from the stat, and parent. A folder that cannot be opened (OSError) adds 1 to skipped. Call progress(n) every 2,000 files. If cancel() returns true, stop walking. Afterwards add sizes up from the deepest folders to the top (folders count: child folders + their folders), and sort each children list by (-size, lower-case name).\n- summary(top, skipped=0, seconds=0.0) -> dict with root (top.path), total_size, files, folders, skipped, seconds (rounded to 3 places), by_ext (dict sorted by extension: {ext: {\"size\": ..., \"files\": ...}} over every file) and top_level ([{\"name\", \"size\", \"files\", \"folders\"} for each child of top, in children order]).\n- timed_scan(root, progress=None, cancel=None) -> (top, skipped, seconds) using time.perf_counter.\nSpeed matters: the test wants 50,000 files in under 0.6 s and at least 4x faster than os.walk + lstat. The size Windows returns with the directory listing (DirEntry.stat) needs no extra system call.",
+   "done_when": [
+    "tests/test_scanner.py prints 0 failed"
+   ]
+  },
+  {
+   "id": "T02",
+   "title": "The treemap layout",
+   "depends_on": [
+    "T01"
+   ],
+   "files": [
+    "wiztry/treemap.py"
+   ],
+   "context": [
+    "wiztry/scanner.py",
+    "tests/test_treemap.py"
+   ],
+   "tests": "tests/test_treemap.py",
+   "brief": "Pure functions, no drawing, in wiztry/treemap.py.\n- squarify(sizes, x, y, w, h) -> list of (x, y, w, h) or None, one per size in the same order. Sizes come largest first. Zero sizes get None; an empty list or a box with no room gives all None (or []). Use the squarified algorithm (Bruls, Huizing, van Wijk): scale sizes to areas that fill w*h; add items to the current row while the worst aspect ratio does not get worse, then lay the row along the shorter side (rows down the left when w >= h, along the top otherwise) and continue in the space left.\n- layout(node, x, y, w, h, min_px=3, depth=0) -> list of (child, (x, y, w, h), depth) for every child of node with size > 0 whose block is at least min_px in both directions, in children order; after a folder's own entry, recurse into it with the box shrunk by 1 px on each side and depth + 1, when it is more than 2*min_px in both directions.",
+   "done_when": [
+    "tests/test_treemap.py prints 0 failed"
+   ]
+  },
+  {
+   "id": "T03",
+   "title": "File types, colors and sizes",
+   "files": [
+    "wiztry/filetypes.py"
+   ],
+   "context": [
+    "tests/test_filetypes.py"
+   ],
+   "tests": "tests/test_filetypes.py",
+   "brief": "wiztry/filetypes.py:\n- PALETTE: exactly 20 different #rrggbb colors; OTHER = \"#a0a0a0\" (not in the palette).\n- human(n): below 1024 -> \"<n> bytes\"; otherwise divide by 1024 into KB, MB, GB, TB with one decimal (\"1.5 KB\"); TB is the largest unit (\"5000.0 TB\").\n- ext_rows(by_ext) -> list of {\"ext\", \"size\", \"files\", \"pct\", \"color\"} sorted by (-size, ext); pct = share of the total size in percent; the first 20 rows take PALETTE in order, the rest OTHER. An empty dict gives [].\n- color_map(by_ext) -> {ext: color} as ext_rows assigns them.",
+   "done_when": [
+    "tests/test_filetypes.py prints 0 failed"
+   ]
+  },
+  {
+   "id": "T04",
+   "title": "Command-line report",
+   "depends_on": [
+    "T01"
+   ],
+   "files": [
+    "wiztry/cli.py",
+    "WizTry.py"
+   ],
+   "context": [
+    "wiztry/scanner.py",
+    "tests/test_cli.py"
+   ],
+   "tests": "tests/test_cli.py",
+   "brief": "- wiztry/cli.py: main(argv=None) -> int. argparse with --scan (required, a folder) and --json (required, the report file). Run timed_scan, write summary(top, skipped, seconds) as JSON (indent=1, ensure_ascii=False, utf-8). Print nothing. Return 0.\n- WizTry.py at the top of the project: under `if __name__ == \"__main__\":`, if \"--scan\" is in sys.argv, sys.exit(cli main(sys.argv[1:])); otherwise import wiztry.app's main and call it (wiztry.app does not exist yet, so import it only on that path).",
+   "done_when": [
+    "tests/test_cli.py prints 0 failed"
+   ]
+  },
+  {
+   "id": "T05",
+   "title": "The window",
+   "depends_on": [
+    "T01",
+    "T02",
+    "T03",
+    "T04"
+   ],
+   "files": [
+    "wiztry/app.py"
+   ],
+   "context": [
+    "wiztry/scanner.py",
+    "wiztry/treemap.py",
+    "wiztry/filetypes.py",
+    "tests/test_app.py"
+   ],
+   "tests": "tests/test_app.py",
+   "minutes": 45,
+   "brief": "wiztry/app.py, tkinter + ttk, a light Windows look like WizTree (ttk theme \"vista\", falling back to \"clam\"; white panes; selection #cce8ff).\n- bar(pct): round(pct/10) full blocks \\u2588 then light blocks \\u2591 to 10 cells, a space, then f\"{pct:5.1f}%\". shade(color, k): k < 1 darkens (each channel * k, int), k > 1 lightens (v + (255 - v) * (k - 1), int, max 255).\n- class App(tk.Tk) with App(start_path=\"\"): title WizTry, 1200x800. Toolbar: path Entry bound to self.path_var (StringVar, starts with start_path), Browse... (askdirectory), Scan (self.scan_btn), Top (zoom_top), status Label bound to self.status (StringVar).\n- Below, a vertical ttk.Panedwindow: on top a horizontal one with self.tree (ttk.Treeview, columns pct, size, items, files, folders, modified; headings Name, % of Parent, Size, Items, Files, Folders, Modified) and self.types (ttk.Treeview: Extension in #0 with a 12x12 color swatch image, Size, %, Files); at the bottom self.canvas (tk.Canvas, white).\n- start_scan(path): if self.busy return; set busy, disable Scan, run scanner.scan in a threading.Thread that only stores its result (top, skipped, seconds) on self; a main-thread after() loop shows \"Scanning... N files\" and, when the result is there, fills everything, sets busy False and the status to f\"{files:,} files, {folders:,} folders, {human(size)} in {secs:.1f} s\".\n- Tree: one top row for the scanned folder (text = its name), open, showing its children; deeper folders get a placeholder child and fill in on <<TreeviewOpen>>. Row values: bar(% of parent size), human(size), items (files + folders), files, folders (blank for files), modified as %Y-%m-%d %H:%M. Keep self.nodes = {item id: Node}. Double-click a folder row: zoom into it. A single click on a row only selects it: self.view is always a folder (never a file), so a later resize still redraws the treemap.\n- Types: one row per ext_rows() entry (text = \" \" + ext), largest first. self.colors = color_map(summary(...)[\"by_ext\"]).\n- draw_treemap(): clear the canvas and self.blocks; lay out self.view with treemap.layout over the canvas size (800x300 if the canvas is under 10 px, e.g. hidden); folders as an outline rectangle (#707070, no fill); files as a rectangle filled with the extension's color (OTHER if unknown), outline shade(color, 0.6), plus a cushion: a light line along the top-left (shade 1.45) and a dark line along the bottom-right (shade 0.75) when the block is over 4 px - draw the cushion lines AFTER the filled rectangle so they sit on top and show. Before a folder's children, fill the folder's area with a plain #c8c8c8 rectangle (no outline), so files too small to draw leave gray, not white holes (the canvas stays covered). Draw in layout order: a folder's gray goes down BEFORE its own files, so the colored file blocks stay on top and visible - never paint folder fills after the files. Record self.blocks[rectangle item] = file Node. Cap at 20,000 blocks by raising min_px. Redraw on window resize (debounced).\n- node_at(x, y): the file Node of the block under the point, or None. tooltip_text_at(x, y): f\"{node.path}\\n{human(node.size)}\" or \"\". Mouse motion shows that text in a small yellow label near the pointer; click selects the node in the tree.\n- select_node(node): open its parent rows (filling placeholders), select and show its row, return the item id. zoom(node): self.view = node and redraw. zoom_top(): back to self.top. Keep self.top (scanned root) and self.view.\n- main(): App().mainloop().",
+   "done_when": [
+    "tests/test_app.py prints 0 failed",
+    "tests/test_cli.py still passes"
+   ]
+  },
+  {
+   "id": "T06",
+   "title": "The portable exe",
+   "depends_on": [
+    "T04",
+    "T05"
+   ],
+   "files": [
+    "build.bat"
+   ],
+   "context": [
+    "WizTry.py",
+    "tests/test_build.py"
+   ],
+   "tests": "tests/test_build.py",
+   "minutes": 40,
+   "brief": "build.bat at the top of the project: cd to its own folder; use the Python in the WIZTRY_PY environment variable when it is set, else .venv\\Scripts\\python.exe; run `-m PyInstaller --onefile --windowed --name WizTry --noconfirm --clean --distpath dist --workpath build --specpath build WizTry.py`; exit 1 if that fails or dist\\WizTry.exe is missing. .gitignore already ignores dist/ and build/. The test builds it (about a minute), then runs dist\\WizTry.exe --scan on the fixture with no Python on the PATH and checks the report.",
+   "done_when": [
+    "tests/test_build.py prints 0 failed"
+   ]
+  }
+ ]
+}

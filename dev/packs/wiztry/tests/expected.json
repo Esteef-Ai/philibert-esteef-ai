@@ -1,0 +1,97 @@
+{
+ "total_size": 46352483,
+ "files": 91,
+ "folders": 20,
+ "by_ext": {
+  "(none)": {
+   "size": 1500,
+   "files": 2
+  },
+  ".cr2": {
+   "size": 18000003,
+   "files": 3
+  },
+  ".flac": {
+   "size": 9000000,
+   "files": 1
+  },
+  ".jpg": {
+   "size": 6435000,
+   "files": 30
+  },
+  ".json": {
+   "size": 700,
+   "files": 1
+  },
+  ".mp3": {
+   "size": 12500000,
+   "files": 4
+  },
+  ".o": {
+   "size": 210000,
+   "files": 6
+  },
+  ".pdf": {
+   "size": 120000,
+   "files": 1
+  },
+  ".py": {
+   "size": 80780,
+   "files": 40
+  },
+  ".txt": {
+   "size": 4500,
+   "files": 3
+  }
+ },
+ "top_level": [
+  {
+   "name": "photos",
+   "size": 24435003,
+   "files": 33,
+   "folders": 2
+  },
+  {
+   "name": "music",
+   "size": 20500000,
+   "files": 4,
+   "folders": 1
+  },
+  {
+   "name": "unicode ünïcødé",
+   "size": 1000000,
+   "files": 1,
+   "folders": 0
+  },
+  {
+   "name": "code",
+   "size": 290780,
+   "files": 46,
+   "folders": 8
+  },
+  {
+   "name": "docs",
+   "size": 124500,
+   "files": 4,
+   "folders": 1
+  },
+  {
+   "name": "noext",
+   "size": 1500,
+   "files": 2,
+   "folders": 0
+  },
+  {
+   "name": ".config",
+   "size": 700,
+   "files": 1,
+   "folders": 0
+  },
+  {
+   "name": "empty_folder",
+   "size": 0,
+   "files": 0,
+   "folders": 0
+  }
+ ]
+}
