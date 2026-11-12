@@ -33,9 +33,10 @@ CLARIFY = """
 """
 REFEREE = "q36c-nd64k"
 RUNS = [
-    {"n": 8, "ws": ROOT / "wiztry8", "name": "Qwen3.6 35B as planner", "model": "q36c-nd64k", "plan": [], "rest": []},
-    {"n": 9, "ws": ROOT / "wiztry9", "name": "gpt-oss:120b as planner", "model": "gpt-oss:120b",
-     "plan": ["--think", "high", "--ctx", "65536", "--max", "60000"], "rest": ["--think", "medium", "--ctx", "65536", "--max", "40000"]},
+    {"n": 9, "ws": ROOT / "wiztry9", "name": "gpt-oss:120b as planner (resumed: planned 2026-11-11)", "model": "gpt-oss:120b",
+     "plan": ["--think", "high", "--ctx", "65536", "--max", "60000"], "rest": ["--think", "medium", "--ctx", "65536", "--max", "40000"],
+     "resume": True},
+    {"n": 10, "ws": ROOT / "wiztry10", "name": "Qwen3.6 35B as planner", "model": "q36c-nd64k", "plan": [], "rest": []},
 ]
 DRY = "--dry" in sys.argv
 ENV = {**os.environ, "PYTHONIOENCODING": "utf-8"}
@@ -236,38 +237,48 @@ def counts(run):
 
 def build(run):
     ws = run["ws"]
-    results[run["n"]] = {"phase": "setting up"}
-    report()
-    setup(run)
     t0 = time.time()
-
-    results[run["n"]]["phase"] = "planning"
-    report()
-    stage(run, "plan", rest=run["plan"], timeout=7200)
-    commit(ws, "plan v1")
-    for i in (1, 2):
-        stage(run, "review", rest=run["plan"], timeout=7200)
-        commit(ws, f"plan review {i}")
-    if not DRY:
+    if run.get("resume"):                     # planned and tested before: go straight to the build
+        results[run["n"]] = {"phase": "resuming"}
+        report()
         plan = json.loads((ws / "plan.json").read_text(encoding="utf-8"))
         ids = [t["id"] for t in plan["tasks"]]
+        engine0 = plan.get("engine_task") or ids[0]
+        if not DRY:
+            sh([sys.executable, FOREMAN, "retry", ws / "plan.json", engine0], Path(FOREMAN).parent, timeout=120,
+               name=f"foreman retry {engine0}")
     else:
-        ids = ["T01"]
-    stage(run, "tests")
-    commit(ws, "tests")
-    stage(run, "accept")
-    commit(ws, "acceptance tests")
-    stage(run, "lint-tests")
-    stage(run, "review-tests")
-    stage(run, "lint-tests")
-    commit(ws, "tests reviewed")
-    out = stage(run, "check", rest=[], retries=0, model=REFEREE)
-    results[run["n"]]["check"] = out[-1500:]
-    for p in (ws.iterdir() if not DRY else []):   # tests must not leave anything behind in the project
-        if p.name not in (".git", ".studio", ".venv", ".foreman", ".gitignore", "SPEC.md", "plan.json", "tests", "opencode.json"):
-            log(f"removing what a test left behind: {p.name}")
-            shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True)
-    results[run["n"]]["planning_hours"] = round((time.time() - t0) / 3600, 1)
+        results[run["n"]] = {"phase": "setting up"}
+        report()
+        setup(run)
+
+        results[run["n"]]["phase"] = "planning"
+        report()
+        stage(run, "plan", rest=run["plan"], timeout=7200)
+        commit(ws, "plan v1")
+        for i in (1, 2):
+            stage(run, "review", rest=run["plan"], timeout=7200)
+            commit(ws, f"plan review {i}")
+        if not DRY:
+            plan = json.loads((ws / "plan.json").read_text(encoding="utf-8"))
+            ids = [t["id"] for t in plan["tasks"]]
+        else:
+            ids = ["T01"]
+        stage(run, "tests")
+        commit(ws, "tests")
+        stage(run, "accept")
+        commit(ws, "acceptance tests")
+        stage(run, "lint-tests")
+        stage(run, "review-tests")
+        stage(run, "lint-tests")
+        commit(ws, "tests reviewed")
+        out = stage(run, "check", rest=[], retries=0, model=REFEREE)
+        results[run["n"]]["check"] = out[-1500:]
+        for p in (ws.iterdir() if not DRY else []):   # tests must not leave anything behind in the project
+            if p.name not in (".git", ".studio", ".venv", ".foreman", ".gitignore", "SPEC.md", "plan.json", "tests", "opencode.json"):
+                log(f"removing what a test left behind: {p.name}")
+                shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True)
+        results[run["n"]]["planning_hours"] = round((time.time() - t0) / 3600, 1)
 
     results[run["n"]]["phase"] = "building the engine"
     report()
