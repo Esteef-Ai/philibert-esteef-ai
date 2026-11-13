@@ -35,3 +35,11 @@
 The four changed files go to the server's `LacklusterPlus\gateway` (keep a dated `.bak` of each, as the folder
 already does), then restart the service `LacklusterPlusGateway`. `public/index.html` alone takes effect at once,
 but it needs the new routes, so copy `dist` first and restart before the page.
+
+## 2026-11-12/13: built and live
+- The local builder (q36c-nd128k) passed T01 and T02 on the first attempt, 5 minutes in all. Diff read, tests rerun,
+  screenshot compared: nothing to fix. `reference/` is now that build.
+- Deployed to the server on 2026-11-12 (backups end `.bak-20261112-tvlogin`); the owner restarted the gateway and
+  reported it looks good. The base snapshot (`C:\PCodeTest\_bases\lackluster_gateway`) was updated to match the
+  live app, so the NEXT pack for this app starts from the new sign-in. This pack's own "fails on the app as it is
+  today" check no longer holds against that base; it is finished work, kept as a record.

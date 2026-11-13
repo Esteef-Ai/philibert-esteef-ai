@@ -39,8 +39,6 @@ export const config = {
     plexClientIdentifier: process.env.PLEX_CLIENT_IDENTIFIER ??
         'lackluster-plus-gateway-9f3c1a',
     plexProduct: 'Lackluster Plus+',
-    // Where Plex's sign-in services live. Only ever changed by the tests,
-    // which point both at a local stand-in so no test talks to the real Plex.
     plexTvUrl: (process.env.PLEX_TV_URL ?? 'https://plex.tv').replace(/\/+$/, ''),
     plexAuthAppUrl: process.env.PLEX_AUTH_APP_URL ?? 'https://app.plex.tv/auth/',
 };

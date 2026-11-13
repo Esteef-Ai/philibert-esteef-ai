@@ -11,16 +11,13 @@ function plexHeaders(extra = {}) {
 }
 /**
  * Step 1 of the "Sign in with Plex" flow: ask plex.tv for a fresh PIN.
- *
- * opts.strong === false asks for a SHORT pin: a 4-character code a person
- * types at plex.tv/link on any other device (how TVs sign in; no popup, no
- * typing a password with a remote). Otherwise the pin is a strong one, for
- * Plex's own sign-in page; opts.forwardUrl is where that page sends the
- * browser back to when the person is done.
+ * The viewer is sent to the returned auth URL (in a new tab/window) to log
+ * in with their own Plex account. We poll `pollPin` afterward until Plex
+ * reports back an auth token for this PIN.
  */
 export async function createPin(opts = {}) {
     const strong = opts.strong !== false;
-    const res = await fetch(`${config.plexTvUrl}/api/v2/pins${strong ? '?strong=true' : ''}`, {
+    const res = await fetch(`${config.plexTvUrl}/api/v2/pins` + (strong ? '?strong=true' : ''), {
         method: 'POST',
         headers: plexHeaders(),
     });
@@ -36,11 +33,6 @@ export async function createPin(opts = {}) {
     }
     return { pin, authUrl };
 }
-/**
- * Where a pin stands: { status: 'ok', authToken } once the person has signed
- * in, { status: 'expired' } when Plex no longer knows the pin (they last 15
- * minutes), { status: 'pending' } until then.
- */
 export async function pollPin(pinId) {
     const res = await fetch(`${config.plexTvUrl}/api/v2/pins/${pinId}`, {
         headers: plexHeaders(),
@@ -52,7 +44,10 @@ export async function pollPin(pinId) {
         throw new Error(`Plex pin poll failed: ${res.status}`);
     }
     const body = (await res.json());
-    return body.authToken ? { status: 'ok', authToken: body.authToken } : { status: 'pending' };
+    if (body.authToken) {
+        return { status: 'ok', authToken: body.authToken };
+    }
+    return { status: 'pending' };
 }
 export async function getPlexUser(authToken) {
     const res = await fetch(`${config.plexTvUrl}/api/v2/user`, {

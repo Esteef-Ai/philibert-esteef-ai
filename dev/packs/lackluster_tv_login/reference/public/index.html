@@ -754,18 +754,7 @@ async function checkAuth(){
   }
 }
 
-// Sign-in never opens a window. Two ways in:
-//   a code   -- the page shows a 4-character code; the person types it at
-//               plex.tv/link on their phone or computer. This is what TVs
-//               use (a TV browser cannot handle a popup, and nobody wants to
-//               type a password with a remote).
-//   same tab -- this tab goes to Plex's sign-in page and Plex sends it back
-//               here (/?signin=return) when the person is done.
-// Either way the page then asks /auth/plex/poll every 2 seconds. The server
-// keeps the pin in a cookie, so the page never handles a pin id.
-let signInTimer = null;
-let codeRenewals = 0;
-const MAX_CODE_RENEWALS = 8; // 8 codes x 15 min: after two hours, wait for a key press
+let signInTimer = null; let codeRenewals = 0;
 
 function isTvBrowser(){
   if(new URLSearchParams(location.search).get('tv') === '1') return true;
@@ -773,12 +762,11 @@ function isTvBrowser(){
 }
 
 function gateStatus(text, isError){
-  const el = document.getElementById('gate-status');
-  el.textContent = text || '';
+  var el = document.getElementById('gate-status');
+  el.textContent = text;
   el.classList.toggle('error', !!isError);
 }
 
-// The code panel and the two buttons are never up together.
 function showCodePanel(on){
   document.getElementById('link-panel').hidden = !on;
   document.getElementById('gate-actions').hidden = on;
@@ -788,7 +776,11 @@ function showCodePanel(on){
 function showGateChoices(){
   clearInterval(signInTimer);
   showCodePanel(false);
-  document.getElementById(isTvBrowser() ? 'btn-code' : 'btn-signin').focus();
+  if(isTvBrowser()){
+    document.getElementById('btn-code').focus();
+  } else {
+    document.getElementById('btn-signin').focus();
+  }
 }
 
 function cancelSignIn(){
@@ -798,19 +790,13 @@ function cancelSignIn(){
 
 function pollSignIn(){
   clearInterval(signInTimer);
-  let attempts = 0;
   signInTimer = setInterval(async () => {
-    attempts++;
-    if(attempts > 900){ // 30 minutes
-      showGateChoices();
-      gateStatus('Sign-in timed out — try again.', true);
+    try {
+      var res = await fetch('/auth/plex/poll');
+      var body = await res.json();
+    } catch(e){
       return;
     }
-    let res, body;
-    try {
-      res = await fetch('/auth/plex/poll');
-      body = await res.json();
-    } catch(e){ return; } // a network blip: try again in 2 seconds
     if(body.status === 'pending') return;
     clearInterval(signInTimer);
     if(body.status === 'ok'){
@@ -818,66 +804,75 @@ function pollSignIn(){
       showCodePanel(false);
       checkAuth();
     } else if(body.status === 'expired'){
-      const onCode = !document.getElementById('link-panel').hidden;
-      if(onCode && codeRenewals < MAX_CODE_RENEWALS){ codeRenewals++; startCodeSignIn(true); }
-      else { showGateChoices(); gateStatus('That sign-in ran out of time — try again.', true); }
+      if(!document.getElementById('link-panel').hidden && codeRenewals < 8){
+        codeRenewals++;
+        startCodeSignIn(true);
+      } else {
+        showGateChoices();
+        gateStatus('That sign-in ran out of time - try again.', true);
+      }
     } else {
       showGateChoices();
-      gateStatus(body.error || 'Sign-in did not work — try again.', true);
+      gateStatus(body.error || 'Sign-in did not work - try again.', true);
     }
   }, 2000);
 }
 
-// A code to type at plex.tv/link on another device.
 async function startCodeSignIn(isRenewal){
   if(isRenewal !== true) codeRenewals = 0;
-  gateStatus('Getting a code…');
+  gateStatus('Getting a code...');
   try {
-    const res = await fetch('/auth/plex/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'link' }) });
-    if(!res.ok) throw new Error('start failed');
-    const info = await res.json();
+    var startRes = await fetch('/auth/plex/start', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({mode:'link'})
+    });
+    if(!startRes.ok) throw new Error('start failed');
+    var info = await startRes.json();
     document.getElementById('link-code').textContent = info.code;
-    document.getElementById('link-url').textContent = String(info.linkUrl || 'https://plex.tv/link').replace(/^https?:\/\//, '');
-    const qr = document.getElementById('link-qr');
+    var urlEl = document.getElementById('link-url');
+    urlEl.textContent = info.linkUrl.replace(/^https?:\/\//, '');
+    var qr = document.getElementById('link-qr');
     qr.hidden = true;
     if(info.qrUrl){
-      qr.onload = () => { qr.hidden = false; };
-      qr.onerror = () => { qr.hidden = true; };
+      qr.onload = function(){ qr.hidden = false; };
+      qr.onerror = function(){ qr.hidden = true; };
       qr.src = info.qrUrl;
     }
     showCodePanel(true);
     document.getElementById('btn-back').focus();
-    gateStatus('Waiting for you to enter the code…');
+    gateStatus('Waiting for you to enter the code...');
     pollSignIn();
   } catch(e){
     showGateChoices();
-    gateStatus('Something went wrong getting a code — try again.', true);
+    gateStatus('Something went wrong getting a code - try again.', true);
   }
 }
 
-// Plex's own sign-in page, in this tab.
 async function startSignIn(){
-  gateStatus('Opening Plex sign-in…');
+  gateStatus('Opening Plex sign-in...');
   try {
-    const res = await fetch('/auth/plex/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'redirect' }) });
-    if(!res.ok) throw new Error('start failed');
-    const info = await res.json();
+    var startRes = await fetch('/auth/plex/start', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({mode:'redirect'})
+    });
+    if(!startRes.ok) throw new Error('start failed');
+    var info = await startRes.json();
     location.assign(info.authUrl);
   } catch(e){
     gateStatus('Something went wrong starting sign-in.', true);
   }
 }
 
-// Called once the page knows nobody is signed in.
 function startGate(){
-  const params = new URLSearchParams(location.search);
+  var params = new URLSearchParams(location.search);
   if(params.get('signin') === 'return'){
-    // Back from Plex's sign-in page: tidy the address, then finish.
     params.delete('signin');
-    const q = params.toString();
+    var q = params.toString();
     history.replaceState(null, '', location.pathname + (q ? '?' + q : ''));
     document.getElementById('gate-actions').hidden = true;
-    gateStatus('Finishing sign-in…');
+    gateStatus('Finishing sign-in...');
     pollSignIn();
   } else if(isTvBrowser()){
     startCodeSignIn();
