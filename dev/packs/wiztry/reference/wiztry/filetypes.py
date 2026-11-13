@@ -1,12 +1,6 @@
 """File-type helpers: human-readable sizes, per-extension rows and colors."""
 
-PALETTE: list[str] = [
-    "#E63946", "#F1FAEE", "#A8DADC", "#457B9D", "#1D3557",
-    "#F4A261", "#2A9D8F", "#264653", "#E76F51", "#606C38",
-    "#283618", "#DDA15E", "#BC6C25", "#6D6875", "#B5838D",
-    "#6D597A", "#2B624A", "#B07D65", "#588157", "#3A5A61",
-]
-OTHER: str = "#a0a0a0"
+from wiztry.theme import OTHER, PALETTE
 
 
 def human(n: int) -> str:

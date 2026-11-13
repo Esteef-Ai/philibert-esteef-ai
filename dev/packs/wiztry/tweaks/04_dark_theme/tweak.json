@@ -4,22 +4,39 @@
  "why": "Owner, 2026-11-12, after using the tweak 03 exe: it works well (delete, zoom, folder path); the menu bars and color schemes could look nicer; 'I typically like dark theme'; take the style from the vault notes on Philibert and the Daily Bread shirts. What the notes say: Philibert Setup is dark navy (#0f172a, panels #111d36) with ONE accent, cyan #00e5ff, and pink #ff2e88 as a rare second; Coma Toast / Daily Bread shirts are near-black with the same cyan and pink; the UI house style note asks for one surface color and one accent used sparingly, depth from shades of the surface, three type roles, real application chrome (toolbar, content, status bar) and visible empty and loading states. Also in this tweak: the review of tweak 03's delete code found that fAnyOperationsAborted was declared 1 byte wide, so a cancelled delete could be reported as done; and reading the window code showed the hover tooltip has never appeared (the handler returns before creating it).",
  "proved": "2026-11-12/13: on a scratch copy, in order and each alone: T14 (12 checks), T15 (24 checks), T16 (35 checks); after each, every older test still passes; at the end all 16 test files pass including the exe build. On the wiztry11 build each new test fails for the reasons above. Colors were chosen by calculation: text contrast at least 7 on every surface, every palette color at least 3 against the treemap background and at least 20 apart (Lab) from every other. Whether it LOOKS good cannot be tested: the owner judges the exe.",
  "rules": [
-  ["Import between modules as `from wiztry.<module> import <names>`; never copy code from another module. One exception: wiztry/app.py reaches the tools as `import wiztry.actions as actions` and calls them as actions.trash(...), actions.show_in_explorer(...), so they can be swapped in a test.",
-   "Import between modules as `from wiztry.<module> import <names>`; never copy code from another module. Two exceptions, both in wiztry/app.py: `import wiztry.actions as actions` (called as actions.trash(...), so a test can swap them) and `import wiztry.theme as theme` (used as theme.BG, theme.apply(...))."],
-  ["Standard library only in wiztry/ (tkinter, os, stat, threading, json, argparse, dataclasses, datetime, time, csv, ctypes, subprocess). PyInstaller is only for build.bat.",
-   "Standard library only in wiztry/ (tkinter, os, stat, threading, json, argparse, dataclasses, datetime, time, csv, ctypes, subprocess). PyInstaller is only for build.bat. Fonts are the ones Windows has (Segoe UI, Consolas): no font files."]
+  [
+   "Import between modules as `from wiztry.<module> import <names>`; never copy code from another module. One exception: wiztry/app.py reaches the tools as `import wiztry.actions as actions` and calls them as actions.trash(...), actions.show_in_explorer(...), so they can be swapped in a test.",
+   "Import between modules as `from wiztry.<module> import <names>`; never copy code from another module. Two exceptions, both in wiztry/app.py: `import wiztry.actions as actions` (called as actions.trash(...), so a test can swap them) and `import wiztry.theme as theme` (used as theme.BG, theme.apply(...))."
+  ],
+  [
+   "Standard library only in wiztry/ (tkinter, os, stat, threading, json, argparse, dataclasses, datetime, time, csv, ctypes, subprocess). PyInstaller is only for build.bat.",
+   "Standard library only in wiztry/ (tkinter, os, stat, threading, json, argparse, dataclasses, datetime, time, csv, ctypes, subprocess). PyInstaller is only for build.bat. Fonts are the ones Windows has (Segoe UI, Consolas): no font files."
+  ]
  ],
  "spec": [],
  "spec_add": "\n## Look (added 2026-11-12)\n- Dark, in the house colors: navy surfaces (#0f172a window, #0a1120 bars and treemap background, #111d36 lists), one accent (cyan #00e5ff) used sparingly, pink #ff2e88 kept for rare marks. Every color has a name in `wiztry/theme.py`; no color is written anywhere else.\n- A toolbar across the top with the name WIZTRY, the path box and the buttons; a status bar across the bottom; a small title above each pane (TREE VIEW, FILE TYPES, TREEMAP); number columns right-aligned.\n- Before a scan the treemap says what to do; while scanning it says Scanning...; hovering a block shows its path and size.\n- File types use a palette of 20 colors that can be told apart on the dark background; folders are a dark fill with a gray outline.\n",
- "tests": ["tests/test_trash_sure.py", "tests/test_theme.py", "tests/test_look.py"],
- "tests_update": ["tests/test_window_big.py"],
+ "tests": [
+  "tests/test_trash_sure.py",
+  "tests/test_theme.py",
+  "tests/test_look.py"
+ ],
+ "tests_update": [
+  "tests/test_window_big.py"
+ ],
  "tasks": [
   {
    "id": "T14",
    "title": "A delete that is sure",
-   "depends_on": ["T12"],
-   "files": ["wiztry/actions.py"],
-   "context": ["tests/test_trash_sure.py", "tests/test_actions.py"],
+   "depends_on": [
+    "T12"
+   ],
+   "files": [
+    "wiztry/actions.py"
+   ],
+   "context": [
+    "tests/test_trash_sure.py",
+    "tests/test_actions.py"
+   ],
    "tests": "tests/test_trash_sure.py",
    "minutes": 25,
    "brief": "trash() can say an item was deleted when Windows did not delete it. Two causes, both in wiztry/actions.py; change nothing else, and every check in tests/test_actions.py must keep passing.\n\n1. The structure is declared wrong. In SHFILEOPSTRUCTW the field fAnyOperationsAborted is a Windows BOOL (4 bytes), not a 1-byte bool: with the 1-byte type it sits at the wrong offset and the program never sees Windows' answer. Add `from ctypes import wintypes` and declare the fields as: hwnd wintypes.HWND, wFunc wintypes.UINT, pFrom wintypes.LPCWSTR, pTo wintypes.LPCWSTR, fFlags ctypes.c_uint16, fAnyOperationsAborted wintypes.BOOL, hNameMappings ctypes.c_void_p, lpszProgressTitle wintypes.LPCWSTR. Keep the class name SHFILEOPSTRUCTW.\n\n2. Split the Windows call out and check the result. Add _recycle(path: str) -> int: it fills the structure (wFunc = FO_DELETE, pFrom = path + \"\\0\", the same four flags as now), calls ctypes.windll.shell32.SHFileOperationW and returns its result code; if the code is 0 but fAnyOperationsAborted is set, return 1223 (cancelled). It is the ONLY place that calls Windows. Then trash(path, root) becomes: why = can_delete(path, root); if why: raise ValueError(why). full = os.path.abspath(path). code = _recycle(full) (call it by that module-level name, so a test can swap it). If code != 0: raise OSError(f\"Windows could not move it to the Recycle Bin (code {code})\"). If os.path.lexists(full): raise OSError(\"Windows reported success but the item is still there\"). Otherwise return None.\n\nThe file still must not contain os.remove, os.unlink, os.rmdir, rmtree, os.rename, os.replace or shutil.move. To try it, delete only inside a folder you made with tempfile.mkdtemp()."
@@ -27,9 +44,17 @@
   {
    "id": "T15",
    "title": "The theme: colors, fonts and styles in one place",
-   "depends_on": ["T03"],
-   "files": ["wiztry/theme.py", "wiztry/filetypes.py"],
-   "context": ["tests/test_theme.py", "tests/test_filetypes.py"],
+   "depends_on": [
+    "T03"
+   ],
+   "files": [
+    "wiztry/theme.py",
+    "wiztry/filetypes.py"
+   ],
+   "context": [
+    "tests/test_theme.py",
+    "tests/test_filetypes.py"
+   ],
    "tests": "tests/test_theme.py",
    "minutes": 35,
    "brief": "A new module wiztry/theme.py holds the whole look, so no color or font is written anywhere else. It imports only ctypes, tkinter and tkinter.ttk. Use EXACTLY these values (they were chosen by calculation: every text color can be read on every surface, and every palette color can be told from every other; a value changed by eye will fail a contrast check).\n\nColors, module constants, lower-case strings:\nDEEP = \"#0a1120\" (toolbar, status bar, entry fields, treemap background); BG = \"#0f172a\" (the window); PANEL = \"#111d36\" (lists); RAISE = \"#162544\" (buttons, list headings, menus, tooltips); LINE = \"#1e3054\" (borders, splitters).\nTEXT = \"#d7e3f4\"; DIM = \"#8ea3c4\"; FAINT = \"#6f86a8\".\nACCENT = \"#00e5ff\"; ACCENT2 = \"#ff2e88\"; SELECT = \"#0d4f68\"; SELECT_TEXT = \"#ffffff\".\nGOOD = \"#22c55e\"; WARN = \"#facc15\"; BAD = \"#ff5c5c\".\nCANVAS = DEEP; FOLDER_FILL = RAISE; FOLDER_LINE = \"#707070\"; OTHER = \"#4b5a78\".\nPALETTE = [\"#38bdf8\", \"#f472b6\", \"#a3e635\", \"#fbbf24\", \"#a78bfa\", \"#34d399\", \"#fb923c\", \"#3b82f6\", \"#f87171\", \"#2dd4bf\", \"#e879f9\", \"#c2410c\", \"#94a3b8\", \"#16a34a\", \"#fda4af\", \"#0e7490\", \"#be185d\", \"#d4a373\", \"#7c3aed\", \"#fef08a\"] (20, in this order; the accents are deliberately not in it).\n\nFonts, tuples: FONT_UI = (\"Segoe UI\", 10); FONT_BRAND = (\"Segoe UI\", 12, \"bold\"); FONT_MONO = (\"Consolas\", 10).\n\napply(root) -> None, safe to call twice: st = ttk.Style(root); st.theme_use(\"clam\") (the Windows themes ignore colors); root.configure(bg=BG); root.option_add(\"*Font\", FONT_UI). Then st.configure / st.map:\n- \".\": background BG, foreground TEXT, fieldbackground DEEP, bordercolor LINE, darkcolor BG, lightcolor BG, troughcolor DEEP, focuscolor ACCENT, font FONT_UI.\n- \"TFrame\": background BG. \"TLabel\": background BG, foreground TEXT.\n- \"Bar.TFrame\": background DEEP. \"Bar.TLabel\": background DEEP, foreground DIM. \"Brand.TLabel\": background DEEP, foreground ACCENT, font FONT_BRAND. \"Title.TLabel\": background BG, foreground FAINT, font (\"Segoe UI\", 8, \"bold\").\n- \"TButton\": background RAISE, foreground TEXT, bordercolor LINE, darkcolor RAISE, lightcolor RAISE, padding (12, 4), relief \"flat\"; map background [(\"disabled\", BG), (\"pressed\", SELECT), (\"active\", LINE)], foreground [(\"disabled\", FAINT)], bordercolor [(\"focus\", ACCENT), (\"active\", ACCENT)].\n- \"TEntry\": fieldbackground DEEP, foreground TEXT, insertcolor ACCENT, bordercolor LINE, darkcolor DEEP, lightcolor DEEP, padding 4; map bordercolor [(\"focus\", ACCENT)].\n- \"Treeview\": background PANEL, fieldbackground PANEL, foreground TEXT, bordercolor LINE, borderwidth 0, rowheight 24, font FONT_UI; map background [(\"selected\", SELECT)], foreground [(\"selected\", SELECT_TEXT)].\n- \"Treeview.Heading\": background RAISE, foreground DIM, bordercolor LINE, darkcolor RAISE, lightcolor RAISE, relief \"flat\", padding (8, 4), font (\"Segoe UI\", 9, \"bold\"); map background [(\"active\", LINE)], foreground [(\"active\", TEXT)].\n- \"TPanedwindow\": background LINE. \"Sash\": sashthickness 5.\n- \"Vertical.TScrollbar\" and \"Horizontal.TScrollbar\": troughcolor DEEP, background RAISE, bordercolor DEEP, darkcolor RAISE, lightcolor RAISE, arrowcolor DIM, relief \"flat\"; map background [(\"active\", LINE)], arrowcolor [(\"active\", ACCENT)].\n\ndark_title_bar(root) -> bool: ask Windows for a dark title bar and say whether it accepted. Inside one try/except that returns False on any error: root.update_idletasks(); hwnd = ctypes.windll.user32.GetParent(root.winfo_id()) or root.winfo_id(); on = ctypes.c_int(1); return ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(on), ctypes.sizeof(on)) == 0.\n\nwiztry/filetypes.py: delete its own PALETTE and OTHER and import them instead: `from wiztry.theme import OTHER, PALETTE`. Nothing else in filetypes.py changes; every check in tests/test_filetypes.py must keep passing.\n\nNever show a window while you work: the test creates a Tk root and withdraws it; do the same."
@@ -37,12 +62,24 @@
   {
    "id": "T16",
    "title": "The window wears the theme",
-   "depends_on": ["T13", "T15"],
-   "files": ["wiztry/app.py"],
-   "context": ["tests/test_look.py", "wiztry/theme.py", "tests/test_app.py", "tests/test_window_use.py", "tests/test_tools.py"],
+   "depends_on": [
+    "T13",
+    "T15"
+   ],
+   "files": [
+    "wiztry/app.py"
+   ],
+   "context": [
+    "tests/test_look.py",
+    "wiztry/theme.py",
+    "tests/test_app.py",
+    "tests/test_window_use.py",
+    "tests/test_tools.py"
+   ],
    "tests": "tests/test_look.py",
    "minutes": 45,
    "brief": "Give the window the dark house look from wiztry/theme.py. Only wiztry/app.py changes, and only how things look and where they sit: every older test must keep passing (tests/test_app.py, test_window_use.py, test_window_big.py, test_tree_path.py, test_tools.py). Add `import wiztry.theme as theme` at the top and take every color and font from it; after this task no color name or #rrggbb value is written in app.py.\n\n1. In __init__, in this order: self.status starts as tk.StringVar(value=\"Ready\"); theme.apply(self) BEFORE any widget is made; build the toolbar; build the status bar; build the panes; theme.dark_title_bar(self); show the empty-state hint (step 6).\n2. Toolbar: ttk.Frame(self, style=\"Bar.TFrame\", padding=(12, 8)) packed side=TOP, fill=X (no outer padx or pady, so it spans the window). In it, left to right: ttk.Label(text=\"WIZTRY\", style=\"Brand.TLabel\"); the path Entry (fill=X, expand=True); the buttons Browse..., Scan (self.scan_btn), Top, Export..., 8 px apart. The status label is no longer in the toolbar.\n3. Status bar: a second ttk.Frame(self, style=\"Bar.TFrame\", padding=(12, 4)) packed side=BOTTOM, fill=X, and packed BEFORE the panes so it keeps its place at the bottom edge. In it ttk.Label(textvariable=self.status, style=\"Bar.TLabel\") at the left.\n4. Pane titles: as the FIRST thing packed in each pane's frame (side=TOP, anchor=\"w\", padx=8, pady=(8, 4)), a ttk.Label with style=\"Title.TLabel\": \"TREE VIEW\" above the tree, \"FILE TYPES\" above the types list, \"TREEMAP\" above the canvas.\n5. Columns: in the tree, \"#0\" and \"pct\" and \"modified\" anchor=\"w\"; \"size\", \"items\", \"files\", \"folders\" anchor=\"e\". In the types list, \"#0\" anchor=\"w\"; \"size\", \"pct\", \"files\" anchor=\"e\".\n6. The canvas: bg=theme.CANVAS. A method show_hint(text): delete everything on the canvas, empty self.blocks, and create ONE text item in the middle (winfo_width()/2, winfo_height()/2) with fill=theme.DIM, font (theme.FONT_UI[0], 12) and tags=\"hint\". Bind the canvas's <Configure> to a handler that moves the item tagged \"hint\" (if there is one) back to the middle: at start-up the canvas is 1 px wide, so without this the hint sits in the corner. At the end of __init__ call self.show_hint(\"Pick a folder, then press Scan\"). In start_scan, where the canvas is cleared now, call self.show_hint(\"Scanning...\") instead. draw_treemap already deletes everything first, so the hint goes when a result is drawn.\n7. Treemap colors: the folder fill \"#c8c8c8\" becomes theme.FOLDER_FILL and the folder outline \"#707070\" becomes theme.FOLDER_LINE. File blocks keep taking their color from self.colors (falling back to OTHER), which now come from the theme through filetypes.\n8. The right-click menu: tk.Menu(self, tearoff=0, bg=theme.RAISE, fg=theme.TEXT, activebackground=theme.SELECT, activeforeground=theme.SELECT_TEXT, bd=0, relief=\"flat\") with the same three commands.\n9. The tooltip has never appeared: the motion handler returns before it creates the label. Rewrite it: text = self.tooltip_text_at(event.x, event.y); if it is empty, destroy the tooltip label (if any) and return. Otherwise create the label once, as a tk.Label child of self.canvas with bg=theme.RAISE, fg=theme.TEXT, relief=\"solid\", borderwidth=1, font (theme.FONT_UI[0], 9), justify=\"left\", padx=6, pady=3; set its text; and place it 16 px right of and below the pointer, pulled back inside the canvas when it would stick out (use winfo_reqwidth and winfo_reqheight). Bind the canvas's <Leave> to a handler that destroys the tooltip.\n\nTo look at the result without showing a window: app.geometry(\"1200x800+-4000+-4000\"), app.update() for half a second, then read sizes and positions (winfo_rootx, winfo_rooty, winfo_width)."
   }
- ]
+ ],
+ "folded_into_pack": "2026-11-13 (tasks T14-T16, the three tests, the rule changes and the spec are in the pack now)"
 }

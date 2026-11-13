@@ -6,6 +6,7 @@ import tkinter as tk
 import tkinter.filedialog
 import tkinter.messagebox
 import wiztry.actions as actions
+import wiztry.theme as theme
 from tkinter import ttk
 
 from wiztry.scanner import Node, clean_root, scan, summary, ext_of
@@ -68,35 +69,50 @@ class App(tk.Tk):
 
         default_path = os.environ.get("SystemDrive", "C:") + "\\"
         self.path_var = tk.StringVar(value=default_path if not start_path else start_path)
-        self.status = tk.StringVar()
+        self.status = tk.StringVar(value="Ready")
 
+        theme.apply(self)
         self._build_toolbar()
+        self._build_status_bar()
         self._build_panes()
+        theme.dark_title_bar(self)
 
-        self.menu = tk.Menu(self, tearoff=0)
+        self.menu = tk.Menu(self, tearoff=0, bg=theme.RAISE, fg=theme.TEXT,
+                            activebackground=theme.SELECT, activeforeground=theme.SELECT_TEXT,
+                            bd=0, relief="flat")
         self.menu.add_command(label="Show in Explorer", command=self.show_in_explorer)
         self.menu.add_command(label="Copy path", command=self.copy_path)
         self.menu.add_command(label="Delete (Recycle Bin)...", command=self.delete_selected)
 
         self._resize_id = None
+        self._tooltip_label = None
+        self.swatches = []
+
+        self.show_hint("Pick a folder, then press Scan")
 
     def _build_toolbar(self):
         """Create the toolbar frame with path entry and buttons."""
-        toolbar = ttk.Frame(self)
-        toolbar.pack(side=tk.TOP, fill=tk.X, padx=4, pady=4)
+        toolbar = ttk.Frame(self, style="Bar.TFrame", padding=(12, 8))
+        toolbar.pack(side=tk.TOP, fill=tk.X)
 
-        ttk.Entry(toolbar, textvariable=self.path_var).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
+        ttk.Label(toolbar, text="WIZTRY", style="Brand.TLabel").pack(side=tk.LEFT, padx=(0, 8))
 
-        ttk.Button(toolbar, text="Browse...", command=self.browse).pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Entry(toolbar, textvariable=self.path_var).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
+
+        ttk.Button(toolbar, text="Browse...", command=self.browse).pack(side=tk.LEFT, padx=(0, 8))
 
         self.scan_btn = ttk.Button(toolbar, text="Scan", command=self._on_scan)
-        self.scan_btn.pack(side=tk.LEFT, padx=(0, 4))
+        self.scan_btn.pack(side=tk.LEFT, padx=(0, 8))
 
-        ttk.Button(toolbar, text="Top", command=self.zoom_top).pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Button(toolbar, text="Top", command=self.zoom_top).pack(side=tk.LEFT, padx=(0, 8))
 
-        ttk.Button(toolbar, text="Export...", command=self.export).pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Button(toolbar, text="Export...", command=self.export).pack(side=tk.LEFT, padx=(0, 8))
 
-        ttk.Label(toolbar, textvariable=self.status).pack(side=tk.LEFT, padx=(4, 0))
+    def _build_status_bar(self):
+        """Create the status bar frame at the bottom of the window."""
+        status_bar = ttk.Frame(self, style="Bar.TFrame", padding=(12, 4))
+        status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+        ttk.Label(status_bar, textvariable=self.status, style="Bar.TLabel").pack(side=tk.LEFT)
 
     def _build_panes(self):
         """Create the vertical PanedWindow with tree, types and canvas."""
@@ -108,6 +124,8 @@ class App(tk.Tk):
 
         tree_frame = ttk.Frame(self._hp)
         self._hp.add(tree_frame, weight=3)
+
+        ttk.Label(tree_frame, text="TREE VIEW", style="Title.TLabel").pack(side=tk.TOP, anchor="w", padx=8, pady=(8, 4))
 
         tree_scroll = ttk.Scrollbar(tree_frame)
         tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
@@ -121,7 +139,10 @@ class App(tk.Tk):
         self.tree.heading("#0", text="Name")
         for col, txt in zip(self.tree["columns"], ("% of Parent", "Size", "Items", "Files", "Folders", "Modified")):
             self.tree.heading(col, text=txt)
-        self.tree.column("#0", width=180)
+        for c in ("#0", "pct", "modified"):
+            self.tree.column(c, anchor="w")
+        for c in ("size", "items", "files", "folders"):
+            self.tree.column(c, anchor="e")
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         tree_scroll.config(command=self.tree.yview)
@@ -137,6 +158,8 @@ class App(tk.Tk):
         types_frame = ttk.Frame(self._hp)
         self._hp.add(types_frame, weight=1)
 
+        ttk.Label(types_frame, text="FILE TYPES", style="Title.TLabel").pack(side=tk.TOP, anchor="w", padx=8, pady=(8, 4))
+
         types_scroll = ttk.Scrollbar(types_frame)
         types_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
@@ -149,7 +172,9 @@ class App(tk.Tk):
         self.types.heading("size", text="Size")
         self.types.heading("pct", text="%")
         self.types.heading("files", text="Files")
-        self.types.column("#0", width=100)
+        self.types.column("#0", anchor="w")
+        for c in ("size", "pct", "files"):
+            self.types.column(c, anchor="e")
         self.types.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         types_scroll.config(command=self.types.yview)
@@ -157,14 +182,16 @@ class App(tk.Tk):
         canvas_frame = ttk.Frame(self._pw)
         self._pw.add(canvas_frame, weight=3)
 
-        self.canvas = tk.Canvas(canvas_frame, bg="white", highlightthickness=0)
+        ttk.Label(canvas_frame, text="TREEMAP", style="Title.TLabel").pack(side=tk.TOP, anchor="w", padx=8, pady=(8, 4))
+
+        self.canvas = tk.Canvas(canvas_frame, bg=theme.CANVAS, highlightthickness=0)
         self.canvas.pack(fill=tk.BOTH, expand=True)
 
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
         self.canvas.bind("<Motion>", self._on_motion)
         self.canvas.bind("<Button-1>", self._on_canvas_click)
         self.canvas.bind("<Button-3>", self._on_canvas_right_click)
-
-        self._tooltip_label = None
+        self.canvas.bind("<Leave>", self._on_canvas_leave)
 
         self.bind("<Configure>", self._on_resize)
 
@@ -196,7 +223,7 @@ class App(tk.Tk):
         self.busy = True
         self.scan_btn.config(state="disabled")
         self.status.set("Scanning...")
-        self.canvas.delete("all")
+        self.show_hint("Scanning...")
         self.blocks = {}
         self.tree.delete(*self.tree.get_children())
         self.scan_result = None
@@ -320,6 +347,40 @@ class App(tk.Tk):
             self.types.item(item, image=img)
             self.types.image = img
 
+    def show_hint(self, text):
+        """Show a centered hint text on the canvas."""
+        self.canvas.delete("all")
+        self.blocks = {}
+        w = self.canvas.winfo_width()
+        h = self.canvas.winfo_height()
+        if w < 10:
+            w = 1
+        if h < 10:
+            h = 1
+        self.canvas.create_text(w / 2, h / 2, text=text,
+                                fill=theme.DIM,
+                                font=(theme.FONT_UI[0], 12),
+                                tags="hint")
+
+    def _on_canvas_configure(self, event):
+        """Move the hint text to the center when the canvas is resized."""
+        w = event.width
+        h = event.height
+        if w < 10:
+            w = 1
+        if h < 10:
+            h = 1
+        items = self.canvas.find_tagged("hint") if hasattr(self.canvas, 'find_tagged') else self.canvas.find_withtag("hint")
+        for item in items:
+            if item and self.canvas.type(item) == "text":
+                self.canvas.coords(item, w / 2, h / 2)
+
+    def _on_canvas_leave(self, event):
+        """Destroy the tooltip when the pointer leaves the canvas."""
+        if self._tooltip_label is not None:
+            self._tooltip_label.destroy()
+            self._tooltip_label = None
+
     def draw_treemap(self):
         """Clear the canvas and draw the squarified treemap for self.view."""
         self.canvas.delete("all")
@@ -351,7 +412,7 @@ class App(tk.Tk):
 
         # Draw folder gray fills first (so small files leave gray, not white)
         for depth, child, (rx, ry, rw, rh) in folder_items:
-            self.canvas.create_rectangle(rx, ry, rx + rw, ry + rh, fill="#c8c8c8", outline="")
+            self.canvas.create_rectangle(rx, ry, rx + rw, ry + rh, fill=theme.FOLDER_FILL, outline="")
 
         # Draw files on top
         for depth, child, (rx, ry, rw, rh) in file_items:
@@ -372,7 +433,7 @@ class App(tk.Tk):
 
         # Draw folder outlines on top of everything
         for depth, child, (rx, ry, rw, rh) in folder_items:
-            self.canvas.create_rectangle(rx, ry, rx + rw, ry + rh, outline="#707070", fill="")
+            self.canvas.create_rectangle(rx, ry, rx + rw, ry + rh, outline=theme.FOLDER_LINE, fill="")
 
     def node_at(self, x, y):
         """Return the Node of the file block at point (x, y), or None."""
@@ -392,16 +453,25 @@ class App(tk.Tk):
     def _on_motion(self, event):
         """Show tooltip on mouse motion over the canvas."""
         text = self.tooltip_text_at(event.x, event.y)
-        if self._tooltip_label is None or text == "":
+        if text == "":
             if self._tooltip_label is not None:
                 self._tooltip_label.destroy()
                 self._tooltip_label = None
             return
-        if text:
-            if self._tooltip_label is None:
-                self._tooltip_label = tk.Label(self, text=text, bg="yellow", relief="solid", borderwidth=1,
-                                                 font=("TkDefaultFont", 8))
-            self._tooltip_label.place(x=event.x + 15, y=event.y + 15)
+        if self._tooltip_label is None:
+            self._tooltip_label = tk.Label(self.canvas, text=text, bg=theme.RAISE, fg=theme.TEXT,
+                                             relief="solid", borderwidth=1,
+                                             font=(theme.FONT_UI[0], 9), justify="left", padx=6, pady=3)
+        self._tooltip_label.place(x=event.x + 16, y=event.y + 16)
+        # Pull back inside canvas if it would stick out
+        tw = self._tooltip_label.winfo_reqwidth()
+        th = self._tooltip_label.winfo_reqheight()
+        cw = self.canvas.winfo_width()
+        ch = self.canvas.winfo_height()
+        if event.x + 16 + tw > cw:
+            self._tooltip_label.place(x=event.x - tw - 16, y=event.y + 16)
+        if event.y + 16 + th > ch:
+            self._tooltip_label.place(x=event.x + 16, y=event.y - th - 16)
 
     def _on_canvas_click(self, event):
         """Select the node at the click position."""

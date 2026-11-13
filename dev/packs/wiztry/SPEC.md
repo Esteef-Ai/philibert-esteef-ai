@@ -38,3 +38,9 @@ The scan is as fast as plain Python goes without admin rights: `os.scandir` with
 - The folder tree always starts at the scanned folder. Every folder with something in it can be opened, level by level. Clicking a block in the treemap opens every folder on the way to that file, selects it and scrolls to it. Double-clicking a folder row zooms the treemap into it.
 - Right-click on a tree row or a treemap block: Show in Explorer, Copy path, Delete (Recycle Bin)... The Delete key does the same as Delete. Delete asks first, refuses the scanned folder itself, drives and anything outside the scanned folder, and afterwards the tree, the file types and the treemap show the new sizes without a new scan.
 - Export... in the toolbar writes the tree as a CSV file: Path, Type, Size, Files, Folders, Modified.
+
+## Look (added 2026-11-12)
+- Dark, in the house colors: navy surfaces (#0f172a window, #0a1120 bars and treemap background, #111d36 lists), one accent (cyan #00e5ff) used sparingly, pink #ff2e88 kept for rare marks. Every color has a name in `wiztry/theme.py`; no color is written anywhere else.
+- A toolbar across the top with the name WIZTRY, the path box and the buttons; a status bar across the bottom; a small title above each pane (TREE VIEW, FILE TYPES, TREEMAP); number columns right-aligned.
+- Before a scan the treemap says what to do; while scanning it says Scanning...; hovering a block shows its path and size.
+- File types use a palette of 20 colors that can be told apart on the dark background; folders are a dark fill with a gray outline.

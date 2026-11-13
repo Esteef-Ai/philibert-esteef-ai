@@ -5,24 +5,60 @@
  "kind": "windows-app",
  "written_by": "Claude (plan and tests, 2026-11-08; tightened 2026-11-09)",
  "entry": "WizTry.py",
- "python": {"version": "3.11", "pip": ["pyinstaller==6.22.3"]},
+ "python": {
+  "version": "3.11",
+  "pip": [
+   "pyinstaller==6.22.3"
+  ]
+ },
  "fill": {
   "FIXTURE": "G:\\WIZTRY\\fixture",
   "FIXTURE_BIG": "G:\\WIZTRY\\fixture_big"
  },
- "fill_in": ["tests/_t.py", "plan.json"],
- "needs": [
-  {"path": "{FIXTURE}", "why": "91 files with known sizes; answers in tests/expected.json",
-   "make": "python G:\\WIZTRY\\kit\\make_fixture.py --small"},
-  {"path": "{FIXTURE_BIG}", "why": "50,000 small files, for the speed checks",
-   "make": "python G:\\WIZTRY\\kit\\make_fixture.py"}
+ "fill_in": [
+  "tests/_t.py",
+  "plan.json"
  ],
- "slow_tests": ["tests/test_build.py"],
- "window_tests": ["tests/test_app.py"],
- "mutation_skip": ["wiztry/app.py", "WizTry.py"],
+ "needs": [
+  {
+   "path": "{FIXTURE}",
+   "why": "91 files with known sizes; answers in tests/expected.json",
+   "make": "python G:\\WIZTRY\\kit\\make_fixture.py --small"
+  },
+  {
+   "path": "{FIXTURE_BIG}",
+   "why": "50,000 small files, for the speed checks",
+   "make": "python G:\\WIZTRY\\kit\\make_fixture.py"
+  }
+ ],
+ "slow_tests": [
+  "tests/test_build.py"
+ ],
+ "window_tests": [
+  "tests/test_app.py",
+  "tests/test_look.py"
+ ],
+ "mutation_skip": [
+  "wiztry/app.py",
+  "WizTry.py"
+ ],
  "acceptance": {
-  "report": {"args": ["--scan", "{FIXTURE}", "--json", "{OUT}"], "expected": "tests/expected.json",
-             "keys": ["total_size", "files", "folders", "by_ext", "top_level"]},
+  "report": {
+   "args": [
+    "--scan",
+    "{FIXTURE}",
+    "--json",
+    "{OUT}"
+   ],
+   "expected": "tests/expected.json",
+   "keys": [
+    "total_size",
+    "files",
+    "folders",
+    "by_ext",
+    "top_level"
+   ]
+  },
   "window": true
  },
  "reference": "reference"

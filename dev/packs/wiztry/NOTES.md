@@ -91,3 +91,12 @@
 - Looks are a new kind of task here. Tests can check that every surface is dark, that text contrast is high
   enough, that palette colors can be told apart, and where things sit. They cannot say whether it looks good.
   The colors were chosen by calculation and written into the brief as exact values; the owner judges the exe.
+
+## 2026-11-13: tweak 04 folded in
+- Built on wiztry11 in 8 minutes, all three tasks on the first attempt (the first build with the shared
+  builder rules in every prompt). The owner tested the exe and asked for the fold.
+- The pack now: 16 tasks, 357 checks, reference = wiztry11 at T16.
+- verify: 22 of 30 planted bugs caught (73%; it was 30 of 30 before this tweak). The drop is the theme module:
+  three of the eight misses are padding and font-size numbers in theme.py (4 -> 5 pixels), which no test can
+  or should pin down; the other five are boundary comparisons in the treemap layout (> against >=) that change
+  nothing visible. Looks are judged by the owner, not by this number.

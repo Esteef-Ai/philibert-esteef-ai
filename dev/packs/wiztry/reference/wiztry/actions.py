@@ -4,8 +4,14 @@ import csv
 import ctypes
 import os
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from wiztry.scanner import Node
+
+try:
+    from ctypes import wintypes
+except ImportError:
+    wintypes = None  # type: ignore[misc, assignment]
 
 # SHFileOperationW flags
 FOF_ALLOWUNDO = 0x0040
@@ -52,15 +58,33 @@ def can_delete(path: str, root: str) -> str:
 class SHFILEOPSTRUCTW(ctypes.Structure):
     """Structure for SHFileOperationW."""
     _fields_ = [
-        ("hwnd", ctypes.c_void_p),
-        ("wFunc", ctypes.c_uint),
-        ("pFrom", ctypes.c_wchar_p),
-        ("pTo", ctypes.c_wchar_p),
+        ("hwnd", wintypes.HWND),
+        ("wFunc", wintypes.UINT),
+        ("pFrom", wintypes.LPCWSTR),
+        ("pTo", wintypes.LPCWSTR),
         ("fFlags", ctypes.c_uint16),
-        ("fAnyOperationsAborted", ctypes.c_bool),
+        ("fAnyOperationsAborted", wintypes.BOOL),
         ("hNameMappings", ctypes.c_void_p),
-        ("lpszProgressTitle", ctypes.c_wchar_p),
+        ("lpszProgressTitle", wintypes.LPCWSTR),
     ]
+
+
+def _recycle(path: str) -> int:
+    """Call SHFileOperationW to recycle a file/folder. Returns the result code."""
+    op = SHFILEOPSTRUCTW()
+    op.hwnd = 0
+    op.wFunc = FO_DELETE
+    op.pFrom = path + "\0\0"
+    op.pTo = "\0"
+    op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI
+    op.fAnyOperationsAborted = False
+    op.hNameMappings = 0
+    op.lpszProgressTitle = None
+
+    result = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
+    if result == 0 and op.fAnyOperationsAborted:
+        return 1223
+    return result
 
 
 def trash(path: str, root: str) -> None:
@@ -69,19 +93,14 @@ def trash(path: str, root: str) -> None:
     if why:
         raise ValueError(why)
 
-    op = SHFILEOPSTRUCTW()
-    op.hwnd = 0
-    op.wFunc = FO_DELETE
-    op.pFrom = os.path.abspath(path) + "\0"
-    op.pTo = "\0"
-    op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI
-    op.fAnyOperationsAborted = False
-    op.hNameMappings = 0
-    op.lpszProgressTitle = None
+    full = os.path.abspath(path)
+    code = _recycle(full)
 
-    result = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
-    if result != 0 or op.fAnyOperationsAborted:
-        raise OSError(f"SHFileOperationW failed: {result}")
+    if code != 0:
+        raise OSError(f"Windows could not move it to the Recycle Bin (code {code})")
+
+    if os.path.lexists(full):
+        raise OSError("Windows reported success but the item is still there")
 
 
 # ---------------------------------------------------------------------------
