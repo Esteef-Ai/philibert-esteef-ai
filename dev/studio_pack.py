@@ -76,8 +76,16 @@ def tests_of(d):
 def lay_out(d, m, dest, reference=False):
     """The pack's files as a workspace gets them (placeholders filled). reference=True adds the good build."""
     dest.mkdir(parents=True, exist_ok=True)
+    if m.get("base"):
+        # An EXISTING app to change, not an empty folder to fill: the workspace starts as a copy of it. The big
+        # folders nobody edits (node_modules) are linked, not copied: a junction costs nothing and git ignores it.
+        base, links = Path(m["base"]), set(m.get("base_links") or [])
+        shutil.copytree(base, dest, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", ".git", *links))
+        for n in links:
+            if (base / n).is_dir() and not (dest / n).exists():
+                subprocess.run(["cmd", "/c", "mklink", "/J", str(dest / n), str(base / n)], capture_output=True, check=True)
     shutil.copytree(d / "tests", dest / "tests", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
-    for n in ("plan.json", "SPEC.md", ".gitignore"):
+    for n in ("plan.json", "SPEC.md", ".gitignore", ".gitattributes"):
         if (d / n).is_file():
             shutil.copy(d / n, dest / n)
     for rel in m.get("fill_in") or []:
@@ -193,9 +201,9 @@ def verify(pack, full=False, n_mutants=30):
         for t in tests:
             for p in T.static_problems(empty, t):
                 bad.append(f"{t}: {p}")
-        print("\n1. On an empty project (every test must fail):")
+        print("\n1. On " + ("the app as it is today" if m.get("base") else "an empty project") + " (every test must fail):")
         for t in fast:
-            p, f, ok, _ = run_test(py, empty, t, 120)
+            p, f, ok, _ = run_test(py, empty, t, 300)
             print(f"   {t:34} {'fails, as it must' if not ok else 'PASSES ON NOTHING'}")
             if ok:
                 bad.append(f"{t} passes on an empty project: it checks nothing")
@@ -238,6 +246,9 @@ def mutation(d, m, py, ref, fast, n, scratch):
             continue
         for line, what, src in mutants(f.read_text(encoding="utf-8")):
             pool.append((rel, line, what, src))
+    if not pool:
+        print("\n3. Broken code: not tried (planted bugs are made for Python only; this pack's code is not Python)")
+        return []
     picked = random.Random(11).sample(pool, min(n, len(pool)))
     quick = [t for t in fast if t not in set(m.get("window_tests") or [])]
     print(f"\n3. Broken code ({len(picked)} of {len(pool)} possible small bugs, one at a time; tests: {', '.join(Path(t).name for t in quick)}):")
@@ -548,6 +559,9 @@ def build(ws, max_hours=6.0, rounds=1):
     try:
         if Q.DRY:
             raise RuntimeError("dry run")
+        kind = json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8")).get("kind")
+        if kind != "windows-app":
+            raise RuntimeError(f"studio_score only knows windows apps (this is a {kind}); the tests are the score")
         score = studio_score.score(ws)
         (ws / ".studio" / "score.json").write_text(json.dumps(score, indent=1, ensure_ascii=False), encoding="utf-8")
     except Exception as e:

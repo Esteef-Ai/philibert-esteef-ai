@@ -1,0 +1,36 @@
+{
+ "format": 1,
+ "name": "lackluster_tv_login",
+ "title": "Lackluster Plus+ - a sign-in that works on a TV",
+ "kind": "web-app",
+ "written_by": "Claude (plan and tests, 2026-11-12)",
+ "base": "C:\\PCodeTest\\_bases\\lackluster_gateway",
+ "base_links": [
+  "node_modules"
+ ],
+ "python": {
+  "version": "3.11",
+  "pip": [
+   "requests",
+   "websocket-client"
+  ]
+ },
+ "fill": {},
+ "fill_in": [],
+ "needs": [
+  {
+   "path": "C:\\PCodeTest\\_bases\\lackluster_gateway\\dist\\server.js",
+   "why": "the app as it runs today: a copy of the gateway folder from the server, without its .env",
+   "make": "copy dist, public, node_modules, package.json from the server's LacklusterPlus\\gateway (never .env or gateway-data)"
+  },
+  {
+   "path": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+   "why": "the page tests drive a real browser, headless",
+   "make": "Edge ships with Windows"
+  }
+ ],
+ "slow_tests": [],
+ "window_tests": [],
+ "mutation_skip": [],
+ "reference": "reference"
+}

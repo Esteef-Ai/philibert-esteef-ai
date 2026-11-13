@@ -134,3 +134,12 @@ order I would build them. Each line says why it is worth it here.
 Not worth building: a sandbox stronger than the shell rules (the builder runs Python, which can do anything
 the user can; the answer is the guarded-function rule and a person launching builds), and parallel builders
 on one card (they would only take turns).
+
+## 2026-11-12: second app kind started - an existing web app
+- Pack `lackluster_tv_login`: the first pack for an EXISTING app (PACK.json `base` + `base_links`) and the first that is
+  not Python (a Node gateway and one big HTML page). Kind `web-app` has its own builder rules.
+- Tests drive the real server against a stand-in for Plex, and a real headless browser (Edge over its debugging port).
+- Workspace `C:\PCodeTest\lackluster1`, 2 tasks, 77 checks proven on the reference. Not built yet (the user launches it).
+- Still open for this kind: planted-bug scoring for JavaScript; a scripted "person" run like studio_score for pages.
+- Next for the same app, once sign-in is in use: remote-control (arrow key) navigation of the guide, then an Android TV
+  wrapper APK. Apple TV cannot run an APK or a web view; it would need a native tvOS app.

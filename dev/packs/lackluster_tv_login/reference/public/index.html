@@ -1,0 +1,3093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lackluster Plus+</title>
+<link rel="icon" href="/favicon.svg?v=ptv1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Montserrat:wght@800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<!-- hls.js is served locally so ad blockers / CDN outages can't break playback;
+     the CDN copy is only a fallback if the local file somehow fails to load. -->
+<script src="/vendor/hls.min.js"></script>
+<script>if(!window.Hls){document.write('<scr'+'ipt src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.17/hls.min.js"><\/scr'+'ipt>');}</script>
+<!-- Lackluster Plus+ patch: Google Cast (Chromecast) sender SDK. This is a
+     no-op outside Chrome-family browsers -- window['__onGCastApiAvailable']
+     below simply never fires, and the Cast button stays hidden. AirPlay
+     doesn't need an SDK at all; it's driven straight off the <video>
+     element's own webkitShowPlaybackTargetPicker() (see toggleAirPlay()). -->
+<script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+<style>
+  :root{
+    --bg:#0A0C10; --bg-raised:#14171F; --bg-raised-2:#1B1F2A;
+    --grid-line:#262B36; --text:#F4F5F9; --text-muted:#8B90A3;
+    --blue:#3B6CFF; --blue-dim:#1E2C63; --red:#E8304C; --red-dim:#3A1620;
+    --cyan:#4CE0E8; --amber:#F2B33D; --green:#33C481;
+    --radius-card:14px;
+    --grad: linear-gradient(120deg, var(--blue), var(--red));
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased; min-height:100vh;}
+  h1,h2,h3{font-family:'Space Grotesk',sans-serif;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  button{-webkit-tap-highlight-color:transparent; font-family:inherit;}
+
+  /* ---------- sign-in gate ---------- */
+  #gate{position:fixed; inset:0; background:radial-gradient(circle at 30% 20%, #131728, #05060a 70%); display:flex; align-items:center; justify-content:center; z-index:100; flex-direction:column; gap:22px;}
+  #gate.hidden{display:none;}
+  #gate .mark{width:88px; height:88px;}
+  #gate h1{font-size:26px; margin:0;}
+  #gate p{color:var(--text-muted); font-size:14px; max-width:340px; text-align:center; margin:0;}
+  #gate .btn-plex{display:flex; align-items:center; gap:10px; background:var(--grad); color:#fff; border:none; border-radius:12px; padding:14px 26px; font-weight:700; font-size:14px; cursor:pointer; box-shadow:0 0 30px -8px rgba(232,48,76,.6);}
+  #gate .status{font-size:12.5px; color:var(--text-muted); min-height:18px;}
+  #gate .status.error{color:var(--red);}
+  #gate .gate-actions{display:flex; flex-direction:column; align-items:center; gap:12px;}
+  #gate .btn-code{background:transparent; color:var(--text); border:1px solid var(--grid-line); border-radius:12px; padding:12px 22px; font-weight:600; font-size:13.5px; cursor:pointer;}
+  #gate button:focus-visible{outline:3px solid var(--cyan); outline-offset:3px;}
+  #gate .link-panel{display:flex; flex-direction:column; align-items:center; gap:14px;}
+  #gate .link-row{display:flex; align-items:center; gap:36px;}
+  #gate .link-steps{display:flex; flex-direction:column; align-items:center; gap:6px;}
+  /* While the code shows, the screen must fit a TV browser's 960x540 with nothing cut off. */
+  #gate.coding{gap:12px;}
+  #gate.coding .mark{width:60px; height:60px;}
+  #gate.coding > p{display:none;}
+  #gate .link-panel[hidden], #gate .gate-actions[hidden]{display:none;}
+  #gate .link-panel p{font-size:16px; max-width:520px;}
+  #gate .link-url{font-family:'IBM Plex Mono',monospace; font-size:30px; font-weight:600; color:var(--cyan);}
+  #gate .link-code{font-family:'IBM Plex Mono',monospace; font-size:72px; font-weight:600; letter-spacing:.18em; padding-left:.18em; line-height:1.1; color:var(--text);}
+  #gate .link-qr{width:132px; height:132px; background:#fff; border-radius:10px; padding:6px;}
+  #gate .link-qr[hidden]{display:none;}
+
+  .app{display:none; min-height:100vh; flex-direction:column;}
+  .app.visible{display:flex;}
+
+  .topbar{height:64px; border-bottom:1px solid var(--grid-line); display:flex; align-items:center; justify-content:space-between; padding:0 24px; background:linear-gradient(180deg, rgba(20,23,31,.9), rgba(20,23,31,.4)); flex:none; gap:16px;}
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand svg{width:34px; height:34px;}
+  .brand .name{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px;}
+  .topbar-right{display:flex; align-items:center; gap:14px; position:relative;}
+  .clock{font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--text-muted);}
+  .today-badge{background:var(--red); color:#fff; font-weight:700; font-size:11px; padding:4px 10px; border-radius:20px; letter-spacing:.06em;}
+  .admin-link{display:none; align-items:center; gap:6px; background:var(--bg-raised-2); border:1px solid var(--grid-line); color:var(--text); font-size:12px; font-weight:600; padding:6px 12px; border-radius:20px; cursor:pointer; text-decoration:none; flex:none;}
+  .admin-link:hover{border-color:var(--blue); color:var(--blue);}
+  .admin-link.visible{display:flex;}
+  .avatar{width:30px; height:30px; border-radius:50%; background:var(--grad); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; flex:none; overflow:hidden; cursor:pointer;}
+  .avatar img{width:100%; height:100%; object-fit:cover;}
+  .icon-btn{width:34px; height:34px; border-radius:10px; border:1px solid var(--grid-line); background:var(--bg-raised-2); display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--text-muted); flex:none;}
+  .icon-btn:hover{color:var(--text); border-color:var(--blue);}
+  .icon-btn svg{width:17px; height:17px;}
+
+  .options-dropdown{position:absolute; top:44px; right:0; width:260px; background:var(--bg-raised-2); border:1px solid var(--grid-line); border-radius:12px; padding:16px; display:none; z-index:20; box-shadow:0 12px 30px rgba(0,0,0,.5);}
+  .options-dropdown.open{display:block;}
+  .options-dropdown h4{margin:0 0 10px 0; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted);}
+  .options-dropdown select{width:100%; background:var(--bg); border:1px solid var(--grid-line); border-radius:8px; padding:8px 10px; color:var(--text); font-size:13px; font-family:inherit;}
+  .options-dropdown .note{font-size:11px; color:var(--text-muted); margin-top:8px; line-height:1.5;}
+  .options-dropdown label.check{display:flex; align-items:center; gap:8px; font-size:12.5px; margin-top:10px; cursor:pointer;}
+  .options-dropdown .signout{margin-top:14px; width:100%; background:transparent; border:1px solid var(--grid-line); color:var(--red); border-radius:8px; padding:8px; font-size:12.5px; cursor:pointer;}
+
+  .view{flex:1; padding:24px; display:flex; flex-direction:column; min-height:0;}
+
+  .guide-layout{display:flex; gap:18px; flex:1; min-height:0;}
+  .filter-sidebar{width:172px; flex:none; display:flex; flex-direction:column; gap:2px;}
+  .filter-sidebar .fs-label{font-size:10.5px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.07em; font-weight:700; margin:14px 0 6px 10px;}
+  .filter-sidebar .fs-label:first-child{margin-top:2px;}
+  .fs-item{padding:9px 10px; border-radius:9px; font-size:13px; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; justify-content:space-between;}
+  .fs-item:hover{background:var(--bg-raised-2); color:var(--text);}
+  .fs-item.active{background:var(--blue-dim); color:#fff; font-weight:600;}
+
+  .guide-main{flex:1; display:flex; flex-direction:column; min-width:0; min-height:0;}
+  .guide-toolbar{display:flex; align-items:center; gap:12px; margin-bottom:14px;}
+  .search-box{flex:1; display:flex; align-items:center; gap:8px; background:var(--bg-raised); border:1px solid var(--grid-line); border-radius:10px; padding:9px 14px; max-width:360px;}
+  .search-box svg{width:15px; height:15px; color:var(--text-muted); flex:none;}
+  .search-box input{flex:1; background:transparent; border:none; outline:none; color:var(--text); font-size:13px; font-family:inherit;}
+  .btn-playnow{display:flex; align-items:center; gap:8px; background:var(--grad); color:#fff; border:none; border-radius:10px; padding:10px 18px; font-weight:700; font-size:13px; cursor:pointer; box-shadow:0 0 24px -8px rgba(232,48,76,.7);}
+  .btn-playnow svg{width:16px; height:16px;}
+
+  .detail-drawer{max-height:0; opacity:0; overflow:hidden; transition:max-height .32s ease, opacity .25s ease, margin .32s ease; border-radius:var(--radius-card); border:1px solid transparent;}
+  .detail-drawer.open{max-height:480px; opacity:1; margin-bottom:16px; border-color:var(--grid-line); background:linear-gradient(120deg, rgba(59,108,255,.08), rgba(232,48,76,.06)), var(--bg-raised);}
+  .detail-inner{display:flex; gap:20px; padding:20px;}
+  .detail-poster{width:120px; height:180px; border-radius:10px; flex:none; background:#0A0C10; border:1px solid var(--grid-line); display:flex; align-items:center; justify-content:center; font-size:40px; overflow:hidden;}
+  .detail-poster img{width:100%; height:100%; object-fit:cover;}
+  .detail-body{flex:1; min-width:0;}
+  .detail-chanlogo{width:72px; height:72px; border-radius:14px; flex:none; align-self:flex-start; background:#0A0C10; border:1px solid var(--grid-line); display:flex; align-items:center; justify-content:center; font-size:26px; overflow:hidden;}
+  .detail-chanlogo img{width:100%; height:100%; object-fit:cover;}
+  .detail-top{display:flex; align-items:flex-start; justify-content:space-between; gap:12px;}
+  .detail-title{font-family:'Space Grotesk',sans-serif; font-size:22px; font-weight:700;}
+  .detail-meta{color:var(--text-muted); font-size:12.5px; margin-top:4px;}
+  .detail-close{background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:20px; line-height:1; padding:4px;}
+  .rating-row{display:flex; gap:14px; align-items:center; margin-top:10px; flex-wrap:wrap;}
+  .rating-chip{display:flex; align-items:center; gap:5px; font-size:12px; color:var(--text-muted); font-weight:600;}
+  .rating-chip .swatch{width:8px; height:8px; border-radius:50%;}
+  .detail-synopsis{font-size:12.5px; color:#C9CCDA; line-height:1.6; margin-top:12px; max-width:640px;}
+  .now-playing-tag{display:inline-flex; align-items:center; gap:6px; background:var(--red-dim); color:var(--red); font-weight:700; font-size:10.5px; padding:4px 10px; border-radius:20px; margin-bottom:8px;}
+  .now-playing-tag .dot{width:6px; height:6px; border-radius:50%; background:var(--red); box-shadow:0 0 6px 1px rgba(232,48,76,.8); animation:pulse 1.4s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+  .watch-btn{display:inline-flex; align-items:center; gap:8px; background:var(--grad); color:#fff; border:none; border-radius:9px; padding:10px 18px; font-weight:700; font-size:12.5px; cursor:pointer; margin-top:12px;}
+  .watch-btn:focus-visible{outline:2px solid #fff; outline-offset:3px;}
+  .subs-btn{background:var(--bg-raised-2); border:1px solid var(--grid-line); margin-left:8px;}
+  .subs-btn:hover{border-color:var(--blue);}
+  /* Lackluster Plus+ patch: subtitle release names (e.g. exact scene-release
+     filenames) are often long and are how you tell the right match apart
+     from six near-identical ones -- truncating them with an ellipsis
+     defeated the whole point of showing a list. This modal is now wider
+     than the other modals, and result titles wrap onto up to 2 lines
+     instead of being cut off, with the provider/badges and Download button
+     dropped to their own row below so wrapping never squishes them. */
+  #subs-modal .modal-card{width:640px; max-width:92vw;}
+  .sub-result{display:flex; flex-direction:column; gap:6px; padding:11px 0; border-bottom:1px solid var(--grid-line); font-size:12.5px;}
+  .sub-result:last-child{border-bottom:none;}
+  .sub-result .st{width:100%; white-space:normal; word-break:break-word; overflow-wrap:anywhere; line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+  .sub-result .meta-row{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .sub-result .sp{color:var(--text-muted); font-size:11px; flex:1; min-width:0;}
+  .sub-result button{background:var(--blue); color:#fff; border:none; border-radius:7px; padding:6px 11px; font-size:11.5px; font-weight:600; cursor:pointer; flex:none;}
+  .sub-result button:disabled{opacity:.5; cursor:default;}
+  .sub-result button.done{background:var(--green, #33C481);}
+  #subs-results{max-height:300px; overflow-y:auto; margin-top:10px;}
+  .cast-row{display:flex; gap:14px; margin-top:14px; overflow-x:auto; padding-bottom:2px;}
+  .cast-member{flex:none; width:64px; text-align:center;}
+  .cast-avatar{width:48px; height:48px; border-radius:50%; background:var(--grad); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; margin:0 auto 6px; overflow:hidden;}
+  .cast-avatar img{width:100%; height:100%; object-fit:cover;}
+  .cast-member .cn{font-size:10.5px; font-weight:600; line-height:1.2;}
+  .cast-member .cr{font-size:9.5px; color:var(--text-muted);}
+
+  .player-modal{position:fixed; inset:0; background:rgba(5,6,10,.9); display:none; align-items:center; justify-content:center; z-index:80; flex-direction:column; gap:14px;}
+  .player-modal.open{display:flex;}
+  .player-stage{position:relative;}
+  .player-modal video{width:min(1100px, 92vw); max-height:72vh; border-radius:12px; background:#000; display:block;}
+  .player-diag{position:absolute; top:14px; left:14px; background:rgba(8,10,15,.82); border:1px solid var(--grid-line); border-radius:10px; padding:10px 13px; font-family:'IBM Plex Mono',monospace; font-size:11.5px; line-height:1.75; color:#C7CBDA; pointer-events:none; white-space:pre; z-index:5;}
+  .player-diag .sig-Excellent{color:#33C481;} .player-diag .sig-Good{color:#33C481;}
+  .player-diag .sig-Fair{color:#F2B33D;} .player-diag .sig-Poor{color:#E8304C;}
+
+  /* Lackluster Plus+ patch: "Media view" -- a third view mode alongside the
+     normal windowed player and the browser's native video fullscreen.
+     Unlike native fullscreen (which pulls just the <video> into its own
+     rendering layer that nothing else can draw on top of), this is plain
+     CSS: the player-stage/video just grow to fill the viewport while
+     staying normal DOM siblings of the draw canvas and the docked social
+     panel, so chat/draw keep working. Toggled by toggleTheaterMode(); see
+     the script section below.
+     `.panel-open` is added/removed alongside the social panel's own `.open`
+     class (see openSocialPanel/closeSocialPanel) so the video knows to
+     leave room for the docked 320px panel instead of running underneath it. */
+  .player-modal.theater{padding:0; gap:0;}
+  .player-modal.theater .player-stage{width:100vw; height:100vh; display:flex; align-items:center; justify-content:center; transition:width .15s ease;}
+  .player-modal.theater.panel-open .player-stage{width:calc(100vw - 320px);}
+  .player-modal.theater video{width:100%; height:100%; max-width:none; max-height:none; border-radius:0; object-fit:contain;}
+  .player-modal.theater .player-info,
+  .player-modal.theater > div:last-child{position:absolute; bottom:10px; left:14px; background:rgba(8,10,15,.75); border-radius:10px; padding:6px 10px; z-index:8;}
+  .player-modal.theater > div:last-child{left:auto; right:14px; bottom:10px; padding:0; background:none;}
+
+  /* Lackluster Plus+ patch: shared drawing overlay -- a transparent canvas
+     sized to exactly match the video's rendered box (see resizeDrawCanvas()
+     in the script). pointer-events is toggled between 'none' (clicks pass
+     through to the video/fullscreen controls, the normal state) and 'auto'
+     (captures mouse/touch for drawing) by the Draw toggle button, rather
+     than always capturing input -- otherwise you could never click the
+     video itself once this feature existed. */
+  .draw-canvas{position:absolute; z-index:6; pointer-events:none; touch-action:none;}
+  .player-modal .player-info{display:flex; align-items:center; gap:16px; color:var(--text-muted); font-size:12.5px;}
+  .player-modal .player-info strong{color:var(--text);}
+  #pm-status{color:var(--amber, #F2B33D);}
+  #pm-status.err{color:#E8304C;}
+  .player-modal .close-player{background:var(--bg-raised-2); border:1px solid var(--grid-line); color:var(--text); border-radius:9px; padding:9px 18px; cursor:pointer; font-size:12.5px;}
+  .player-modal .close-player.active{background:var(--blue); border-color:var(--blue);}
+
+  /* Lackluster Plus+ patch: "who's watching" + live chat + draw controls,
+     docked to the right edge. Fixed to the viewport rather than reflowing
+     the player-stage in Window mode (so it can be toggled without resizing
+     the video there); in Media view the player-stage itself leaves room
+     for it instead (see .panel-open above), so it reads as a proper docked
+     sidebar rather than an overlay. */
+  .social-panel{position:fixed; top:0; right:0; bottom:0; width:320px; max-width:88vw; background:var(--bg-raised); border-left:1px solid var(--grid-line); z-index:90; display:none; flex-direction:column; box-shadow:-8px 0 24px rgba(0,0,0,.35);}
+  .social-panel.open{display:flex;}
+  .social-header{display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--grid-line); font-size:13px; font-weight:600;}
+  .social-header button{background:none; border:none; color:var(--text-muted); font-size:16px; cursor:pointer; line-height:1;}
+  .social-viewers{display:flex; flex-wrap:wrap; gap:8px; padding:12px 16px; border-bottom:1px solid var(--grid-line); max-height:110px; overflow-y:auto;}
+  .social-viewer{display:flex; align-items:center; gap:6px; background:var(--bg-raised-2); border-radius:20px; padding:4px 10px 4px 4px; font-size:11.5px;}
+  .social-viewer .av{width:20px; height:20px; border-radius:50%; background:var(--blue); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; overflow:hidden; flex-shrink:0;}
+  .social-viewer .av img{width:100%; height:100%; object-fit:cover;}
+  .social-empty{color:var(--text-muted); font-size:11.5px; padding:2px 4px;}
+
+  /* Lackluster Plus+ patch: "Re-Skin" -- an optional decorative TV-frame
+     overlay for Media view, off by default. reskin-screen-overlay sits
+     directly over the video (same rect, kept in sync by resizeDrawCanvas())
+     with its own screen area cut fully transparent by whoever authored the
+     skin, so the video shows through; the panel skin is just a background
+     image on the docked panel itself. See reskin.ts on the server. */
+  .reskin-screen-overlay{position:absolute; object-fit:fill; pointer-events:none; z-index:5; display:none;}
+  .reskin-screen-overlay.visible{display:block;}
+  /* Lackluster Plus+ patch: Re-Skin is hidden for now while the image-split
+     approach gets rethought -- code kept intact underneath, just not shown
+     or activated in the UI. */
+  .social-reskin-section{display:none !important;}
+  .social-reskin-section .sd-label{font-size:11px; color:var(--text-muted); width:100%; display:flex; align-items:center; justify-content:space-between;}
+  .reskin-picker{width:100%; background:var(--bg-raised-2); border:1px solid var(--grid-line); color:var(--text); border-radius:7px; padding:6px 8px; font-size:12px;}
+  .social-draw-section{display:flex; align-items:center; gap:8px; padding:12px 16px; border-bottom:1px solid var(--grid-line); flex-wrap:wrap;}
+  .social-draw-section .sd-label{font-size:11px; color:var(--text-muted); width:100%; display:flex; align-items:center; justify-content:space-between;}
+  .draw-enable-btn{background:var(--bg-raised-2); border:1px solid var(--grid-line); color:var(--text); border-radius:6px; padding:2px 9px; font-size:10.5px; cursor:pointer;}
+  .draw-enable-btn.active{background:var(--blue); border-color:var(--blue); color:#fff;}
+  .draw-swatch{width:20px; height:20px; border-radius:50%; border:2px solid rgba(255,255,255,.25); cursor:pointer; padding:0;}
+  .draw-swatch.selected{border-color:#fff;}
+  .draw-tools{display:flex; flex-wrap:wrap; gap:4px; width:100%;}
+  .draw-tool-btn{background:var(--bg-raised-2); border:1px solid var(--grid-line); color:var(--text); border-radius:7px; padding:5px 8px; font-size:13px; cursor:pointer; line-height:1;}
+  .draw-tool-btn.active{background:var(--blue); border-color:var(--blue);}
+  .social-draw-section button.draw-clear{background:var(--bg-raised-2); border:1px solid var(--grid-line); color:var(--text); border-radius:7px; padding:5px 10px; font-size:11.5px; cursor:pointer; margin-left:auto;}
+
+  /* Lackluster Plus+ patch: audio clip export panel. */
+  .social-clip-section{display:flex; align-items:center; gap:8px; padding:12px 16px; border-bottom:1px solid var(--grid-line); flex-wrap:wrap;}
+  .social-clip-section .sd-label{font-size:11px; color:var(--text-muted); width:100%; display:flex; align-items:center; justify-content:space-between;}
+  .clip-now-playing{width:100%; font-size:12px; color:var(--text); background:var(--bg-raised-2); border:1px solid var(--grid-line); border-radius:7px; padding:6px 8px;}
+  .clip-row{display:flex; gap:10px; width:100%; flex-wrap:wrap;}
+  .clip-row label{display:flex; flex-direction:column; gap:3px; font-size:10.5px; color:var(--text-muted); flex:1; min-width:70px;}
+  .clip-row input, .clip-row select{background:var(--bg-raised-2); border:1px solid var(--grid-line); color:var(--text); border-radius:6px; padding:6px 8px; font-size:12px;}
+  .clip-status{width:100%; font-size:11.5px; color:var(--text-muted); min-height:14px;}
+  .clip-status.error{color:#e5484d;}
+  .clip-status.ok{color:#3ecf7e;}
+  .social-chat-log{flex:1; overflow-y:auto; padding:12px 16px; display:flex; flex-direction:column; gap:8px; min-height:0;}
+  .social-chat-msg{font-size:12.5px; line-height:1.4;}
+  .social-chat-msg .u{font-weight:600; color:var(--text);}
+  .social-chat-msg .u.me{color:var(--blue);}
+  .social-chat-msg .t{color:var(--text); word-break:break-word;}
+  .social-chat-form{display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--grid-line);}
+  .social-chat-form input{flex:1; background:var(--bg-raised-2); border:1px solid var(--grid-line); border-radius:8px; padding:8px 10px; color:var(--text); font-size:12.5px;}
+  .social-chat-form button{background:var(--blue); border:none; color:#fff; border-radius:8px; padding:8px 14px; font-size:12.5px; cursor:pointer;}
+
+  .guide-wrap{border:1px solid var(--grid-line); border-radius:var(--radius-card); overflow:hidden; background:var(--bg-raised); flex:1; display:flex; flex-direction:column; min-height:0;}
+  .epg-toolbar{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 12px; border-bottom:1px solid var(--grid-line); background:#10131A; flex-wrap:wrap;}
+  .epg-toolbar-group{display:flex; align-items:center; gap:6px;}
+  .guide-tbtn{background:var(--bg-raised-2); border:1px solid var(--grid-line); color:var(--text); border-radius:7px; padding:5px 11px; cursor:pointer; font-size:12px; line-height:1.3;}
+  .guide-tbtn:hover{background:rgba(255,255,255,.06);}
+  .guide-tbtn:disabled{opacity:.4; cursor:default;}
+  .guide-zoom-label{font-size:11px; color:var(--text-muted); min-width:64px; text-align:center;}
+  .guide-window-label{font-size:11px; color:var(--text-muted); font-family:'IBM Plex Mono',monospace;}
+  .guide-scroll{overflow:auto; flex:1; position:relative;}
+  .guide-ruler-row{display:flex; position:sticky; top:0; z-index:3;}
+  .guide-ruler-spacer{position:sticky; left:0; z-index:4; width:220px; flex:none; background:#10131A; border-bottom:1px solid var(--grid-line); border-right:1px solid var(--grid-line); display:flex; align-items:center; padding:0 14px; font-size:12px; color:var(--text-muted); font-weight:600;}
+  .guide-ruler{position:relative; background:#10131A; border-bottom:1px solid var(--grid-line); height:34px; flex:none;}
+  .ruler-tick{position:absolute; top:0; bottom:0; border-left:1px solid var(--grid-line); padding-left:6px; display:flex; align-items:center; font-size:11px; color:var(--text-muted); font-family:'IBM Plex Mono',monospace; white-space:nowrap;}
+  .ruler-tick.half{color:#5a6070;}
+  .now-flag{color:var(--red); font-weight:700; font-size:10px; letter-spacing:.06em;}
+  .guide-rows{position:relative;}
+  .guide-row{display:flex;}
+  .guide-row.row-hidden{display:none;}
+  .chan-cell{position:sticky; left:0; background:var(--bg-raised); z-index:1; border-bottom:1px solid var(--grid-line); border-right:1px solid var(--grid-line); display:flex; align-items:center; gap:10px; padding:10px 12px; width:220px; flex:none;}
+  .logo-tile{display:flex; align-items:center; justify-content:center; background:#0A0C10; border:1px solid var(--grid-line); overflow:hidden;}
+  .logo-tile img{width:100%; height:100%; object-fit:cover;}
+  .chan-cell .logo-tile{width:40px; height:40px; border-radius:9px; flex:none; font-size:16px;}
+  .chan-num{font-family:'IBM Plex Mono',monospace; color:var(--blue); font-weight:600; font-size:12px;}
+  .chan-name{font-size:13px; font-weight:600; line-height:1.2;}
+  .chan-tags{font-size:10px; color:var(--text-muted); margin-top:1px;}
+  .chan-info{min-width:0; flex:1;}
+  .chan-name, .chan-tags{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+
+  /* Lackluster Plus+ patch: per-viewer favorite channels -- pinned to the
+     top of the guide (see the favorites sort in renderGrid()) with a
+     star toggle and, for favorited rows only, small up/down buttons to
+     reorder within the favorites block. Favorites are per-Plex-account
+     (server-side, gateway/src/routes/prefs.ts), not shared across
+     viewers. */
+  .chan-cell.is-favorite{background:var(--bg-raised-2);}
+  .chan-fav-controls{display:flex; flex-direction:column; align-items:center; gap:2px; flex:none; margin-left:auto;}
+  .chan-fav-btn{background:none; border:none; cursor:pointer; font-size:16px; line-height:1; padding:2px; color:var(--text-muted);}
+  .chan-fav-btn.active{color:var(--amber, #F2B33D);}
+  .chan-fav-reorder{display:flex; gap:2px;}
+  .chan-fav-reorder button{background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:10px; line-height:1; padding:1px 3px;}
+  .chan-fav-reorder button:hover{color:var(--text);}
+  .chan-fav-reorder button:disabled{opacity:.25; cursor:default;}
+  .timeline-track{position:relative; height:74px; border-bottom:1px solid var(--grid-line); flex:none;}
+  .now-line{position:absolute; top:0; bottom:0; width:2px; background:var(--red); z-index:2; box-shadow:0 0 6px 1px rgba(232,48,76,.6); pointer-events:none;}
+  .prog-cell{position:absolute; top:0; bottom:0; border-right:1px solid var(--grid-line); padding:8px 12px; font-size:12px; color:var(--text-muted); cursor:pointer; overflow:hidden; box-sizing:border-box;}
+  .prog-cell:hover{filter:brightness(1.22);}
+  .prog-cell .p-title{color:var(--text); font-weight:600; font-size:12.5px; display:block; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .prog-cell.on-now{background:linear-gradient(180deg, rgba(232,48,76,.10), rgba(232,48,76,.02)); border-left:3px solid var(--red);}
+  .prog-cell.on-now .p-title{color:#fff;}
+  .on-now-tag{display:inline-flex; align-items:center; gap:4px; color:var(--red); font-weight:700; font-size:9.5px; letter-spacing:.06em; margin-bottom:4px;}
+  .on-now-tag .dot{width:6px; height:6px; border-radius:50%; background:var(--red); box-shadow:0 0 6px 1px rgba(232,48,76,.8);}
+  .progress-track{height:3px; border-radius:2px; background:var(--grid-line); margin-top:6px; overflow:hidden;}
+  .progress-fill{height:100%; background:var(--grad);}
+  .empty-state{padding:40px; text-align:center; color:var(--text-muted); font-size:13px;}
+
+  .modal-backdrop{position:fixed; inset:0; background:rgba(5,6,10,.72); display:none; align-items:center; justify-content:center; z-index:50;}
+  .modal-backdrop.open{display:flex;}
+  .modal-card{width:460px; background:var(--bg-raised); border:1px solid var(--grid-line); border-radius:16px; padding:24px;}
+  .modal-card h3{margin:0 0 4px 0; font-size:16px;}
+  .modal-card .hint{color:var(--text-muted); font-size:12px; margin:0 0 18px 0;}
+  .modal-section{margin-bottom:18px;}
+  .modal-section label{display:block; font-size:11.5px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;}
+  .chip-row{display:flex; flex-wrap:wrap; gap:8px;}
+  .chip{border:1px solid var(--grid-line); background:var(--bg); color:var(--text-muted); padding:6px 12px; border-radius:20px; font-size:12px; cursor:pointer; user-select:none;}
+  .chip.selected{background:var(--blue-dim); border-color:var(--blue); color:#fff; font-weight:600;}
+  .segmented{display:flex; background:var(--bg); border:1px solid var(--grid-line); border-radius:9px; padding:3px; width:fit-content;}
+  .segmented button{border:none; background:transparent; color:var(--text-muted); padding:8px 16px; border-radius:7px; font-size:12.5px; font-weight:600; cursor:pointer;}
+  .segmented button.active{background:var(--grad); color:#fff;}
+  .btn{border:none; border-radius:9px; padding:11px 20px; font-size:13px; font-weight:700; cursor:pointer; letter-spacing:.01em;}
+  .btn-primary{background:var(--grad); color:#fff;}
+  .btn-ghost{background:transparent; border:1px solid var(--grid-line); color:var(--text);}
+  .btn-row{display:flex; gap:10px; margin-top:4px;}
+
+  .toast{position:fixed; bottom:26px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--bg-raised-2); border:1px solid var(--blue); border-radius:12px; padding:12px 20px; font-size:13px; box-shadow:0 12px 30px rgba(0,0,0,.5); opacity:0; pointer-events:none; transition:all .25s ease; z-index:60;}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  .footer-note{color:var(--text-muted); font-size:11px; margin-top:14px; text-align:center;}
+
+  /* ===== Lackluster Plus+ / Philibert TV / Esteef.Ai branding + guide behaviour (2026-11-08) ===== */
+  .app.visible{height:100vh; height:100dvh;}
+  .view{min-height:0; overflow:auto;}
+  .guide-wrap{min-height:240px;}
+  .brand{gap:12px;}
+  .brand svg.brand-mark{width:42px; height:42px; filter:drop-shadow(0 0 10px rgba(59,108,255,.35));}
+  .brand-text{display:flex; flex-direction:column; line-height:1.1;}
+  .brand .name{font-size:17px; letter-spacing:.01em;}
+  .brand .name .plus{background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent;}
+  .brand-sub{display:flex; align-items:center; gap:6px; font-size:10.5px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.09em; font-weight:600; margin-top:3px; text-decoration:none;}
+  .brand-sub .sep{opacity:.5;}
+  .esteef{--ink:#F4F5F9; --orbit:#00E5FF; --ai:#00E5FF; --node:#E8304C; height:1em; width:auto; display:block; overflow:visible;}
+  .esteef text{font-family:Montserrat,Arial,sans-serif; font-weight:800; letter-spacing:.12em;}
+  .brand-sub .esteef{height:11px;}
+  .brand-sub:hover .esteef{--ink:#00E5FF;}
+  #gate .mark{width:112px; height:112px;}
+  #gate .gate-by{display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.1em; text-decoration:none;}
+  #gate .gate-by .esteef{height:15px;}
+  .footer-note{display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap;}
+  .footer-note a{display:inline-flex; align-items:center; gap:7px; color:var(--text-muted); text-decoration:none;}
+  .footer-note .esteef{height:12px;}
+  .footer-note a:hover .esteef{--ink:#00E5FF;}
+
+  /* collapsible Browse column */
+  .filter-sidebar{overflow-y:auto; overflow-x:hidden; transition:width .25s ease, opacity .2s ease, margin .25s ease;}
+  .guide-layout.sb-collapsed .filter-sidebar{width:0; opacity:0; margin-right:-18px; pointer-events:none;}
+  .btn-browse{display:flex; align-items:center; gap:8px; background:var(--bg-raised); border:1px solid var(--grid-line); color:var(--text); border-radius:10px; padding:9px 13px; font-size:12.5px; font-weight:600; cursor:pointer; flex:none; max-width:220px;}
+  .btn-browse:hover{border-color:var(--blue);}
+  .btn-browse svg{width:16px; height:16px; flex:none;}
+  .btn-browse .bb-label{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .guide-layout:not(.sb-collapsed) .btn-browse{background:var(--blue-dim); border-color:var(--blue);}
+
+  /* channel icon: first click = info, second click = watch */
+  .chan-cell .logo-tile{cursor:pointer; transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;}
+  .chan-cell .logo-tile:hover{transform:scale(1.06); border-color:var(--blue);}
+  .chan-cell .logo-tile:focus-visible{outline:2px solid #fff; outline-offset:2px;}
+  .chan-cell .logo-tile.primed{border-color:var(--red); box-shadow:0 0 0 2px var(--red), 0 0 16px rgba(232,48,76,.55); position:relative;}
+  .chan-cell .logo-tile.primed::after{content:'▶'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(10,12,16,.55); color:#fff; font-size:15px;}
+  .detail-chanlogo{cursor:pointer;}
+  .detail-chanlogo:hover{border-color:var(--red);}
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <svg class="mark" viewBox="0 0 256 256" role="img" aria-label="Philibert TV"><defs><linearGradient id="gateGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#3B6CFF"/><stop offset="100%" stop-color="#E8304C"/></linearGradient></defs><path d="M128 72 L86 24 M128 72 L170 24" stroke="url(#gateGrad)" stroke-width="9" stroke-linecap="round"/><circle cx="86" cy="22" r="9" fill="#3B6CFF"/><circle cx="170" cy="22" r="11" fill="#E8304C"/><rect x="56" y="214" width="30" height="16" rx="5" fill="#2A3040"/><rect x="170" y="214" width="30" height="16" rx="5" fill="#2A3040"/><rect x="20" y="70" width="216" height="150" rx="32" fill="#0A0C10" stroke="url(#gateGrad)" stroke-width="10"/><rect x="42" y="90" width="172" height="110" rx="22" fill="#121A2B"/><circle cx="98" cy="136" r="23" fill="#F4F5F9"/><circle cx="98" cy="136" r="15" fill="#121A2B"/><circle cx="98" cy="136" r="6" fill="#00E5FF"/><circle cx="158" cy="136" r="23" fill="#F4F5F9"/><circle cx="158" cy="136" r="15" fill="#121A2B"/><circle cx="158" cy="136" r="6" fill="#00E5FF"/><path d="M66 181 H110 L117 172 L126 190 L133 176 L138 181 H190" fill="none" stroke="#00E5FF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <h1>Lackluster Plus+</h1>
+  <a class="gate-by" href="https://github.com/Esteef-Ai" target="_blank" rel="noopener">Philibert TV &middot; by <svg class="esteef" viewBox="38 16 236 46" role="img" aria-label="Esteef.Ai"><text x="128" y="52" text-anchor="middle" font-size="34" fill="var(--ink)">ESTEEF</text><ellipse cx="238" cy="40" rx="30" ry="14" fill="none" stroke="var(--orbit)" stroke-width="3" transform="rotate(-18 238 40)"/><text x="238" y="52" text-anchor="middle" font-size="30" fill="var(--ai)">AI</text><circle cx="212" cy="53" r="4" fill="var(--node)"/></svg></a>
+  <p>Sign in with the Plex account you already use for this library. If you're already a shared user, you're in — no separate password.</p>
+  <div class="gate-actions" id="gate-actions">
+    <button class="btn-plex" id="btn-signin" onclick="startSignIn()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M4 2h9.62L22 12l-8.38 10H4l8.38-10z"/></svg>
+      Sign in with Plex
+    </button>
+    <button class="btn-code" id="btn-code" onclick="startCodeSignIn()">On a TV? Sign in with a code</button>
+  </div>
+  <div class="link-panel" id="link-panel" hidden>
+    <div class="link-row">
+      <div class="link-steps">
+        <p>On your phone or computer, go to</p>
+        <div class="link-url" id="link-url">plex.tv/link</div>
+        <p>sign in to Plex, and enter this code</p>
+        <div class="link-code" id="link-code"></div>
+      </div>
+      <img class="link-qr" id="link-qr" alt="QR code for plex.tv/link" hidden>
+    </div>
+    <button class="btn-code" id="btn-back" onclick="cancelSignIn()">Back</button>
+  </div>
+  <div class="status" id="gate-status"></div>
+</div>
+
+<div class="app" id="app">
+  <div class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 256 256" role="img" aria-label="Philibert TV"><defs><linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#3B6CFF"/><stop offset="100%" stop-color="#E8304C"/></linearGradient></defs><path d="M128 72 L86 24 M128 72 L170 24" stroke="url(#brandGrad)" stroke-width="9" stroke-linecap="round"/><circle cx="86" cy="22" r="9" fill="#3B6CFF"/><circle cx="170" cy="22" r="11" fill="#E8304C"/><rect x="56" y="214" width="30" height="16" rx="5" fill="#2A3040"/><rect x="170" y="214" width="30" height="16" rx="5" fill="#2A3040"/><rect x="20" y="70" width="216" height="150" rx="32" fill="#0A0C10" stroke="url(#brandGrad)" stroke-width="10"/><rect x="42" y="90" width="172" height="110" rx="22" fill="#121A2B"/><circle cx="98" cy="136" r="23" fill="#F4F5F9"/><circle cx="98" cy="136" r="15" fill="#121A2B"/><circle cx="98" cy="136" r="6" fill="#00E5FF"/><circle cx="158" cy="136" r="23" fill="#F4F5F9"/><circle cx="158" cy="136" r="15" fill="#121A2B"/><circle cx="158" cy="136" r="6" fill="#00E5FF"/><path d="M66 181 H110 L117 172 L126 190 L133 176 L138 181 H190" fill="none" stroke="#00E5FF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div class="brand-text"><span class="name">Lackluster <span class="plus">Plus+</span></span><a class="brand-sub" href="https://github.com/Esteef-Ai" target="_blank" rel="noopener" title="Esteef.Ai on GitHub">Philibert TV <span class="sep">&middot;</span> by <svg class="esteef" viewBox="38 16 236 46" role="img" aria-label="Esteef.Ai"><text x="128" y="52" text-anchor="middle" font-size="34" fill="var(--ink)">ESTEEF</text><ellipse cx="238" cy="40" rx="30" ry="14" fill="none" stroke="var(--orbit)" stroke-width="3" transform="rotate(-18 238 40)"/><text x="238" y="52" text-anchor="middle" font-size="30" fill="var(--ai)">AI</text><circle cx="212" cy="53" r="4" fill="var(--node)"/></svg></a></div>
+    </div>
+    <div class="topbar-right">
+      <a class="admin-link" id="admin-link" href="/admin" title="Open the admin app">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 3 7v6c0 5 4 9 9 9s9-4 9-9V7l-9-5Z"/></svg>
+        Admin
+      </a>
+      <span class="today-badge">TODAY</span>
+      <span class="clock mono" id="clock">--:--</span>
+      <div class="icon-btn" onclick="toggleOptions()" title="Playback options">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 15 4-8 4 8M6 12h4"/><path d="M14 15h6M17 12v6"/></svg>
+      </div>
+      <div class="avatar" id="avatar" onclick="toggleOptions()" title="Options &amp; sign out">?</div>
+      <div class="options-dropdown" id="options-dropdown">
+        <h4>Playback Options</h4>
+        <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Video Quality</label>
+        <select id="quality-pref" onchange="savePrefs()">
+          <option value="auto">Auto — best for your connection (recommended)</option>
+          <option value="source">Source — original quality, needs fast connection</option>
+          <option value="stable">Stable — always transcode for compatibility</option>
+        </select>
+        <div class="note" style="margin-bottom:10px;">Source plays the original file untouched — sharpest picture, but it may not work for every title in every browser. Auto is right for almost everyone.</div>
+        <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Default Subtitles</label>
+        <select id="subtitle-pref" onchange="savePrefs()">
+          <option value="off">Off</option>
+          <option value="en">English</option>
+          <option value="es">Spanish</option>
+          <option value="fr">French</option>
+        </select>
+        <label class="check"><input type="checkbox" id="force-subs" checked onchange="savePrefs()"> Force subtitles on when available</label>
+        <div class="note">Applies whenever you tune in or use Play Now.</div>
+        <button class="signout" onclick="signOut()">Sign out</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="view">
+    <div class="guide-layout">
+      <aside class="filter-sidebar" id="filter-sidebar">
+        <div class="fs-label">Browse</div>
+        <div class="fs-item active" data-filter="all">All Channels</div>
+        <div class="fs-item" data-filter="movies">Movies</div>
+        <div class="fs-item" data-filter="tv">TV Shows</div>
+        <div class="fs-label">Genres</div>
+        <div id="genre-list"></div>
+      </aside>
+
+      <div class="guide-main">
+        <div class="guide-toolbar">
+          <button class="btn-browse" id="btn-browse" onclick="toggleBrowse()" title="Show or hide the Browse / Genres column" aria-controls="filter-sidebar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+            <span class="bb-label" id="bb-label">All Channels</span>
+          </button>
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <input type="text" id="search-input" placeholder="Search channel or title…" oninput="applyFilters()">
+          </div>
+          <div style="flex:1"></div>
+          <button class="btn-playnow" onclick="openPlayNow()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3v18l15-9L5 3z"/></svg>
+            Play Now
+          </button>
+        </div>
+
+        <div class="detail-drawer" id="detail-drawer">
+          <div class="detail-inner">
+            <div class="detail-poster" id="dd-poster">🎬</div>
+            <div class="detail-body">
+              <div class="detail-top">
+                <div>
+                  <div id="dd-playing" class="now-playing-tag" style="display:none;"><span class="dot"></span>ON NOW</div>
+                  <div class="detail-title" id="dd-title">Title</div>
+                  <div class="detail-meta" id="dd-meta">—</div>
+                </div>
+                <button class="detail-close" onclick="closeDetail()">✕</button>
+              </div>
+              <div class="rating-row" id="dd-ratings" style="display:none;">
+                <span class="rating-chip"><span class="swatch" style="background:var(--amber);"></span><span id="dd-critic">--</span></span>
+                <span class="rating-chip"><span class="swatch" style="background:var(--blue);"></span><span id="dd-audience">--</span></span>
+              </div>
+              <div class="detail-synopsis" id="dd-synopsis">—</div>
+              <button class="watch-btn" id="dd-watch" style="display:none;" onclick="watchCurrent()">▶ Watch Live</button>
+              <button class="watch-btn subs-btn" id="dd-subs" style="display:none;" onclick="openSubtitleSearch()">💬 Subtitles</button>
+              <div class="cast-row" id="dd-cast"></div>
+            </div>
+            <div class="detail-chanlogo" id="dd-chanlogo" title="Watch this channel" onclick="watchCurrent()">📺</div>
+          </div>
+        </div>
+
+        <div class="guide-wrap">
+          <div class="epg-toolbar">
+            <div class="epg-toolbar-group">
+              <button class="guide-tbtn" onclick="guideZoom(-1)" title="Zoom out">－</button>
+              <span class="guide-zoom-label" id="guide-zoom-label">--</span>
+              <button class="guide-tbtn" onclick="guideZoom(1)" title="Zoom in">＋</button>
+            </div>
+            <div class="epg-toolbar-group">
+              <button class="guide-tbtn" onclick="guideScroll(-1)">◀ Back</button>
+              <button class="guide-tbtn" onclick="guideJumpNow()">● Now</button>
+              <button class="guide-tbtn" onclick="guideScroll(1)">Forward ▶</button>
+              <span class="guide-window-label" id="guide-window-label">--</span>
+            </div>
+          </div>
+          <div class="guide-scroll" id="guide-scroll">
+            <div class="guide-ruler-row">
+              <div class="guide-ruler-spacer">CHANNELS</div>
+              <div class="guide-ruler" id="guide-ruler"></div>
+            </div>
+            <div class="guide-rows" id="guide-rows"></div>
+          </div>
+        </div>
+        <div class="footer-note"><span>Click a channel icon for what's on &mdash; click it again to watch.</span><span>&middot;</span><a href="https://github.com/Esteef-Ai" target="_blank" rel="noopener">Lackluster Plus+ &middot; Philibert TV &middot; built by <svg class="esteef" viewBox="38 16 236 46" role="img" aria-label="Esteef.Ai"><text x="128" y="52" text-anchor="middle" font-size="34" fill="var(--ink)">ESTEEF</text><ellipse cx="238" cy="40" rx="30" ry="14" fill="none" stroke="var(--orbit)" stroke-width="3" transform="rotate(-18 238 40)"/><text x="238" y="52" text-anchor="middle" font-size="30" fill="var(--ai)">AI</text><circle cx="212" cy="53" r="4" fill="var(--node)"/></svg></a></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="subs-modal">
+  <div class="modal-card">
+    <h3>Find subtitles</h3>
+    <p class="hint" id="subs-for">Searches the same subtitle providers Plex uses, and adds your pick to the library for everyone.</p>
+    <div class="modal-section">
+      <label>Language</label>
+      <select id="subs-lang" style="background:#0E1118; color:var(--text); border:1px solid var(--grid-line); border-radius:8px; padding:8px 10px; font-size:13px;">
+        <option value="en">English</option>
+        <option value="es">Spanish</option>
+        <option value="fr">French</option>
+        <option value="de">German</option>
+        <option value="it">Italian</option>
+        <option value="pt">Portuguese</option>
+        <option value="ja">Japanese</option>
+      </select>
+      <button class="watch-btn" style="margin-top:0; margin-left:8px;" onclick="searchSubtitles()">Search</button>
+    </div>
+    <div id="subs-results"><div class="hint" id="subs-status"></div></div>
+    <div class="modal-actions"><button class="btn btn-ghost" onclick="closeSubtitleSearch()">Close</button></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="playnow-modal">
+  <div class="modal-card">
+    <h3>Play Now</h3>
+    <p class="hint">Jump into something that's airing right now, anywhere across your channels.</p>
+    <div class="modal-section">
+      <label>Genres</label>
+      <div class="chip-row" id="pn-genres"><span class="chip selected" data-val="all">All</span></div>
+    </div>
+    <div class="modal-section">
+      <label>Type</label>
+      <div class="segmented" id="pn-type">
+        <button class="active" data-val="any">Any</button>
+        <button data-val="tv">TV</button>
+        <button data-val="movie">Movies</button>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="surpriseMe()" style="flex:1;">🎲 Surprise Me</button>
+      <button class="btn btn-ghost" onclick="closePlayNow()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="player-modal" id="player-modal">
+  <div class="player-stage">
+    <video id="player-video" controls autoplay playsinline></video>
+    <img class="reskin-screen-overlay" id="reskin-screen-overlay" alt="">
+    <div class="player-diag" id="player-diag"></div>
+    <canvas class="draw-canvas" id="draw-canvas"></canvas>
+    <canvas class="draw-canvas" id="draw-preview-canvas" style="pointer-events:none;"></canvas>
+  </div>
+  <div class="player-info">
+    <span>▶ <strong id="pm-channel">—</strong></span>
+    <span>Local time: <strong class="mono" id="pm-time">--:--:--</strong></span>
+    <span id="pm-status"></span>
+  </div>
+  <div style="display:flex; gap:10px; flex-wrap:wrap;">
+    <button class="close-player" onclick="toggleDiag()" id="diag-toggle">Diagnostics: OFF</button>
+    <button class="close-player" onclick="toggleTheaterMode()" id="theater-toggle">🖥 Media view</button>
+    <button class="close-player" onclick="togglePopOut()" id="popout-toggle" style="display:none;" title="Pop the video out into its own floating, resizable window that stays on top of other windows">🗔 Pop out</button>
+    <button class="close-player" onclick="toggleCast()" id="cast-toggle" style="display:none;" title="Cast to a Chromecast device">📺 Cast</button>
+    <button class="close-player" onclick="toggleAirPlay()" id="airplay-toggle" style="display:none;" title="AirPlay to an Apple TV or Mac">🍎 AirPlay</button>
+    <button class="close-player" onclick="closePlayer()">Close</button>
+  </div>
+</div>
+
+<div class="social-panel" id="social-panel">
+  <div class="social-header">
+    <strong>Who's watching &amp; chat</strong>
+    <button onclick="toggleSocialPanel()" aria-label="Close">✕</button>
+  </div>
+  <div class="social-viewers" id="social-viewers"><div class="social-empty">Just you, so far.</div></div>
+  <div class="social-reskin-section" id="social-reskin-section">
+    <span class="sd-label">Re-Skin <button id="reskin-enable-toggle" class="draw-enable-btn" onclick="toggleReskinEnabled()">Off</button></span>
+    <select id="reskin-picker" class="reskin-picker" onchange="onReskinPick(this.value)">
+      <option value="">No skins found</option>
+    </select>
+  </div>
+  <div class="social-draw-section" id="social-draw-section">
+    <span class="sd-label">Drawing <button id="draw-enable-toggle" class="draw-enable-btn" onclick="toggleDrawMode()">Enable</button></span>
+    <button class="draw-swatch selected" style="background:#E8304C;" data-color="#E8304C" onclick="setDrawColor('#E8304C', this)" title="Red"></button>
+    <button class="draw-swatch" style="background:#F2B33D;" data-color="#F2B33D" onclick="setDrawColor('#F2B33D', this)" title="Amber"></button>
+    <button class="draw-swatch" style="background:#33C481;" data-color="#33C481" onclick="setDrawColor('#33C481', this)" title="Green"></button>
+    <button class="draw-swatch" style="background:#3B6CFF;" data-color="#3B6CFF" onclick="setDrawColor('#3B6CFF', this)" title="Blue"></button>
+    <button class="draw-swatch" style="background:#F4F5F9;" data-color="#F4F5F9" onclick="setDrawColor('#F4F5F9', this)" title="White"></button>
+    <span class="sd-label">Tools</span>
+    <div class="draw-tools" id="draw-tools">
+      <button class="draw-tool-btn active" data-tool="pencil" onclick="setDrawTool('pencil', this)" title="Pencil">✏️</button>
+      <button class="draw-tool-btn" data-tool="line" onclick="setDrawTool('line', this)" title="Line">📏</button>
+      <button class="draw-tool-btn" data-tool="rect" onclick="setDrawTool('rect', this)" title="Rectangle">▭</button>
+      <button class="draw-tool-btn" data-tool="ellipse" onclick="setDrawTool('ellipse', this)" title="Ellipse">⬭</button>
+      <button class="draw-tool-btn" data-tool="eraser" onclick="setDrawTool('eraser', this)" title="Eraser">🧹</button>
+      <button class="draw-tool-btn" data-tool="fill" onclick="setDrawTool('fill', this)" title="Paint bucket fill">🪣</button>
+      <button class="draw-tool-btn" data-tool="eyedropper" onclick="setDrawTool('eyedropper', this)" title="Color picker (eyedropper)">💧</button>
+    </div>
+    <button class="draw-clear" onclick="clearDrawing()">Clear</button>
+  </div>
+  <div class="social-clip-section" id="social-clip-section">
+    <span class="sd-label">Audio clip export</span>
+    <div class="clip-now-playing" id="clip-now-playing">Nothing airing right now.</div>
+    <div class="clip-row">
+      <label>Start<input type="text" id="clip-start" placeholder="0:00" value="0:00"></label>
+      <label>End<input type="text" id="clip-end" placeholder="0:30" value="0:30"></label>
+    </div>
+    <div class="clip-row">
+      <label>Format
+        <select id="clip-format" onchange="onClipFormatChange()">
+          <option value="mp3" selected>MP3</option>
+          <option value="aac">AAC (.m4a)</option>
+          <option value="wav">WAV (uncompressed)</option>
+        </select>
+      </label>
+      <label>Quality
+        <select id="clip-quality">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+        </select>
+      </label>
+    </div>
+    <div class="clip-row">
+      <label>Channels
+        <select id="clip-channels">
+          <option value="stereo" selected>Stereo</option>
+          <option value="mono">Mono</option>
+        </select>
+      </label>
+    </div>
+    <button class="draw-clear" id="clip-export-btn" style="width:100%; margin-top:2px;" onclick="exportAudioClip()">⬇ Export &amp; download</button>
+    <div class="clip-status" id="clip-status"></div>
+  </div>
+  <div class="social-chat-log" id="social-chat-log"></div>
+  <form class="social-chat-form" id="social-chat-form" onsubmit="return sendChatMessage(event)">
+    <input type="text" id="social-chat-input" placeholder="Say something…" maxlength="500" autocomplete="off" />
+    <button type="submit">Send</button>
+  </form>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let CHANNELS = [];      // from /v/api/channels
+let GUIDE = {};         // from /v/api/guide
+let genreSet = new Set();
+let hlsInstance = null;
+let myUsername = null; // set in checkAuth(); used to tell "me" apart in chat
+
+// Per-viewer favorite channels, in display order -- loaded once from
+// /v/api/favorites on startup (see checkAuth()) and kept in sync with the
+// server on every toggle/reorder. Declared up here (not down by
+// renderGrid() where it's read) for the same TDZ reason as the guide
+// timeline state below: renderGrid() can run before this point in the
+// script if it lived any lower.
+let favoriteChannelIds = [];
+
+// Re-Skin state -- loaded once from /v/api/reskin + /v/api/reskin/list in
+// checkAuth(), applied via applyReskin() whenever the player opens/resizes
+// or the user changes the toggle/picker.
+let reskinEnabled = false;
+let reskinSkinName = '';
+let reskinSkins = [];
+
+// Shared drawing overlay state -- see resetSocialPanelForChannel() (renamed
+// scope covers draw reset too) and the ---- drawing ---- section below.
+let drawMode = false;
+let drawColor = '#E8304C';
+let drawTool = 'pencil'; // 'pencil' | 'line' | 'rect' | 'ellipse' | 'eraser' | 'fill' | 'eyedropper'
+let drawPollTimer = null;
+let drawFlushTimer = null;
+let drawLastId = 0;
+let drawStrokeId = null;
+let drawPending = [];
+let drawIsPointerDown = false;
+
+// Casting state -- see the ---- casting ---- section further down.
+// castAvailable flips true only if the Google Cast SDK actually
+// initializes (window['__onGCastApiAvailable'] fires with true), which
+// only ever happens in Chrome-family browsers -- everyone else just never
+// sees the Cast button. AirPlay has no equivalent SDK; its button's
+// visibility is decided per-video-element in initAirPlayButton() instead.
+let castAvailable = false;
+let castSession = null;
+
+// Guide timeline state -- declared up here (rather than down by
+// loadGuide/renderGrid where they're used) because tick() below calls
+// updateNowLines() immediately and every second from the moment the page
+// loads; if these lived below tick()'s first invocation, that first call
+// would throw a temporal-dead-zone ReferenceError and (since it's an
+// uncaught top-level exception) silently abort every statement after it in
+// this script, including the checkAuth()/loadGuide() call at the bottom
+// that actually populates the page.
+// Base/minimum fetch window; bumped up on the fly (see neededHours()) so
+// the timeline always has enough data to fill the visible viewport even
+// at the most zoomed-out level, on any size screen -- capped at 48 (the
+// server's own hard limit).
+let guideFetchHours = 24;
+// Zoom is defined in HOURS VISIBLE ACROSS THE SCREEN, not raw pixels per
+// hour -- pxPerHour() below divides the actual viewport width by this, so
+// the visible window is always fully covered by fetched data by
+// construction, on any size screen. Index 0 = zoomed all the way out (6h
+// visible, the widest/most-hours view); last index = zoomed all the way
+// in (2h visible, the narrowest/most-detail view).
+const ZOOM_HOURS = [6, 5.5, 5, 4.5, 4, 3.5, 3, 2.5, 2.25, 2];
+let zoomIndex = 4;
+let guideFetchStart = null; // Date.now() at the moment GUIDE was fetched -- the timeline's t=0
+
+// ---------------- auth / sign-in ----------------
+async function checkAuth(){
+  const res = await fetch('/auth/me');
+  if(res.ok){
+    const user = await res.json();
+    myUsername = user.username || null;
+    document.getElementById('gate').classList.add('hidden');
+    document.getElementById('app').classList.add('visible');
+    const av = document.getElementById('avatar');
+    if(user.thumb){ av.innerHTML = '<img src="'+user.thumb+'">'; }
+    else { av.textContent = (user.username||'?')[0].toUpperCase(); }
+    if(user.role === 'admin'){ document.getElementById('admin-link').classList.add('visible'); }
+    loadPrefs();
+    await loadFavorites();
+    // Re-Skin is hidden for now (see .social-reskin-section) while the
+    // image-split approach gets rethought -- don't fetch/apply state for a
+    // UI that isn't shown.
+    loadGuide();
+  } else {
+    document.getElementById('gate').classList.remove('hidden');
+    document.getElementById('app').classList.remove('visible');
+    startGate();
+  }
+}
+
+// Sign-in never opens a window. Two ways in:
+//   a code   -- the page shows a 4-character code; the person types it at
+//               plex.tv/link on their phone or computer. This is what TVs
+//               use (a TV browser cannot handle a popup, and nobody wants to
+//               type a password with a remote).
+//   same tab -- this tab goes to Plex's sign-in page and Plex sends it back
+//               here (/?signin=return) when the person is done.
+// Either way the page then asks /auth/plex/poll every 2 seconds. The server
+// keeps the pin in a cookie, so the page never handles a pin id.
+let signInTimer = null;
+let codeRenewals = 0;
+const MAX_CODE_RENEWALS = 8; // 8 codes x 15 min: after two hours, wait for a key press
+
+function isTvBrowser(){
+  if(new URLSearchParams(location.search).get('tv') === '1') return true;
+  return /\bTV\b|SMART-TV|SmartTV|Tizen|Web0S|WebOS|BRAVIA|AFT[A-Z]|CrKey|Roku|VIDAA|HbbTV|LacklusterPlusTV/i.test(navigator.userAgent);
+}
+
+function gateStatus(text, isError){
+  const el = document.getElementById('gate-status');
+  el.textContent = text || '';
+  el.classList.toggle('error', !!isError);
+}
+
+// The code panel and the two buttons are never up together.
+function showCodePanel(on){
+  document.getElementById('link-panel').hidden = !on;
+  document.getElementById('gate-actions').hidden = on;
+  document.getElementById('gate').classList.toggle('coding', on);
+}
+
+function showGateChoices(){
+  clearInterval(signInTimer);
+  showCodePanel(false);
+  document.getElementById(isTvBrowser() ? 'btn-code' : 'btn-signin').focus();
+}
+
+function cancelSignIn(){
+  showGateChoices();
+  gateStatus('');
+}
+
+function pollSignIn(){
+  clearInterval(signInTimer);
+  let attempts = 0;
+  signInTimer = setInterval(async () => {
+    attempts++;
+    if(attempts > 900){ // 30 minutes
+      showGateChoices();
+      gateStatus('Sign-in timed out — try again.', true);
+      return;
+    }
+    let res, body;
+    try {
+      res = await fetch('/auth/plex/poll');
+      body = await res.json();
+    } catch(e){ return; } // a network blip: try again in 2 seconds
+    if(body.status === 'pending') return;
+    clearInterval(signInTimer);
+    if(body.status === 'ok'){
+      gateStatus('Signed in!');
+      showCodePanel(false);
+      checkAuth();
+    } else if(body.status === 'expired'){
+      const onCode = !document.getElementById('link-panel').hidden;
+      if(onCode && codeRenewals < MAX_CODE_RENEWALS){ codeRenewals++; startCodeSignIn(true); }
+      else { showGateChoices(); gateStatus('That sign-in ran out of time — try again.', true); }
+    } else {
+      showGateChoices();
+      gateStatus(body.error || 'Sign-in did not work — try again.', true);
+    }
+  }, 2000);
+}
+
+// A code to type at plex.tv/link on another device.
+async function startCodeSignIn(isRenewal){
+  if(isRenewal !== true) codeRenewals = 0;
+  gateStatus('Getting a code…');
+  try {
+    const res = await fetch('/auth/plex/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'link' }) });
+    if(!res.ok) throw new Error('start failed');
+    const info = await res.json();
+    document.getElementById('link-code').textContent = info.code;
+    document.getElementById('link-url').textContent = String(info.linkUrl || 'https://plex.tv/link').replace(/^https?:\/\//, '');
+    const qr = document.getElementById('link-qr');
+    qr.hidden = true;
+    if(info.qrUrl){
+      qr.onload = () => { qr.hidden = false; };
+      qr.onerror = () => { qr.hidden = true; };
+      qr.src = info.qrUrl;
+    }
+    showCodePanel(true);
+    document.getElementById('btn-back').focus();
+    gateStatus('Waiting for you to enter the code…');
+    pollSignIn();
+  } catch(e){
+    showGateChoices();
+    gateStatus('Something went wrong getting a code — try again.', true);
+  }
+}
+
+// Plex's own sign-in page, in this tab.
+async function startSignIn(){
+  gateStatus('Opening Plex sign-in…');
+  try {
+    const res = await fetch('/auth/plex/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'redirect' }) });
+    if(!res.ok) throw new Error('start failed');
+    const info = await res.json();
+    location.assign(info.authUrl);
+  } catch(e){
+    gateStatus('Something went wrong starting sign-in.', true);
+  }
+}
+
+// Called once the page knows nobody is signed in.
+function startGate(){
+  const params = new URLSearchParams(location.search);
+  if(params.get('signin') === 'return'){
+    // Back from Plex's sign-in page: tidy the address, then finish.
+    params.delete('signin');
+    const q = params.toString();
+    history.replaceState(null, '', location.pathname + (q ? '?' + q : ''));
+    document.getElementById('gate-actions').hidden = true;
+    gateStatus('Finishing sign-in…');
+    pollSignIn();
+  } else if(isTvBrowser()){
+    startCodeSignIn();
+  } else {
+    showGateChoices();
+  }
+}
+
+async function signOut(){
+  await fetch('/auth/logout', { method: 'POST' });
+  location.reload();
+}
+
+// ---------------- clock ----------------
+function tick(){
+  const t = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const clockEl = document.getElementById('clock');
+  if(clockEl) clockEl.textContent = t;
+  const pmTime = document.getElementById('pm-time');
+  if(pmTime) pmTime.textContent = t;
+  updateNowLines();
+}
+tick(); setInterval(tick, 1000);
+
+// ---------------- options / prefs ----------------
+function toggleOptions(){ document.getElementById('options-dropdown').classList.toggle('open'); }
+document.addEventListener('click', (e)=>{
+  const dd = document.getElementById('options-dropdown');
+  if(dd && !dd.contains(e.target) && !e.target.closest('.icon-btn') && !e.target.closest('.avatar')) dd.classList.remove('open');
+
+  // Detail drawer collapses when you click anything outside it (except the
+  // guide cells that open it, and the player it launches).
+  const drawer = document.getElementById('detail-drawer');
+  if(drawer && drawer.classList.contains('open')
+     && !drawer.contains(e.target)
+     && !e.target.closest('.prog-cell')
+     && !e.target.closest('.player-modal')
+     && !e.target.closest('.modal-backdrop')){
+    closeDetail();
+  }
+});
+let qualityPref = 'auto';
+
+async function loadPrefs(){
+  const res = await fetch('/v/api/prefs');
+  if(!res.ok) return;
+  const p = await res.json();
+  document.getElementById('subtitle-pref').value = p.subtitleLang;
+  document.getElementById('force-subs').checked = p.forceSubtitles;
+  qualityPref = p.quality || 'auto';
+  document.getElementById('quality-pref').value = qualityPref;
+}
+async function savePrefs(){
+  qualityPref = document.getElementById('quality-pref').value;
+  await fetch('/v/api/prefs', {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      subtitleLang: document.getElementById('subtitle-pref').value,
+      forceSubtitles: document.getElementById('force-subs').checked,
+      quality: qualityPref,
+    }),
+  });
+}
+
+// Maps the viewer's quality preference to Tunarr's per-request stream
+// mode. 'auto' sends nothing (channel default); 'source' asks for
+// direct-play HLS (streams copied, not re-encoded); 'stable' forces the
+// standard transcode.
+function qualityQuery(){
+  if(qualityPref === 'source') return '?mode=hls_direct_v2';
+  if(qualityPref === 'stable') return '?mode=hls';
+  return '';
+}
+
+// ---------------- guide loading + rendering ----------------
+// The timeline covers a rolling window starting "now" out to
+// guideFetchHours ahead (server caps this at 48h; neededHours() bumps it
+// up as needed so the visible viewport is always fully covered, even at
+// the most zoomed-out level on a wide screen). Users zoom (pixels per
+// hour) and scroll (native horizontal scroll + Back/Forward buttons)
+// within that already-fetched window instead of us re-fetching on every
+// interaction -- keeps zoom/scroll instant, except when zooming out far
+// enough to need more data than we already have (see guideZoom()).
+// (guideFetchHours / ZOOM_HOURS / zoomIndex / guideFetchStart are
+// declared near the top of the script -- see the comment there.)
+
+async function loadGuide(){
+  // Never SHRINK an already-extended window (e.g. one grown by scrolling
+  // near the right edge) -- only grow it to cover whatever the current
+  // zoom level needs.
+  guideFetchHours = Math.max(guideFetchHours, neededHours());
+  const [chRes, guideRes] = await Promise.all([
+    fetch('/v/api/channels'),
+    fetch('/v/api/guide?hours=' + guideFetchHours),
+  ]);
+  if(!chRes.ok || !guideRes.ok){
+    document.getElementById('guide-rows').insertAdjacentHTML('beforeend',
+      '<div class="empty-state">Could not load the guide — is Tunarr running?</div>');
+    return;
+  }
+  CHANNELS = await chRes.json();
+  GUIDE = await guideRes.json();
+  guideFetchStart = Date.now();
+
+  genreSet = new Set();
+  CHANNELS.forEach(c => (c.meta?.tags || []).forEach(t => genreSet.add(t)));
+  const genreList = document.getElementById('genre-list');
+  genreList.innerHTML = [...genreSet].sort().map(g =>
+    '<div class="fs-item" data-filter="'+g+'">'+g+'</div>').join('');
+
+  document.querySelectorAll('.fs-item').forEach(item=>{
+    item.addEventListener('click', ()=>{
+      document.querySelectorAll('.fs-item').forEach(i=>i.classList.remove('active'));
+      item.classList.add('active');
+      applyFilters();
+    });
+  });
+
+  // Preserve the user's scroll position (and thus which part of the
+  // timeline they're looking at) across the 60s background refresh.
+  const scrollEl = document.getElementById('guide-scroll');
+  const wasScroll = scrollEl ? scrollEl.scrollLeft : 0;
+  const firstRender = !scrollEl || scrollEl.dataset.rendered !== '1';
+  renderGrid();
+  if(scrollEl){
+    scrollEl.dataset.rendered = '1';
+    scrollEl.scrollLeft = firstRender ? 0 : wasScroll;
+  }
+  if(firstRender) guideJumpNow();
+}
+
+// ---------------- favorite channels ----------------
+// See favoriteChannelIds declaration near the top of the script and the
+// column comment in gateway/src/db.ts. The array's ORDER is the display
+// order within the favorites block, not just membership.
+
+async function loadFavorites(){
+  try {
+    const res = await fetch('/v/api/favorites');
+    if(!res.ok) return;
+    const data = await res.json();
+    favoriteChannelIds = Array.isArray(data.favorites) ? data.favorites : [];
+  } catch(e){ /* start with no favorites rather than blocking the guide load */ }
+}
+
+async function saveFavorites(){
+  try {
+    await fetch('/v/api/favorites', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ favorites: favoriteChannelIds }),
+    });
+  } catch(e){ /* local state already updated; next load will just retry the save */ }
+}
+
+function toggleFavorite(channelId, e){
+  if(e){ e.preventDefault(); e.stopPropagation(); }
+  const idx = favoriteChannelIds.indexOf(channelId);
+  if(idx === -1){ favoriteChannelIds.push(channelId); }
+  else { favoriteChannelIds.splice(idx, 1); }
+  saveFavorites();
+  renderGrid();
+}
+
+function moveFavorite(channelId, dir, e){
+  if(e){ e.preventDefault(); e.stopPropagation(); }
+  const idx = favoriteChannelIds.indexOf(channelId);
+  const target = idx + dir;
+  if(idx === -1 || target < 0 || target >= favoriteChannelIds.length) return;
+  const tmp = favoriteChannelIds[idx];
+  favoriteChannelIds[idx] = favoriteChannelIds[target];
+  favoriteChannelIds[target] = tmp;
+  saveFavorites();
+  renderGrid();
+}
+
+// ---------------- Re-Skin ----------------
+// See the state declarations near the top of the script and reskin.ts on
+// the server. Off by default, per the user's explicit ask.
+
+async function loadReskinState(){
+  try {
+    const [prefRes, listRes] = await Promise.all([
+      fetch('/v/api/reskin'),
+      fetch('/v/api/reskin/list'),
+    ]);
+    if(prefRes.ok){
+      const pref = await prefRes.json();
+      reskinEnabled = !!pref.enabled;
+      reskinSkinName = pref.skinName || '';
+    }
+    if(listRes.ok){
+      const data = await listRes.json();
+      reskinSkins = Array.isArray(data.skins) ? data.skins : [];
+    }
+  } catch(e){ /* Re-Skin just stays off/empty if this fails -- not fatal to the rest of the app */ }
+
+  const toggle = document.getElementById('reskin-enable-toggle');
+  if(toggle){ toggle.classList.toggle('active', reskinEnabled); toggle.textContent = reskinEnabled ? 'On' : 'Off'; }
+
+  const picker = document.getElementById('reskin-picker');
+  if(picker){
+    if(reskinSkins.length === 0){
+      picker.innerHTML = '<option value="">No skins found</option>';
+    } else {
+      picker.innerHTML = '<option value="">— Select a skin —</option>' +
+        reskinSkins.map(s => '<option value="'+esc(s.name)+'">'+esc(s.name)+'</option>').join('');
+      picker.value = reskinSkinName;
+    }
+  }
+  applyReskin();
+}
+
+async function saveReskinPrefs(){
+  try {
+    await fetch('/v/api/reskin', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: reskinEnabled, skinName: reskinSkinName }),
+    });
+  } catch(e){ /* local state already updated -- next load will just retry the save */ }
+}
+
+function toggleReskinEnabled(){
+  reskinEnabled = !reskinEnabled;
+  const toggle = document.getElementById('reskin-enable-toggle');
+  if(toggle){ toggle.classList.toggle('active', reskinEnabled); toggle.textContent = reskinEnabled ? 'On' : 'Off'; }
+  saveReskinPrefs();
+  applyReskin();
+}
+
+function onReskinPick(name){
+  reskinSkinName = name;
+  saveReskinPrefs();
+  applyReskin();
+}
+
+function applyReskin(){
+  const overlay = document.getElementById('reskin-screen-overlay');
+  const panel = document.getElementById('social-panel');
+  const skin = reskinSkins.find(s => s.name === reskinSkinName);
+  const active = reskinEnabled && !!skin;
+
+  if(overlay){
+    if(active && skin.hasScreen){
+      overlay.src = '/v/api/reskin/asset/' + encodeURIComponent(skin.name) + '/screen';
+      overlay.classList.add('visible');
+      resizeDrawCanvas(); // also repositions the overlay -- see the reskin block there
+    } else {
+      overlay.classList.remove('visible');
+      overlay.removeAttribute('src');
+    }
+  }
+
+  if(panel){
+    if(active && skin.hasPanel){
+      panel.style.backgroundImage = 'url(/v/api/reskin/asset/' + encodeURIComponent(skin.name) + '/panel)';
+      panel.style.backgroundSize = 'cover';
+      panel.style.backgroundPosition = 'center';
+    } else {
+      panel.style.backgroundImage = '';
+    }
+  }
+}
+
+function nowProgram(channelId){
+  const ch = GUIDE[channelId];
+  if(!ch) return null;
+  const now = Date.now();
+  return (ch.programs||[]).find(p => Date.parse(p.start) <= now && now < Date.parse(p.stop)) || null;
+}
+function programLabel(p){
+  if(!p) return '<span class="p-title">No data</span>';
+  if(p.subtype === 'episode' && p.seasonNumber != null && p.episodeNumber != null){
+    const label = p.showTitle ? (p.showTitle + ': ' + p.title) : p.title;
+    return '<span class="p-title">'+esc(label)+'</span>S'+pad(p.seasonNumber)+'E'+pad(p.episodeNumber);
+  }
+  return '<span class="p-title">'+esc(p.title)+'</span>'+(p.subtype === 'movie' ? 'Feature film' : '');
+}
+function pad(n){ return String(n).padStart(2,'0'); }
+function esc(s){ const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+// Calm, desaturated per-series colors -- deliberately muted (not the
+// neon/rainbow look) so a dense guide still reads as one cohesive dark
+// UI. Same show (or same movie) always lands on the same color; a
+// different series right next door always lands on a different one.
+const SERIES_COLORS = [
+  '#2b3a4a', '#24413f', '#3a2f45', '#423a2e', '#33402f',
+  '#452f36', '#2f333f', '#453c26', '#2c2f47', '#442f2a',
+  '#2f4038', '#3d2f3a',
+];
+function seriesKey(p){
+  return p.subtype === 'episode' && p.showTitle ? p.showTitle : p.title;
+}
+function seriesColor(p){
+  const key = seriesKey(p) || 'unknown';
+  let hash = 0;
+  for(let i = 0; i < key.length; i++){ hash = (hash * 31 + key.charCodeAt(i)) | 0; }
+  return SERIES_COLORS[Math.abs(hash) % SERIES_COLORS.length];
+}
+
+function pxPerHour(){
+  const scrollEl = document.getElementById('guide-scroll');
+  const viewportWidth = (scrollEl ? scrollEl.clientWidth : window.innerWidth) || window.innerWidth;
+  return viewportWidth / ZOOM_HOURS[zoomIndex];
+}
+function pxPerMs(){ return pxPerHour() / 3600000; }
+function timelineWidth(){ return guideFetchHours * pxPerHour(); }
+
+// How many hours of guide data we need fetched so the timeline fills the
+// full visible viewport at the CURRENT zoom level, with a little slack --
+// otherwise a wide screen at a zoomed-out level runs out of programming
+// before it runs out of screen. Always at least 24h, capped at the
+// server's 48h limit.
+function neededHours(){
+  // Zoom is now capped at 6 hours visible at most (see ZOOM_HOURS above),
+  // so by construction the viewport itself never needs more than ~8h of
+  // data at once -- a 24h base fetch always covers that with room to
+  // spare. The real reason to grow past 24h is scrolling far forward,
+  // which ensureGuideCoverage() (a scroll listener) handles separately.
+  return Math.min(48, Math.max(24, guideFetchHours));
+}
+
+function drawRuler(){
+  const ruler = document.getElementById('guide-ruler');
+  const pph = pxPerHour();
+  ruler.style.width = timelineWidth() + 'px';
+  ruler.innerHTML = '';
+  const halfStep = pph >= 140; // show :30 sub-ticks once there's room
+  const stepHours = halfStep ? 0.5 : 1;
+  const startDate = new Date(guideFetchStart);
+  // Align the first tick to the next clean hour/half-hour boundary.
+  const base = new Date(startDate);
+  base.setSeconds(0,0);
+  const minuteStep = stepHours * 60;
+  base.setMinutes(Math.ceil(base.getMinutes() / minuteStep) * minuteStep);
+  let frag = document.createDocumentFragment();
+  for(let t = base.getTime(); t < guideFetchStart + guideFetchHours*3600000; t += stepHours*3600000){
+    const left = (t - guideFetchStart) * pxPerMs();
+    if(left < 0) continue;
+    const d = new Date(t);
+    const isHour = d.getMinutes() === 0;
+    const tick = document.createElement('div');
+    tick.className = 'ruler-tick' + (isHour ? '' : ' half');
+    tick.style.left = left + 'px';
+    tick.textContent = isHour
+      ? d.toLocaleTimeString('en-US',{hour:'numeric'})
+      : ':30';
+    frag.appendChild(tick);
+  }
+  ruler.appendChild(frag);
+}
+
+async function guideZoom(dir){
+  const scrollEl = document.getElementById('guide-scroll');
+  const centerMs = scrollEl ? (scrollEl.scrollLeft + scrollEl.clientWidth/2) / pxPerMs() : 0;
+  zoomIndex = Math.max(0, Math.min(ZOOM_HOURS.length - 1, zoomIndex + dir));
+
+  // Zoom is capped at 6 hours visible at most, so it never needs more
+  // fetched data than the 24h base window already provides -- just
+  // redraw. (Scrolling far forward is what actually needs more data; see
+  // ensureGuideCoverage().)
+  renderGrid();
+
+  if(scrollEl){
+    scrollEl.scrollLeft = Math.max(0, centerMs * pxPerMs() - scrollEl.clientWidth/2);
+  }
+  updateZoomLabel();
+}
+
+function guideScroll(dir){
+  const scrollEl = document.getElementById('guide-scroll');
+  if(!scrollEl) return;
+  scrollEl.scrollBy({ left: dir * scrollEl.clientWidth * 0.85, behavior: 'smooth' });
+}
+
+// Zooming out isn't the only way to outrun the fetched window -- scrolling
+// forward (via the Forward button, a trackpad, or a scrollbar drag) gets
+// there just as easily. Whenever the visible right edge gets close to the
+// edge of what we've actually fetched, grow the window and pull more data,
+// so "how far out the user is" (zoomed OR scrolled) never runs dry.
+let guideExtending = false;
+async function ensureGuideCoverage(){
+  const scrollEl = document.getElementById('guide-scroll');
+  if(!scrollEl || guideExtending || guideFetchHours >= 48) return;
+  const rightEdge = scrollEl.scrollLeft + scrollEl.clientWidth;
+  if(rightEdge > timelineWidth() - 600){
+    guideExtending = true;
+    guideFetchHours = Math.min(48, guideFetchHours + 24);
+    await loadGuide();
+    guideExtending = false;
+  }
+}
+(function(){
+  const scrollEl = document.getElementById('guide-scroll');
+  if(!scrollEl) return;
+  let scrollCheckTimer = null;
+  scrollEl.addEventListener('scroll', function(){
+    if(scrollCheckTimer) clearTimeout(scrollCheckTimer);
+    scrollCheckTimer = setTimeout(ensureGuideCoverage, 150);
+  });
+})();
+
+function guideJumpNow(){
+  const scrollEl = document.getElementById('guide-scroll');
+  if(!scrollEl || guideFetchStart == null) return;
+  const nowLeft = (Date.now() - guideFetchStart) * pxPerMs();
+  scrollEl.scrollLeft = Math.max(0, nowLeft - 60);
+}
+
+function updateZoomLabel(){
+  const label = document.getElementById('guide-zoom-label');
+  if(label) label.textContent = zoomIndex === ZOOM_HOURS.length - 1 ? 'Zoomed in' : zoomIndex === 0 ? 'Zoomed out' : 'Zoom ' + (zoomIndex+1) + '/' + ZOOM_HOURS.length;
+}
+
+function updateWindowLabel(){
+  const scrollEl = document.getElementById('guide-scroll');
+  const label = document.getElementById('guide-window-label');
+  if(!scrollEl || !label || guideFetchStart == null) return;
+  const startMs = guideFetchStart + scrollEl.scrollLeft / pxPerMs();
+  const endMs = guideFetchStart + (scrollEl.scrollLeft + scrollEl.clientWidth) / pxPerMs();
+  const fmt = (ms) => new Date(ms).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  label.textContent = fmt(startMs) + ' – ' + fmt(endMs);
+}
+
+function updateNowLines(){
+  if(guideFetchStart == null) return;
+  const left = (Date.now() - guideFetchStart) * pxPerMs();
+  document.querySelectorAll('.now-line').forEach(el => { el.style.left = left + 'px'; });
+  updateWindowLabel();
+}
+
+function renderGrid(){
+  const rows = document.getElementById('guide-rows');
+  rows.innerHTML = '';
+  drawRuler();
+  updateZoomLabel();
+
+  const trackWidth = timelineWidth();
+  const windowEnd = guideFetchStart + guideFetchHours * 3600000;
+  // Favorites first (in the viewer's own custom order), then everything
+  // else in normal channel-number order.
+  const favIndex = (id) => favoriteChannelIds.indexOf(id);
+  const sorted = [...CHANNELS].sort((a,b) => {
+    const fa = favIndex(a.id), fb = favIndex(b.id);
+    if(fa !== -1 || fb !== -1){
+      if(fa === -1) return 1;
+      if(fb === -1) return -1;
+      return fa - fb;
+    }
+    return (a.number||0) - (b.number||0);
+  });
+
+  sorted.forEach(chan => {
+    const row = document.createElement('div');
+    row.className = 'guide-row g-row';
+    row.dataset.row = chan.id;
+
+    const isFav = favoriteChannelIds.includes(chan.id);
+    const favIdx = favoriteChannelIds.indexOf(chan.id);
+
+    const chanCell = document.createElement('div');
+    chanCell.className = 'chan-cell' + (isFav ? ' is-favorite' : '');
+    const logoSrc = chan.icon && chan.icon.path
+      ? '/v/api/channel-image?path=' + encodeURIComponent(chan.icon.path)
+      : null;
+    chanCell.innerHTML =
+      '<div class="logo-tile" style="border-radius:14px;" tabindex="0" role="button" data-chan="'+chan.id+'" title="'+esc(chan.name)+': click for what\'s on, click again to watch">' + (logoSrc ? '<img src="'+logoSrc+'" alt="">' : '📺') + '</div>' +
+      '<div class="chan-info"><div class="chan-num">CH '+pad(chan.number||0)+'</div><div class="chan-name">'+esc(chan.name)+'</div>' +
+      '<div class="chan-tags">'+esc((chan.meta?.tags||[]).join(', ') || chan.meta?.contentType || '')+'</div></div>' +
+      '<div class="chan-fav-controls">' +
+        '<button class="chan-fav-btn' + (isFav ? ' active' : '') + '" title="' + (isFav ? 'Remove from favorites' : 'Add to favorites') + '" onclick="toggleFavorite(\''+chan.id+'\', event)">' + (isFav ? '★' : '☆') + '</button>' +
+        (isFav ? (
+          '<div class="chan-fav-reorder">' +
+            '<button title="Move up" ' + (favIdx <= 0 ? 'disabled' : '') + ' onclick="moveFavorite(\''+chan.id+'\', -1, event)">▲</button>' +
+            '<button title="Move down" ' + (favIdx >= favoriteChannelIds.length - 1 ? 'disabled' : '') + ' onclick="moveFavorite(\''+chan.id+'\', 1, event)">▼</button>' +
+          '</div>'
+        ) : '') +
+      '</div>';
+    row.appendChild(chanCell);
+
+    const track = document.createElement('div');
+    track.className = 'timeline-track';
+    track.style.width = trackWidth + 'px';
+
+    const nowLine = document.createElement('div');
+    nowLine.className = 'now-line';
+    nowLine.style.left = ((Date.now() - guideFetchStart) * pxPerMs()) + 'px';
+    track.appendChild(nowLine);
+
+    const programs = ((GUIDE[chan.id] || {}).programs || [])
+      .filter(p => Date.parse(p.stop) > guideFetchStart && Date.parse(p.start) < windowEnd);
+
+    if(programs.length === 0){
+      const empty = document.createElement('div');
+      empty.className = 'p-title';
+      empty.style.cssText = 'position:absolute; top:10px; left:12px; color:var(--text-muted); font-weight:400;';
+      empty.textContent = 'No programming scheduled in this window.';
+      track.appendChild(empty);
+    }
+
+    programs.forEach(p => {
+      const start = Math.max(Date.parse(p.start), guideFetchStart);
+      const stop = Math.min(Date.parse(p.stop), windowEnd);
+      const left = (start - guideFetchStart) * pxPerMs();
+      const width = Math.max(2, (stop - start) * pxPerMs());
+      const isNow = Date.parse(p.start) <= Date.now() && Date.now() < Date.parse(p.stop);
+
+      const cell = document.createElement('div');
+      cell.className = 'prog-cell' + (isNow ? ' on-now' : '');
+      cell.style.left = left + 'px';
+      cell.style.width = width + 'px';
+      cell.dataset.kind = p.subtype || '';
+      // Flex/off-air placeholders stay neutral; everything else gets a
+      // calm, per-series color so adjacent different shows are easy to
+      // tell apart at a glance, while back-to-back episodes of the same
+      // show read as one continuous block. The "on now" treatment (accent
+      // border + gradient) takes precedence over the base series color.
+      if(p.subtype !== 'flex' && !isNow){
+        cell.style.background = seriesColor(p);
+      }
+      cell.onclick = () => showDetail(chan, p, isNow);
+      let inner = '';
+      if(isNow){
+        const pct = progressPct(p);
+        inner = '<span class="on-now-tag"><span class="dot"></span>ON NOW</span>' + programLabel(p) +
+          '<div class="progress-track"><div class="progress-fill" style="width:'+pct+'%"></div></div>';
+      } else {
+        inner = programLabel(p);
+      }
+      cell.innerHTML = inner;
+      track.appendChild(cell);
+    });
+
+    row.appendChild(track);
+    rows.appendChild(row);
+  });
+
+  if(sorted.length === 0){
+    rows.insertAdjacentHTML('beforeend',
+      '<div class="empty-state">No channels yet — create one in the admin app.</div>');
+  }
+  updateWindowLabel();
+}
+
+function progressPct(p){
+  const start = Date.parse(p.start), stop = Date.parse(p.stop), now = Date.now();
+  if(stop <= start) return 0;
+  return Math.max(0, Math.min(100, ((now - start) / (stop - start)) * 100));
+}
+
+function applyFilters(){
+  const activeFilter = document.querySelector('.fs-item.active').dataset.filter;
+  const q = document.getElementById('search-input').value.trim().toLowerCase();
+
+  CHANNELS.forEach(chan => {
+    const meta = chan.meta || { tags: [], contentType: 'both' };
+    let genreMatch = true;
+    if(activeFilter === 'movies') genreMatch = meta.contentType === 'movies' || meta.contentType === 'both';
+    else if(activeFilter === 'tv') genreMatch = meta.contentType === 'tv' || meta.contentType === 'both';
+    else if(activeFilter !== 'all') genreMatch = meta.tags.includes(activeFilter);
+
+    const row = document.querySelector('.guide-row[data-row="'+chan.id+'"]');
+    if(!row) return;
+    let textMatch = true;
+    if(q){
+      const combined = (chan.name + ' ' + row.textContent).toLowerCase();
+      textMatch = combined.includes(q);
+    }
+    row.classList.toggle('row-hidden', !(genreMatch && textMatch));
+  });
+}
+
+// ---------------- detail drawer ----------------
+let currentDetail = null;
+
+async function showDetail(chan, program, isNow){
+  currentDetail = { chan, program, isNow };
+  document.getElementById('dd-poster').innerHTML = program.subtype === 'movie' ? '🎬' : '📺';
+  document.getElementById('dd-title').textContent = program.title;
+  const bits = [];
+  if(program.year) bits.push(program.year);
+  if(program.rating) bits.push(program.rating);
+  if(program.subtype === 'episode' && program.seasonNumber != null) bits.push('S'+pad(program.seasonNumber)+'E'+pad(program.episodeNumber));
+  document.getElementById('dd-meta').textContent = bits.join(' · ') || '—';
+  document.getElementById('dd-synopsis').textContent = program.summary || 'No synopsis available.';
+  document.getElementById('dd-cast').innerHTML = '';
+  document.getElementById('dd-ratings').style.display = 'none';
+
+  document.getElementById('dd-playing').style.display = isNow ? 'inline-flex' : 'none';
+  document.getElementById('dd-watch').style.display = isNow ? 'inline-flex' : 'none';
+  document.getElementById('dd-subs').style.display =
+    (program.externalKey && program.sourceType === 'plex') ? 'inline-flex' : 'none';
+
+  const chanLogoEl = document.getElementById('dd-chanlogo');
+  const chanLogoSrc = chan.icon && chan.icon.path
+    ? '/v/api/channel-image?path=' + encodeURIComponent(chan.icon.path)
+    : null;
+  chanLogoEl.innerHTML = chanLogoSrc ? '<img src="'+chanLogoSrc+'" alt="'+esc(chan.name)+'">' : '📺';
+  chanLogoEl.title = chan.name;
+
+  document.getElementById('detail-drawer').classList.add('open');
+
+  // Land keyboard focus on Watch Live so Enter starts playback immediately.
+  if(isNow){
+    requestAnimationFrame(function(){ document.getElementById('dd-watch').focus(); });
+  }
+
+  // best-effort enrichment straight from Plex
+  if(program.externalKey){
+    try {
+      const res = await fetch('/v/api/program-details?externalKey=' + encodeURIComponent(program.externalKey));
+      const d = await res.json();
+      if(d.available){
+        if(d.poster) document.getElementById('dd-poster').innerHTML = '<img src="'+d.poster+'" style="width:100%;height:100%;object-fit:cover;">';
+        if(d.summary) document.getElementById('dd-synopsis').textContent = d.summary;
+        if(d.criticRating || d.audienceRating){
+          document.getElementById('dd-ratings').style.display = 'flex';
+          document.getElementById('dd-critic').textContent = d.criticRating ? (d.criticRating + ' Critic') : '—';
+          document.getElementById('dd-audience').textContent = d.audienceRating ? (Math.round(d.audienceRating*10) + '% Audience') : '—';
+        }
+        if(d.cast && d.cast.length){
+          document.getElementById('dd-cast').innerHTML = d.cast.map(c => {
+            const initials = c.name.split(' ').map(p=>p[0]).slice(0,2).join('');
+            const face = c.thumb
+              ? '<div class="cast-avatar"><img src="'+esc(c.thumb)+'" alt="" loading="lazy" onerror="this.parentNode.textContent=\''+esc(initials)+'\'"></div>'
+              : '<div class="cast-avatar">'+initials+'</div>';
+            return '<div class="cast-member">'+face+'<div class="cn">'+esc(c.name)+'</div><div class="cr">'+esc(c.role)+'</div></div>';
+          }).join('');
+        }
+      }
+    } catch(e){ /* enrichment is best-effort; base info already shown */ }
+  }
+}
+function closeDetail(){ document.getElementById('detail-drawer').classList.remove('open'); }
+
+function watchCurrent(){
+  if(!currentDetail) return;
+  playChannel(currentDetail.chan.id, currentDetail.chan.name);
+}
+
+// ---------------- subtitle search & download ----------------
+function openSubtitleSearch(){
+  if(!currentDetail || !currentDetail.program.externalKey) return;
+  document.getElementById('subs-for').textContent =
+    'Searching for: ' + currentDetail.program.title + ' — results come from the same providers Plex uses, and your pick is added to the library for everyone.';
+  const langSel = document.getElementById('subs-lang');
+  const pref = document.getElementById('subtitle-pref').value;
+  if(pref && pref !== 'off'){ langSel.value = pref; }
+  document.getElementById('subs-results').innerHTML = '<div class="hint" id="subs-status"></div>';
+  document.getElementById('subs-modal').classList.add('open');
+}
+function closeSubtitleSearch(){ document.getElementById('subs-modal').classList.remove('open'); }
+
+async function searchSubtitles(){
+  if(!currentDetail) return;
+  const lang = document.getElementById('subs-lang').value;
+  const resultsEl = document.getElementById('subs-results');
+  resultsEl.innerHTML = '<div class="hint">Searching… this asks the subtitle providers directly, give it up to ~20 seconds.</div>';
+  try {
+    const res = await fetch('/v/api/subtitles/search?externalKey=' +
+      encodeURIComponent(currentDetail.program.externalKey) + '&lang=' + encodeURIComponent(lang));
+    const data = await res.json();
+    if(!res.ok){ resultsEl.innerHTML = '<div class="hint">' + esc(data.error || 'Search failed.') + '</div>'; return; }
+    if(!data.results.length){ resultsEl.innerHTML = '<div class="hint">No subtitles found for that language.</div>'; return; }
+    resultsEl.innerHTML = data.results.map(function(r, i){
+      const badges = [];
+      if(r.hearingImpaired) badges.push('HI');
+      if(r.forced) badges.push('Forced');
+      return '<div class="sub-result">' +
+        '<span class="st" title="' + esc(r.title) + '">' + esc(r.title) + '</span>' +
+        '<div class="meta-row">' +
+          '<span class="sp">' + esc(r.provider) + (badges.length ? ' · ' + badges.join(' · ') : '') + '</span>' +
+          '<button onclick="applySubtitle(' + i + ', this)">Download</button>' +
+        '</div>' +
+        '</div>';
+    }).join('');
+    window._subResults = data.results;
+  } catch(e){
+    resultsEl.innerHTML = '<div class="hint">Search failed — try again in a moment.</div>';
+  }
+}
+
+async function applySubtitle(index, btn){
+  const r = (window._subResults || [])[index];
+  if(!r || !currentDetail) return;
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    const res = await fetch('/v/api/subtitles/apply', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        externalKey: currentDetail.program.externalKey,
+        key: r.key, codec: r.codec, languageCode: r.languageCode,
+        title: r.title, provider: r.provider,
+        hearingImpaired: r.hearingImpaired, forced: r.forced,
+      }),
+    });
+    const data = await res.json();
+    if(res.ok){
+      btn.textContent = 'Added ✓'; btn.classList.add('done');
+      showToast('Subtitle added — it takes effect the next time this title plays.');
+    } else {
+      btn.disabled = false; btn.textContent = 'Download';
+      showToast(esc(data.error || 'Download failed.'));
+    }
+  } catch(e){
+    btn.disabled = false; btn.textContent = 'Download';
+    showToast('Download failed — try again.');
+  }
+}
+
+// ---------------- player ----------------
+let playerWatchdog = null;
+let currentChannelId = null, currentChannelName = null;
+let reconnectAttempts = 0, mediaRecoverAttempts = 0, lastMediaErrorAt = 0;
+const MAX_RECONNECT_ATTEMPTS = 3;
+
+// ---------------- video diagnostics overlay ----------------
+// Default ON while we're testing quality settings; toggle in the player.
+let diagOn = false, diagTimer = null, diagLastError = '', diagLastErrorBody = '', diagProbed = false;
+
+function toggleDiag(){
+  diagOn = !diagOn;
+  document.getElementById('diag-toggle').textContent = 'Diagnostics: ' + (diagOn ? 'ON' : 'OFF');
+  updateDiag();
+}
+
+function recordDiagError(data){
+  const url = (data && (data.url || (data.frag && data.frag.url) || (data.context && data.context.url))) || '';
+  const code = data && data.response && data.response.code;
+  diagLastError = (data.details || 'error') + (code ? ' HTTP ' + code : '') + (url ? '\n  ' + url.replace(location.origin, '') : '');
+  // Once per playback session, fetch the failing URL ourselves to capture
+  // the response body -- it says WHO returned the error and why.
+  if(url && !diagProbed){
+    diagProbed = true;
+    fetch(url).then(function(r){ return r.text().then(function(t){
+      diagLastErrorBody = 'HTTP ' + r.status + ': ' + t.slice(0, 110);
+      updateDiag();
+    });}).catch(function(){});
+  }
+  updateDiag();
+}
+
+function updateDiag(){
+  const el = document.getElementById('player-diag');
+  const open = document.getElementById('player-modal').classList.contains('open');
+  if(!open || !diagOn){ el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  const video = document.getElementById('player-video');
+
+  const res = video.videoWidth ? (video.videoWidth + 'x' + video.videoHeight) : '—';
+  let bwBps = null, levelBps = null, levelH = null;
+  if(hlsInstance){
+    bwBps = hlsInstance.bandwidthEstimate || null;
+    const lv = hlsInstance.levels && hlsInstance.levels[hlsInstance.currentLevel];
+    if(lv){ levelBps = lv.bitrate || null; levelH = lv.height || null; }
+  }
+  const bw = bwBps ? (bwBps/1e6).toFixed(1) + ' Mbps' : 'n/a';
+  const lvl = levelBps ? (levelBps/1e6).toFixed(1) + ' Mbps' + (levelH ? ' @' + levelH + 'p' : '') : 'n/a';
+
+  let sig = 'n/a', sigClass = '';
+  if(bwBps){
+    const need = levelBps || 3e6; // assume ~3 Mbps if the stream doesn't advertise
+    const ratio = bwBps / need;
+    sig = ratio >= 2 ? 'Excellent' : ratio >= 1.3 ? 'Good' : ratio >= 1 ? 'Fair' : 'Poor';
+    sigClass = 'sig-' + sig;
+  }
+
+  let buf = '0.0s';
+  try {
+    if(video.buffered.length){
+      buf = Math.max(0, video.buffered.end(video.buffered.length-1) - video.currentTime).toFixed(1) + 's';
+    }
+  } catch(e){}
+
+  let dropped = 'n/a';
+  if(video.getVideoPlaybackQuality){
+    const q = video.getVideoPlaybackQuality();
+    dropped = q.droppedVideoFrames + ' / ' + q.totalVideoFrames;
+  }
+
+  let txt = 'Signal:     <span class="' + sigClass + '">' + sig + '</span>\n' +
+            'Bandwidth:  ' + esc(bw) + '\n' +
+            'Stream:     ' + esc(lvl) + '\n' +
+            'Resolution: ' + esc(res) + '\n' +
+            'Buffer:     ' + esc(buf) + '\n' +
+            'Dropped:    ' + esc(dropped) + '\n' +
+            'Quality:    ' + esc(qualityPref);
+  if(diagLastError){ txt += '\nLast error: ' + esc(diagLastError); }
+  if(diagLastErrorBody){ txt += '\n  body: ' + esc(diagLastErrorBody); }
+  el.innerHTML = txt;
+}
+
+function startDiag(){
+  diagLastError = ''; diagLastErrorBody = ''; diagProbed = false;
+  if(diagTimer) clearInterval(diagTimer);
+  diagTimer = setInterval(updateDiag, 1000);
+  updateDiag();
+}
+function stopDiag(){ if(diagTimer){ clearInterval(diagTimer); diagTimer = null; } }
+
+function setPlayerStatus(msg, isError){
+  const el = document.getElementById('pm-status');
+  el.innerHTML = msg || '';
+  el.classList.toggle('err', !!isError);
+}
+
+function clearPlayerWatchdog(){
+  if(playerWatchdog){ clearTimeout(playerWatchdog); playerWatchdog = null; }
+}
+
+function playChannel(channelId, channelName, isReconnect){
+  // Cache-buster: the master playlist must NEVER come from browser cache.
+  // A cached master points at a transcode session that no longer exists,
+  // and the player then loops on 404s ("levelLoadError") forever. This is
+  // also what makes reconnects safe -- a fresh fetch always lands on
+  // wherever the channel engine's live position is RIGHT NOW, never on
+  // wherever THIS client's old buffer happened to be.
+  const q = qualityQuery();
+  const src = '/v/stream/channels/' + channelId + '.m3u8' + q + (q ? '&' : '?') + '_ts=' + Date.now();
+  const video = document.getElementById('player-video');
+  const channelChanged = currentChannelId !== channelId;
+  currentChannelId = channelId;
+  currentChannelName = channelName;
+  if(!isReconnect){
+    reconnectAttempts = 0;
+    mediaRecoverAttempts = 0;
+  }
+  if(channelChanged){ resetSocialPanelForChannel(); resetDrawingForChannel(); }
+  startDrawPolling();
+  document.getElementById('pm-channel').textContent = channelName;
+  document.getElementById('player-modal').classList.add('open');
+  setPlayerStatus(isReconnect ? 'Reconnecting to live…' : 'Starting stream — first tune-in can take ~15 seconds…');
+  startDiag();
+
+  if(hlsInstance){ hlsInstance.destroy(); hlsInstance = null; }
+
+  // If nothing has loaded after 45s, the engine is hanging server-side —
+  // stop spinning and point at the diagnosis page instead.
+  clearPlayerWatchdog();
+  playerWatchdog = setTimeout(function(){
+    setPlayerStatus('The stream never started — this usually means the channel engine can\'t run FFmpeg. Open <a href="/status" target="_blank" style="color:#3B6CFF">the status page</a> to see exactly what\'s wrong.', true);
+    if(hlsInstance){ hlsInstance.destroy(); hlsInstance = null; }
+  }, 45000);
+
+  const tryPlay = function(){
+    clearPlayerWatchdog();
+    reconnectAttempts = 0;
+    mediaRecoverAttempts = 0;
+    resizeDrawCanvas();
+    video.muted = false;
+    video.play().then(function(){
+      setPlayerStatus('');
+    }).catch(function(){
+      // Autoplay with sound blocked — muted autoplay is always allowed,
+      // so start playing silently rather than sitting on a paused frame.
+      video.muted = true;
+      video.play().then(function(){
+        setPlayerStatus('Playing muted — click the 🔊 icon in the player to unmute.');
+      }).catch(function(){
+        setPlayerStatus('Press ▶ on the player to start.');
+      });
+    });
+  };
+
+  // Full reconnect: tear down and re-tune from scratch. Used when hls.js's
+  // own in-place recovery (recoverMediaError, retrying fragment loads)
+  // can't get unstuck on its own -- e.g. after the tab was backgrounded
+  // during a fullscreen transition and the live HLS window slid forward
+  // out from under the old buffer, or after a fatal network error. A
+  // fresh master-playlist fetch always resolves to the CURRENT live
+  // position (confirmed server-side), so this is what actually fixes the
+  // "resumes from the original start position" symptom -- that symptom is
+  // hls.js's internal media-error recovery reusing a stale buffer/decoder
+  // state, not a fresh reconnect.
+  const reconnect = function(reason){
+    if(reconnectAttempts >= MAX_RECONNECT_ATTEMPTS){
+      setPlayerStatus('Lost the stream and could not reconnect (' + reason + '). Close and try again.', true);
+      if(hlsInstance){ hlsInstance.destroy(); hlsInstance = null; }
+      return;
+    }
+    reconnectAttempts++;
+    setPlayerStatus('Reconnecting to live (attempt ' + reconnectAttempts + '/' + MAX_RECONNECT_ATTEMPTS + ')…');
+    setTimeout(function(){
+      if(currentChannelId === channelId){ playChannel(channelId, channelName, true); }
+    }, Math.min(1500 * reconnectAttempts, 5000));
+  };
+
+  if(window.Hls && window.Hls.isSupported()){
+    // Chrome / Brave / Edge / Firefox: hls.js. Retries cover Tunarr's
+    // session spin-up, but are kept tight enough that a real error goes
+    // fatal (and gets shown) well before the 45s watchdog.
+    hlsInstance = new Hls({
+      manifestLoadingMaxRetry: 4,
+      manifestLoadingRetryDelay: 1000,
+      manifestLoadingMaxRetryTimeout: 4000,
+      levelLoadingMaxRetry: 4,
+      fragLoadingMaxRetry: 6,
+      liveSyncDurationCount: 3,
+      maxBufferHole: 1.5,
+      nudgeMaxRetry: 8,
+      backBufferLength: 30,
+    });
+    hlsInstance.loadSource(src);
+    hlsInstance.attachMedia(video);
+    hlsInstance.on(Hls.Events.MANIFEST_PARSED, tryPlay);
+    hlsInstance.on(Hls.Events.ERROR, function(_evt, data){
+      recordDiagError(data);
+      if(!data.fatal){
+        // Non-fatal = hls.js is retrying. Show what it hit so a repeating
+        // failure is visible instead of an endless quiet spinner. A
+        // stalled/seek-over-hole buffer on a LIVE stream almost always
+        // means the buffered position has fallen behind the live window
+        // (e.g. the tab was paused/backgrounded for fullscreen) -- nudge
+        // hls.js to resync to the live edge instead of waiting for it to
+        // find its own way back.
+        if(data.details === 'bufferStalledError' || data.details === 'bufferSeekOverHole'){
+          try { hlsInstance.startLoad(-1); } catch(e){}
+        }
+        var c = data.response && data.response.code;
+        setPlayerStatus('Retrying — ' + (data.details || 'error') + (c ? ' (HTTP ' + c + ')' : '') + '…');
+        return;
+      }
+      clearPlayerWatchdog();
+      if(data.type === Hls.ErrorTypes.NETWORK_ERROR){
+        const code = data.response && data.response.code;
+        if(code === 401){
+          setPlayerStatus('Your session expired — refresh the page and sign in again.', true);
+          hlsInstance.destroy(); hlsInstance = null;
+          return;
+        }
+        // Segment/playlist 404s after playback was already underway mean
+        // the session this player was following is gone -- a full
+        // reconnect gets a fresh session at the live position instead of
+        // looping on dead URLs.
+        reconnect('HTTP ' + (code || 'network error'));
+      } else if(data.type === Hls.ErrorTypes.MEDIA_ERROR){
+        const now = Date.now();
+        // Repeated media errors within a short window mean in-place
+        // recovery isn't working -- stop calling recoverMediaError() (it
+        // can leave the decoder re-buffering from a stale/pre-live
+        // position) and do a full reconnect instead.
+        if(now - lastMediaErrorAt < 20000){ mediaRecoverAttempts++; } else { mediaRecoverAttempts = 1; }
+        lastMediaErrorAt = now;
+        if(mediaRecoverAttempts <= 2){
+          setPlayerStatus('Recovering playback…');
+          try { hlsInstance.startLoad(-1); } catch(e){}
+          hlsInstance.recoverMediaError();
+        } else {
+          reconnect('playback stalled');
+        }
+      } else {
+        setPlayerStatus('Playback failed (' + data.details + ').', true);
+        hlsInstance.destroy(); hlsInstance = null;
+      }
+    });
+  } else if(video.canPlayType('application/vnd.apple.mpegurl')){
+    // Safari: native HLS
+    video.src = src;
+    video.addEventListener('loadedmetadata', tryPlay, { once: true });
+    video.addEventListener('error', function(){
+      setPlayerStatus('Playback failed — close and try again in ~30s.', true);
+    }, { once: true });
+  } else {
+    setPlayerStatus('This browser cannot play HLS streams.', true);
+    return;
+  }
+}
+
+// Native (browser-provided) fullscreen on the <video controls> element can
+// briefly pause/detach the decoder during the transition. If that happens
+// to land during a live buffer stall, the player can come out of
+// fullscreen stuck. Nudge it back on every fullscreen transition rather
+// than waiting for hls.js to notice on its own.
+document.addEventListener('fullscreenchange', function(){ handleFullscreenChange(); setTimeout(resizeDrawCanvas, 50); });
+document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+function handleFullscreenChange(){
+  const video = document.getElementById('player-video');
+  if(!document.getElementById('player-modal').classList.contains('open')) return;
+  setTimeout(function(){
+    if(hlsInstance){
+      try { hlsInstance.startLoad(-1); } catch(e){}
+    }
+    if(video.paused){
+      video.play().catch(function(){});
+    }
+  }, 250);
+}
+// Live feedback from the video element itself: buffering vs. actually
+// playing. Registered once — the element persists across channel changes.
+(function(){
+  const v = document.getElementById('player-video');
+  v.addEventListener('playing', function(){
+    const cur = document.getElementById('pm-status').textContent;
+    if(cur.indexOf('muted') === -1) setPlayerStatus('');
+  });
+  v.addEventListener('waiting', function(){
+    if(document.getElementById('player-modal').classList.contains('open')){
+      setPlayerStatus('Buffering…');
+    }
+  });
+  v.addEventListener('volumechange', function(){
+    if(!v.muted && document.getElementById('pm-status').textContent.indexOf('muted') !== -1){
+      setPlayerStatus('');
+    }
+  });
+})();
+
+function closePlayer(){
+  const video = document.getElementById('player-video');
+  // Closing the pip window synchronously fires 'pagehide', which moves the
+  // video back into the main page before the rest of this teardown runs.
+  if(docPipWindow){ docPipWindow.close(); }
+  if(document.pictureInPictureElement){ document.exitPictureInPicture().catch(function(){}); }
+  video.pause();
+  video.removeAttribute('src');
+  video.load();
+  if(hlsInstance){ hlsInstance.destroy(); hlsInstance = null; }
+  clearPlayerWatchdog();
+  stopDiag();
+  setPlayerStatus('');
+  document.getElementById('player-modal').classList.remove('open');
+  closeSocialPanel();
+  stopDrawPolling();
+  if(drawMode){ toggleDrawMode(); }
+  if(theaterMode){
+    theaterMode = false;
+    document.getElementById('player-modal').classList.remove('theater');
+    const theaterBtn = document.getElementById('theater-toggle');
+    if(theaterBtn) theaterBtn.classList.remove('active');
+  }
+  // Prevent a reconnect() timer that was already queued from firing after
+  // the user closed the player.
+  currentChannelId = null;
+  currentChannelName = null;
+  reconnectAttempts = 0;
+  mediaRecoverAttempts = 0;
+}
+
+// ---------------- who's watching + chat ----------------
+// Deliberately simple polling rather than a WebSocket -- this stays
+// consistent with the rest of the viewer app (which already polls the
+// guide/clock on an interval) and doesn't require any new server
+// infrastructure. Polling only runs while the panel is actually open, on
+// top of only running while a channel is playing at all.
+let socialPanelOpen = false;
+let socialPollTimer = null;
+let chatLastId = 0;
+
+function resetSocialPanelForChannel(){
+  chatLastId = 0;
+  document.getElementById('social-chat-log').innerHTML = '';
+  document.getElementById('social-viewers').innerHTML = '<div class="social-empty">Just you, so far.</div>';
+  loadClipNowPlaying();
+  if(socialPanelOpen){ refreshPresence(); refreshChat(); }
+}
+
+function toggleSocialPanel(){
+  if(socialPanelOpen){ closeSocialPanel(); } else { openSocialPanel(); }
+}
+
+function openSocialPanel(){
+  if(!currentChannelId) return;
+  socialPanelOpen = true;
+  document.getElementById('social-panel').classList.add('open');
+  // In Media view the player-stage itself leaves room for the docked panel
+  // (see .player-modal.theater.panel-open in the CSS) instead of the panel
+  // just floating over the video -- toggle that here so it reacts whenever
+  // the panel opens/closes, not just when theater mode itself is toggled.
+  document.getElementById('player-modal').classList.add('panel-open');
+  refreshPresence();
+  refreshChat();
+  loadClipNowPlaying();
+  if(socialPollTimer) clearInterval(socialPollTimer);
+  socialPollTimer = setInterval(function(){
+    refreshPresence();
+    refreshChat();
+  }, 4000);
+  // The video's rendered box shrinks to make room for the panel in Media
+  // view -- let the CSS width transition settle before re-measuring it.
+  setTimeout(resizeDrawCanvas, 200);
+}
+
+function closeSocialPanel(){
+  socialPanelOpen = false;
+  document.getElementById('social-panel').classList.remove('open');
+  document.getElementById('player-modal').classList.remove('panel-open');
+  if(socialPollTimer){ clearInterval(socialPollTimer); socialPollTimer = null; }
+  setTimeout(resizeDrawCanvas, 200);
+}
+
+// ---------------- Media view (theater mode) ----------------
+// Pure CSS full-viewport layout -- deliberately NOT the browser's native
+// Fullscreen API (see the .player-modal.theater CSS comment above), so the
+// draw canvas and docked chat/draw panel keep working, unlike native
+// fullscreen which pulls the <video> into a layer nothing else can render
+// on top of.
+let theaterMode = false;
+
+function toggleTheaterMode(){
+  theaterMode = !theaterMode;
+  const modal = document.getElementById('player-modal');
+  const btn = document.getElementById('theater-toggle');
+  if(modal) modal.classList.toggle('theater', theaterMode);
+  if(btn) btn.classList.toggle('active', theaterMode);
+  // Entering Media view without the panel open just looks like plain
+  // fullscreen with nothing extra -- the whole point of this mode is the
+  // docked chat/draw panel, so open it by default when switching in.
+  if(theaterMode && !socialPanelOpen){ openSocialPanel(); }
+  setTimeout(resizeDrawCanvas, 200);
+}
+
+async function refreshPresence(){
+  if(!currentChannelId) return;
+  try {
+    const res = await fetch('/v/api/presence?channelId=' + encodeURIComponent(currentChannelId));
+    if(!res.ok) return;
+    const data = await res.json();
+    const el = document.getElementById('social-viewers');
+    const viewers = (data.viewers || []).filter(v => v.username !== myUsername);
+    if(viewers.length === 0){
+      el.innerHTML = '<div class="social-empty">Just you, so far.</div>';
+      return;
+    }
+    el.innerHTML = viewers.map(v => {
+      const av = v.thumb ? '<img src="' + esc(v.thumb) + '">' : esc((v.username||'?')[0].toUpperCase());
+      return '<div class="social-viewer"><span class="av">' + av + '</span>' + esc(v.username) + '</div>';
+    }).join('');
+  } catch(e){ /* transient network hiccup -- next poll will retry */ }
+}
+
+async function refreshChat(){
+  if(!currentChannelId) return;
+  try {
+    const res = await fetch('/v/api/chat/' + encodeURIComponent(currentChannelId) + '?after=' + chatLastId);
+    if(!res.ok) return;
+    const data = await res.json();
+    const messages = data.messages || [];
+    if(messages.length === 0) return;
+    const log = document.getElementById('social-chat-log');
+    const atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
+    for(const m of messages){
+      chatLastId = Math.max(chatLastId, m.id);
+      const row = document.createElement('div');
+      row.className = 'social-chat-msg';
+      const isMe = m.username === myUsername;
+      row.innerHTML = '<span class="u' + (isMe ? ' me' : '') + '">' + esc(isMe ? 'You' : m.username) + ':</span> <span class="t">' + esc(m.text) + '</span>';
+      log.appendChild(row);
+    }
+    if(atBottom){ log.scrollTop = log.scrollHeight; }
+  } catch(e){ /* transient network hiccup -- next poll will retry */ }
+}
+
+async function sendChatMessage(e){
+  e.preventDefault();
+  if(!currentChannelId) return false;
+  const input = document.getElementById('social-chat-input');
+  const text = input.value.trim();
+  if(!text) return false;
+  input.value = '';
+  try {
+    await fetch('/v/api/chat/' + encodeURIComponent(currentChannelId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    await refreshChat();
+  } catch(e){ /* leave the input cleared -- not worth a toast for chat */ }
+  return false;
+}
+
+// ---------------- shared drawing overlay ----------------
+// Coordinates are sent/received NORMALIZED (0..1) so the same stroke lands
+// in the same relative spot regardless of each viewer's screen size (see
+// gateway/src/drawing.ts). Own strokes are drawn locally the instant they
+// happen for a responsive feel; the poll loop skips echoing your own points
+// back (matched by username) since they're already on your canvas.
+
+function drawCanvasCtx(){
+  const canvas = document.getElementById('draw-canvas');
+  return canvas ? canvas.getContext('2d') : null;
+}
+
+function resizeDrawCanvas(){
+  const video = document.getElementById('player-video');
+  const canvas = document.getElementById('draw-canvas');
+  const preview = document.getElementById('draw-preview-canvas');
+  const reskinOverlay = document.getElementById('reskin-screen-overlay');
+  if(!video || !canvas) return;
+  const rect = video.getBoundingClientRect();
+  const stageRect = video.parentElement.getBoundingClientRect();
+  const left = (rect.left - stageRect.left);
+  const top = (rect.top - stageRect.top);
+  [canvas, preview].forEach(function(c){
+    if(!c) return;
+    c.style.left = left + 'px';
+    c.style.top = top + 'px';
+    c.width = Math.max(1, Math.round(rect.width));
+    c.height = Math.max(1, Math.round(rect.height));
+    c.style.width = rect.width + 'px';
+    c.style.height = rect.height + 'px';
+  });
+  // Re-Skin's screen overlay -- an <img>, not a canvas, so it's sized via
+  // CSS only (no drawing-buffer width/height to keep in sync).
+  if(reskinOverlay){
+    reskinOverlay.style.left = left + 'px';
+    reskinOverlay.style.top = top + 'px';
+    reskinOverlay.style.width = rect.width + 'px';
+    reskinOverlay.style.height = rect.height + 'px';
+  }
+}
+window.addEventListener('resize', resizeDrawCanvas);
+
+function previewCanvasCtx(){
+  const canvas = document.getElementById('draw-preview-canvas');
+  return canvas ? canvas.getContext('2d') : null;
+}
+
+function clearDrawCanvasLocal(){
+  const ctx = drawCanvasCtx();
+  const canvas = document.getElementById('draw-canvas');
+  if(ctx && canvas){ ctx.clearRect(0, 0, canvas.width, canvas.height); }
+  clearPreviewCanvasLocal();
+}
+
+function clearPreviewCanvasLocal(){
+  const ctx = previewCanvasCtx();
+  const canvas = document.getElementById('draw-preview-canvas');
+  if(ctx && canvas){ ctx.clearRect(0, 0, canvas.width, canvas.height); }
+}
+
+function drawSegment(x0, y0, x1, y1, color, newStroke, tool){
+  const ctx = drawCanvasCtx();
+  const canvas = document.getElementById('draw-canvas');
+  if(!ctx || !canvas) return;
+  const erasing = tool === 'eraser';
+  ctx.save();
+  ctx.globalCompositeOperation = erasing ? 'destination-out' : 'source-over';
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = erasing ? 22 : 3;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  if(newStroke){
+    // Draw a dot for a single-point stroke (a click without dragging).
+    ctx.arc(x1 * canvas.width, y1 * canvas.height, ctx.lineWidth / 2, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.moveTo(x0 * canvas.width, y0 * canvas.height);
+    ctx.lineTo(x1 * canvas.width, y1 * canvas.height);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// Live rubber-band preview for Line/Rectangle/Ellipse -- drawn on the
+// separate preview canvas (stacked above the real one) so dragging never
+// touches the committed drawing underneath. Cleared and redrawn on every
+// pointer move, then wiped for good on pointer-up once the shape commits.
+function drawShapePreview(tool, x0, y0, x1, y1, color){
+  const ctx = previewCanvasCtx();
+  const canvas = document.getElementById('draw-preview-canvas');
+  if(!ctx || !canvas) return;
+  clearPreviewCanvasLocal();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const X0 = x0 * canvas.width, Y0 = y0 * canvas.height, X1 = x1 * canvas.width, Y1 = y1 * canvas.height;
+  ctx.beginPath();
+  if(tool === 'line'){
+    ctx.moveTo(X0, Y0);
+    ctx.lineTo(X1, Y1);
+  } else if(tool === 'rect'){
+    ctx.rect(Math.min(X0, X1), Math.min(Y0, Y1), Math.abs(X1 - X0), Math.abs(Y1 - Y0));
+  } else if(tool === 'ellipse'){
+    const cx = (X0 + X1) / 2, cy = (Y0 + Y1) / 2;
+    const rx = Math.max(Math.abs(X1 - X0) / 2, 0.01), ry = Math.max(Math.abs(Y1 - Y0) / 2, 0.01);
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  }
+  ctx.stroke();
+}
+
+// Interpolates a shape's OUTLINE into a series of normalized (0..1) points
+// so Line/Rectangle/Ellipse ride the exact same point-stream every other
+// stroke uses (see drawing.ts's DrawPointEvent) -- no server changes
+// needed for these three tools; they just look like a very deliberate
+// pencil stroke to everyone else.
+function interpolateShapePoints(tool, x0, y0, x1, y1){
+  const pts = [];
+  if(tool === 'line'){
+    const dist = Math.hypot(x1 - x0, y1 - y0);
+    const steps = Math.max(1, Math.round(dist * 60));
+    for(let i = 0; i <= steps; i++){
+      const t = i / steps;
+      pts.push({ x: x0 + (x1 - x0) * t, y: y0 + (y1 - y0) * t });
+    }
+  } else if(tool === 'rect'){
+    const corners = [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }, { x: x0, y: y0 }];
+    for(let i = 0; i < corners.length - 1; i++){
+      const a = corners[i], b = corners[i + 1];
+      const dist = Math.hypot(b.x - a.x, b.y - a.y);
+      const steps = Math.max(1, Math.round(dist * 60));
+      for(let j = (i === 0 ? 0 : 1); j <= steps; j++){
+        const t = j / steps;
+        pts.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+      }
+    }
+  } else if(tool === 'ellipse'){
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const rx = Math.abs(x1 - x0) / 2, ry = Math.abs(y1 - y0) / 2;
+    const steps = Math.max(24, Math.round((rx + ry) * 140));
+    for(let i = 0; i <= steps; i++){
+      const a = (i / steps) * Math.PI * 2;
+      pts.push({ x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) });
+    }
+  }
+  return pts;
+}
+
+function setDrawColor(color, btn){
+  drawColor = color;
+  document.querySelectorAll('.draw-swatch').forEach(el => el.classList.remove('selected'));
+  if(btn) btn.classList.add('selected');
+}
+
+function setDrawTool(tool, btn){
+  drawTool = tool;
+  document.querySelectorAll('.draw-tool-btn').forEach(el => el.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+}
+
+function toggleDrawMode(){
+  drawMode = !drawMode;
+  const canvas = document.getElementById('draw-canvas');
+  const btn = document.getElementById('draw-enable-toggle');
+  if(canvas) canvas.style.pointerEvents = drawMode ? 'auto' : 'none';
+  if(btn){ btn.classList.toggle('active', drawMode); btn.textContent = drawMode ? 'Enabled' : 'Enable'; }
+  if(drawMode) resizeDrawCanvas();
+}
+
+function pointerPos(e){
+  const canvas = document.getElementById('draw-canvas');
+  const rect = canvas.getBoundingClientRect();
+  const cx = (e.touches && e.touches[0]) ? e.touches[0].clientX : (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientX : e.clientX;
+  const cy = (e.touches && e.touches[0]) ? e.touches[0].clientY : (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientY : e.clientY;
+  return {
+    x: Math.max(0, Math.min(1, (cx - rect.left) / rect.width)),
+    y: Math.max(0, Math.min(1, (cy - rect.top) / rect.height)),
+  };
+}
+
+let drawLastLocalPoint = null;
+let drawShapeStart = null;    // anchor point for Line/Rectangle/Ellipse while dragging
+let drawShapeLastPoint = null; // most recent point for that same drag, since touchend/mouseup don't always carry coordinates
+
+function handleDrawStart(e){
+  if(!drawMode) return;
+  e.preventDefault();
+  const p = pointerPos(e);
+
+  if(drawTool === 'eyedropper'){
+    pickColorAt(p);
+    return;
+  }
+  if(drawTool === 'fill'){
+    doFill(p);
+    return;
+  }
+
+  drawIsPointerDown = true;
+  drawStrokeId = 'me-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+
+  if(drawTool === 'line' || drawTool === 'rect' || drawTool === 'ellipse'){
+    drawShapeStart = p;
+    drawShapeLastPoint = p;
+    return; // committed as a point-path on pointer-up, see handleDrawEnd
+  }
+
+  drawLastLocalPoint = p;
+  drawSegment(p.x, p.y, p.x, p.y, drawColor, true, drawTool);
+  drawPending.push({ strokeId: drawStrokeId, color: drawColor, tool: drawTool, x: p.x, y: p.y, newStroke: true });
+  scheduleDrawFlush();
+}
+
+function handleDrawMove(e){
+  if(!drawMode || !drawIsPointerDown) return;
+  e.preventDefault();
+  const p = pointerPos(e);
+
+  if(drawShapeStart){
+    drawShapeLastPoint = p;
+    drawShapePreview(drawTool, drawShapeStart.x, drawShapeStart.y, p.x, p.y, drawColor);
+    return;
+  }
+
+  if(drawLastLocalPoint){ drawSegment(drawLastLocalPoint.x, drawLastLocalPoint.y, p.x, p.y, drawColor, false, drawTool); }
+  drawLastLocalPoint = p;
+  drawPending.push({ strokeId: drawStrokeId, color: drawColor, tool: drawTool, x: p.x, y: p.y, newStroke: false });
+  scheduleDrawFlush();
+}
+
+function handleDrawEnd(e){
+  if(drawShapeStart){
+    const end = drawShapeLastPoint || drawShapeStart;
+    clearPreviewCanvasLocal();
+    commitShape(drawTool, drawShapeStart, end);
+    drawShapeStart = null;
+    drawShapeLastPoint = null;
+  }
+  drawIsPointerDown = false;
+  drawStrokeId = null;
+  drawLastLocalPoint = null;
+}
+
+// Finalizes a Line/Rectangle/Ellipse: interpolates its outline into points,
+// draws them onto the real canvas immediately (for a responsive feel), and
+// queues them for sync exactly like a freehand stroke would be.
+function commitShape(tool, start, end){
+  const pts = interpolateShapePoints(tool, start.x, start.y, end.x, end.y);
+  if(pts.length === 0) return;
+  const strokeId = 'me-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  pts.forEach(function(pt, i){
+    const newStroke = i === 0;
+    if(newStroke){
+      drawSegment(pt.x, pt.y, pt.x, pt.y, drawColor, true, 'pencil');
+    } else {
+      const prev = pts[i - 1];
+      drawSegment(prev.x, prev.y, pt.x, pt.y, drawColor, false, 'pencil');
+    }
+    drawPending.push({ strokeId: strokeId, color: drawColor, tool: 'pencil', x: pt.x, y: pt.y, newStroke: newStroke });
+  });
+  scheduleDrawFlush();
+}
+
+// Eyedropper: samples the pixel under the pointer and adopts it as the
+// draw color, then hops back to the pencil -- same behavior as MS Paint's
+// color picker tool, so you're not stuck "in" the eyedropper after one use.
+function pickColorAt(p){
+  const canvas = document.getElementById('draw-canvas');
+  const ctx = drawCanvasCtx();
+  if(!canvas || !ctx) return;
+  const px = Math.min(canvas.width - 1, Math.max(0, Math.round(p.x * canvas.width)));
+  const py = Math.min(canvas.height - 1, Math.max(0, Math.round(p.y * canvas.height)));
+  try {
+    const data = ctx.getImageData(px, py, 1, 1).data;
+    if(data[3] > 0){
+      const hex = '#' + [data[0], data[1], data[2]].map(function(v){ return v.toString(16).padStart(2, '0'); }).join('');
+      setDrawColor(hex, null);
+    }
+  } catch(e){ /* canvas read can throw in rare tainted-canvas cases -- ignore */ }
+  setDrawTool('pencil', document.querySelector('.draw-tool-btn[data-tool="pencil"]'));
+}
+
+function doFill(p){
+  if(!currentChannelId) return;
+  const canvas = document.getElementById('draw-canvas');
+  if(!canvas) return;
+  floodFillCanvas(canvas, Math.round(p.x * canvas.width), Math.round(p.y * canvas.height), drawColor);
+  fetch('/v/api/draw/' + encodeURIComponent(currentChannelId) + '/fill', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ x: p.x, y: p.y, color: drawColor }),
+  }).catch(function(){ /* local canvas already filled; peers pick it up on next poll */ });
+}
+
+// Classic 4-directional flood fill over the canvas's own pixel buffer, with
+// a color-distance tolerance so anti-aliased stroke edges (never exactly
+// the clicked pixel's color) still get swallowed by the fill instead of
+// leaving a thin unfilled ring around every line/shape.
+function floodFillCanvas(canvas, startX, startY, fillColorHex){
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  if(w === 0 || h === 0) return;
+  startX = Math.max(0, Math.min(w - 1, startX));
+  startY = Math.max(0, Math.min(h - 1, startY));
+  const img = ctx.getImageData(0, 0, w, h);
+  const data = img.data;
+  const startIdx = (startY * w + startX) * 4;
+  const targetR = data[startIdx], targetG = data[startIdx + 1], targetB = data[startIdx + 2], targetA = data[startIdx + 3];
+
+  const fr = parseInt(fillColorHex.slice(1, 3), 16) || 0;
+  const fg = parseInt(fillColorHex.slice(3, 5), 16) || 0;
+  const fb = parseInt(fillColorHex.slice(5, 7), 16) || 0;
+
+  // Already effectively this color -- also guards a fully-transparent
+  // canvas from refilling itself (harmlessly) on every single click.
+  if(Math.abs(targetR - fr) < 8 && Math.abs(targetG - fg) < 8 && Math.abs(targetB - fb) < 8 && targetA > 200) return;
+
+  const tolerance = 40;
+  function matches(i){
+    return Math.abs(data[i] - targetR) <= tolerance &&
+           Math.abs(data[i + 1] - targetG) <= tolerance &&
+           Math.abs(data[i + 2] - targetB) <= tolerance &&
+           Math.abs(data[i + 3] - targetA) <= tolerance;
+  }
+
+  const stack = [[startX, startY]];
+  const visited = new Uint8Array(w * h);
+  while(stack.length){
+    const next = stack.pop();
+    const x = next[0], y = next[1];
+    if(x < 0 || x >= w || y < 0 || y >= h) continue;
+    const vIdx = y * w + x;
+    if(visited[vIdx]) continue;
+    const i = vIdx * 4;
+    if(!matches(i)) continue;
+    visited[vIdx] = 1;
+    data[i] = fr; data[i + 1] = fg; data[i + 2] = fb; data[i + 3] = 255;
+    stack.push([x + 1, y]); stack.push([x - 1, y]); stack.push([x, y + 1]); stack.push([x, y - 1]);
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function scheduleDrawFlush(){
+  if(drawFlushTimer) return;
+  drawFlushTimer = setTimeout(function(){
+    drawFlushTimer = null;
+    flushDrawPending();
+  }, 150);
+}
+
+async function flushDrawPending(){
+  if(!currentChannelId || drawPending.length === 0) return;
+  const batch = drawPending;
+  drawPending = [];
+  try {
+    await fetch('/v/api/draw/' + encodeURIComponent(currentChannelId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ points: batch })
+    });
+  } catch(e){ /* dropped points just mean a small gap in a peer's view of this stroke */ }
+}
+
+async function clearDrawing(){
+  if(!currentChannelId) return;
+  clearDrawCanvasLocal();
+  try {
+    await fetch('/v/api/draw/' + encodeURIComponent(currentChannelId) + '/clear', { method: 'POST' });
+  } catch(e){ /* local canvas is already cleared; peers pick it up on next poll */ }
+}
+
+async function pollDrawEvents(){
+  if(!currentChannelId) return;
+  try {
+    const res = await fetch('/v/api/draw/' + encodeURIComponent(currentChannelId) + '?after=' + drawLastId);
+    if(!res.ok) return;
+    const data = await res.json();
+    const events = data.events || [];
+    if(events.length === 0) return;
+    const strokeLastPoint = {};
+    for(const ev of events){
+      drawLastId = Math.max(drawLastId, ev.id);
+      if(ev.username === myUsername) continue; // already drawn locally
+      if(ev.kind === 'clear'){
+        clearDrawCanvasLocal();
+        continue;
+      }
+      if(ev.kind === 'fill'){
+        const canvas = document.getElementById('draw-canvas');
+        if(canvas) floodFillCanvas(canvas, Math.round(ev.x * canvas.width), Math.round(ev.y * canvas.height), ev.color);
+        continue;
+      }
+      const prev = strokeLastPoint[ev.strokeId];
+      if(ev.newStroke || !prev){
+        drawSegment(ev.x, ev.y, ev.x, ev.y, ev.color, true, ev.tool);
+      } else {
+        drawSegment(prev.x, prev.y, ev.x, ev.y, ev.color, false, ev.tool);
+      }
+      strokeLastPoint[ev.strokeId] = { x: ev.x, y: ev.y };
+    }
+  } catch(e){ /* next poll will retry */ }
+}
+
+function startDrawPolling(){
+  stopDrawPolling();
+  resizeDrawCanvas();
+  pollDrawEvents();
+  drawPollTimer = setInterval(pollDrawEvents, 1000);
+}
+
+function stopDrawPolling(){
+  if(drawPollTimer){ clearInterval(drawPollTimer); drawPollTimer = null; }
+  if(drawFlushTimer){ clearTimeout(drawFlushTimer); drawFlushTimer = null; }
+  drawPending = [];
+  drawIsPointerDown = false;
+  drawStrokeId = null;
+  drawShapeStart = null;
+  drawShapeLastPoint = null;
+}
+
+function resetDrawingForChannel(){
+  drawLastId = 0;
+  clearDrawCanvasLocal();
+}
+
+(function(){
+  const canvas = document.getElementById('draw-canvas');
+  if(!canvas) return;
+  canvas.addEventListener('mousedown', handleDrawStart);
+  canvas.addEventListener('mousemove', handleDrawMove);
+  window.addEventListener('mouseup', handleDrawEnd);
+  canvas.addEventListener('touchstart', handleDrawStart, { passive: false });
+  canvas.addEventListener('touchmove', handleDrawMove, { passive: false });
+  canvas.addEventListener('touchend', handleDrawEnd);
+})();
+
+// ---------------- casting (Chromecast + AirPlay) ----------------
+// Chromecast fetches the stream itself, over the LAN, with none of the
+// browser's cookies -- it needs a URL it can hit on its own, which is
+// exactly what /v/cast-stream/* + a short-lived cast token exist for (see
+// castToken.ts / castStreamProxy.ts on the server). AirPlay is the
+// opposite: it mirrors the browser's own already-authenticated <video>
+// element, so it needs no token or special URL at all.
+
+// Called by the Cast SDK script tag once it's loaded and knows whether
+// this browser can cast at all. window['__onGCastApiAvailable'] is the
+// exact global name the SDK looks for -- do not rename it.
+window['__onGCastApiAvailable'] = function(isAvailable){
+  if(!isAvailable) return;
+  try {
+    cast.framework.CastContext.getInstance().setOptions({
+      receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+      autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
+    });
+    castAvailable = true;
+    document.getElementById('cast-toggle').style.display = '';
+    cast.framework.CastContext.getInstance().addEventListener(
+      cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
+      function(e){
+        const State = cast.framework.SessionState;
+        if(e.sessionState === State.SESSION_STARTED || e.sessionState === State.SESSION_RESUMED){
+          castSession = cast.framework.CastContext.getInstance().getCurrentSession();
+          loadCurrentChannelOnCast();
+        } else if(e.sessionState === State.SESSION_ENDED){
+          castSession = null;
+        }
+        updateCastButton();
+      }
+    );
+  } catch(e){ /* Cast SDK present but something about this browser/page rejected it -- just stay hidden */ }
+};
+
+function updateCastButton(){
+  const btn = document.getElementById('cast-toggle');
+  if(!btn) return;
+  btn.classList.toggle('active', !!castSession);
+  btn.textContent = castSession ? '📺 Casting' : '📺 Cast';
+}
+
+function toggleCast(){
+  if(!castAvailable) return;
+  const context = cast.framework.CastContext.getInstance();
+  if(castSession){
+    context.endCurrentSession(true);
+    castSession = null;
+    updateCastButton();
+    return;
+  }
+  context.requestSession().then(function(){
+    castSession = context.getCurrentSession();
+    updateCastButton();
+    loadCurrentChannelOnCast();
+  }).catch(function(){ /* user closed the device picker without choosing one -- nothing to do */ });
+}
+
+async function loadCurrentChannelOnCast(){
+  if(!castSession || !currentChannelId) return;
+  try {
+    const res = await fetch('/v/api/cast-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelId: currentChannelId }),
+    });
+    if(!res.ok) return;
+    const data = await res.json();
+    const q = qualityQuery();
+    const streamUrl = location.origin + '/v/cast-stream/channels/' + currentChannelId + '.m3u8' + q + (q ? '&' : '?') + 'token=' + encodeURIComponent(data.token);
+
+    const mediaInfo = new chrome.cast.media.MediaInfo(streamUrl, 'application/x-mpegurl');
+    mediaInfo.streamType = chrome.cast.media.StreamType.LIVE;
+    mediaInfo.metadata = new chrome.cast.media.GenericMediaMetadata();
+    mediaInfo.metadata.title = currentChannelName || 'Lackluster Plus+';
+    const request = new chrome.cast.media.LoadRequest(mediaInfo);
+    castSession.loadMedia(request).catch(function(){ /* Chromecast couldn't start playback -- nothing more to try client-side */ });
+  } catch(e){ /* token request failed -- leave the cast session open, user can retry */ }
+}
+
+// AirPlay has no SDK -- it's the <video> element's own native picker.
+// Only Safari (desktop + iOS) exposes webkitShowPlaybackTargetPicker, so
+// the button just stays hidden everywhere else.
+function initAirPlayButton(){
+  const video = document.getElementById('player-video');
+  const btn = document.getElementById('airplay-toggle');
+  if(!video || !btn) return;
+  if(typeof video.webkitShowPlaybackTargetPicker === 'function'){
+    btn.style.display = '';
+  }
+}
+
+function toggleAirPlay(){
+  const video = document.getElementById('player-video');
+  if(video && typeof video.webkitShowPlaybackTargetPicker === 'function'){
+    video.webkitShowPlaybackTargetPicker();
+  }
+}
+
+// ---------------- pop-out player ----------------
+// Two different browser APIs can back this, tried in order:
+//
+// 1. Document Picture-in-Picture (Chrome/Edge 116+). Opens an actual
+//    separate always-on-top window with its OWN document that we get to
+//    fill with arbitrary HTML -- so the video moves in along with a real
+//    custom control bar (play/pause, mute, a volume slider) that we build
+//    and wire up ourselves. This is the only way to get more than bare
+//    play/pause controls in the popped-out window, since standard PiP's
+//    control surface is drawn by the browser/OS and can't be extended.
+// 2. Standard video Picture-in-Picture (Chrome/Edge/Safari/Firefox), used
+//    as a fallback when Document PiP isn't available. Still a real
+//    always-on-top, drag/resize window, just with whichever minimal native
+//    controls that particular browser draws on it (typically play/pause;
+//    volume support varies and isn't something we can add to).
+//
+// Either way the floating window stays on top of every window on the
+// desktop, not just other browser tabs/windows -- that part comes from the
+// OS compositor, not anything CSS/JS could fake.
+let docPipWindow = null;
+let docPipOriginalParent = null;
+let docPipOriginalNextSibling = null;
+
+function supportsDocumentPip(){
+  return 'documentPictureInPicture' in window;
+}
+
+function initPopOutButton(){
+  const video = document.getElementById('player-video');
+  const btn = document.getElementById('popout-toggle');
+  if(!video || !btn) return;
+  if(supportsDocumentPip() || (document.pictureInPictureEnabled && !video.disablePictureInPicture)){
+    btn.style.display = '';
+  }
+  // Only relevant for the standard-PiP fallback path -- Document PiP
+  // manages its own button state directly (see openDocumentPopOut/
+  // restoreFromDocumentPopOut below), since there's no matching event for it.
+  video.addEventListener('enterpictureinpicture', function(){
+    if(docPipWindow) return; // Document PiP is active, not standard PiP
+    btn.textContent = '🗔 Popped out';
+    btn.classList.add('active');
+  });
+  video.addEventListener('leavepictureinpicture', function(){
+    if(docPipWindow) return;
+    btn.textContent = '🗔 Pop out';
+    btn.classList.remove('active');
+  });
+}
+
+async function togglePopOut(){
+  const video = document.getElementById('player-video');
+  if(!video) return;
+  try {
+    if(docPipWindow){
+      docPipWindow.close(); // triggers its 'pagehide' handler, which restores things
+      return;
+    }
+    if(document.pictureInPictureElement){
+      await document.exitPictureInPicture();
+      return;
+    }
+    if(supportsDocumentPip()){
+      await openDocumentPopOut(video);
+    } else if(document.pictureInPictureEnabled){
+      await video.requestPictureInPicture();
+    } else {
+      setPlayerStatus('Pop-out isn\'t supported in this browser.', true);
+    }
+  } catch(e){
+    setPlayerStatus('Couldn\'t pop out the video -- try again once playback has started.', true);
+  }
+}
+
+async function openDocumentPopOut(video){
+  const pipWindow = await documentPictureInPicture.requestWindow({
+    width: 480,
+    height: 320,
+  });
+  docPipWindow = pipWindow;
+
+  // Popped-out window is a genuinely separate document -- it doesn't
+  // inherit the main page's stylesheet, so give it its own minimal,
+  // self-contained styling rather than trying to import the site's CSS.
+  const style = pipWindow.document.createElement('style');
+  style.textContent = `
+    html, body { margin:0; padding:0; height:100%; background:#000; overflow:hidden; }
+    body { display:flex; flex-direction:column; height:100vh; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    video { flex:1; width:100%; min-height:0; background:#000; object-fit:contain; }
+    .pip-controls { display:flex; align-items:center; gap:10px; padding:8px 10px; background:#12141c; flex-shrink:0; }
+    .pip-controls button { background:#242836; border:1px solid #333a4d; color:#fff; border-radius:7px; width:34px; height:34px; font-size:15px; cursor:pointer; flex-shrink:0; padding:0; }
+    .pip-controls button:hover { background:#2f3446; }
+    .pip-controls input[type=range] { flex:1; accent-color:#3B6CFF; }
+  `;
+  pipWindow.document.head.appendChild(style);
+  pipWindow.document.title = currentChannelName || 'Lackluster Plus+';
+
+  // Remember exactly where the video came from so it can go back once the
+  // pop-out window closes.
+  docPipOriginalParent = video.parentNode;
+  docPipOriginalNextSibling = video.nextSibling;
+
+  video.controls = false; // replaced by the custom bar built below
+  pipWindow.document.body.appendChild(video);
+
+  const controls = pipWindow.document.createElement('div');
+  controls.className = 'pip-controls';
+
+  const playBtn = pipWindow.document.createElement('button');
+  playBtn.title = 'Play/Pause';
+  playBtn.textContent = video.paused ? '▶' : '⏸';
+  playBtn.onclick = function(){ video.paused ? video.play() : video.pause(); };
+  video.addEventListener('play', function(){ playBtn.textContent = '⏸'; });
+  video.addEventListener('pause', function(){ playBtn.textContent = '▶'; });
+
+  const muteBtn = pipWindow.document.createElement('button');
+  muteBtn.title = 'Mute/Unmute';
+  const updateMuteIcon = function(){ muteBtn.textContent = (video.muted || video.volume === 0) ? '🔇' : '🔊'; };
+  updateMuteIcon();
+  muteBtn.onclick = function(){ video.muted = !video.muted; updateMuteIcon(); };
+
+  const volume = pipWindow.document.createElement('input');
+  volume.type = 'range';
+  volume.min = '0';
+  volume.max = '1';
+  volume.step = '0.05';
+  volume.title = 'Volume';
+  volume.value = String(video.volume);
+  volume.oninput = function(){
+    video.volume = Number(volume.value);
+    if(video.volume > 0 && video.muted){ video.muted = false; }
+    updateMuteIcon();
+  };
+
+  controls.appendChild(playBtn);
+  controls.appendChild(muteBtn);
+  controls.appendChild(volume);
+  pipWindow.document.body.appendChild(controls);
+
+  const btn = document.getElementById('popout-toggle');
+  if(btn){ btn.textContent = '🗔 Popped out'; btn.classList.add('active'); }
+
+  pipWindow.addEventListener('pagehide', function(){ restoreFromDocumentPopOut(video); }, { once: true });
+}
+
+function restoreFromDocumentPopOut(video){
+  if(docPipOriginalParent){
+    if(docPipOriginalNextSibling && docPipOriginalNextSibling.parentNode === docPipOriginalParent){
+      docPipOriginalParent.insertBefore(video, docPipOriginalNextSibling);
+    } else {
+      docPipOriginalParent.appendChild(video);
+    }
+  }
+  video.controls = true;
+  docPipWindow = null;
+  docPipOriginalParent = null;
+  docPipOriginalNextSibling = null;
+  const btn = document.getElementById('popout-toggle');
+  if(btn){ btn.textContent = '🗔 Pop out'; btn.classList.remove('active'); }
+  resizeDrawCanvas();
+}
+
+// ---------------- audio clip export ----------------
+// Server never tells the browser a real filesystem path -- /v/api/clip/now-playing
+// only returns {title, durationSeconds}, and /v/api/clip/export re-resolves the
+// path itself and clamps start/end against the real duration. See audioClip.ts.
+let clipDurationSeconds = 0;
+let clipExporting = false;
+
+function formatClipTime(totalSeconds){
+  const s = Math.max(0, Math.round(totalSeconds));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return m + ':' + String(r).padStart(2, '0');
+}
+
+// Accepts "mm:ss" or a bare number of seconds.
+function parseClipTime(str){
+  if(str == null) return NaN;
+  const t = String(str).trim();
+  if(t === '') return NaN;
+  if(t.includes(':')){
+    const parts = t.split(':');
+    if(parts.length !== 2) return NaN;
+    const m = Number(parts[0]), s = Number(parts[1]);
+    if(!Number.isFinite(m) || !Number.isFinite(s)) return NaN;
+    return m * 60 + s;
+  }
+  const n = Number(t);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function onClipFormatChange(){
+  const format = document.getElementById('clip-format').value;
+  const qualitySelect = document.getElementById('clip-quality');
+  // WAV is uncompressed PCM -- bitrate/quality doesn't apply.
+  qualitySelect.disabled = (format === 'wav');
+  qualitySelect.style.opacity = (format === 'wav') ? '0.4' : '1';
+}
+
+async function loadClipNowPlaying(){
+  const box = document.getElementById('clip-now-playing');
+  if(!box) return;
+  if(!currentChannelId){
+    box.textContent = 'Nothing airing right now.';
+    clipDurationSeconds = 0;
+    return;
+  }
+  box.textContent = 'Loading...';
+  try {
+    const res = await fetch('/v/api/clip/now-playing?channelId=' + encodeURIComponent(currentChannelId));
+    if(!res.ok){
+      box.textContent = 'Nothing airing right now.';
+      clipDurationSeconds = 0;
+      return;
+    }
+    const data = await res.json();
+    clipDurationSeconds = data.durationSeconds || 0;
+    box.textContent = data.title + ' (' + formatClipTime(clipDurationSeconds) + ')';
+    document.getElementById('clip-end').value = formatClipTime(Math.min(30, clipDurationSeconds));
+  } catch(e){
+    box.textContent = 'Nothing airing right now.';
+    clipDurationSeconds = 0;
+  }
+}
+
+async function exportAudioClip(){
+  if(clipExporting) return;
+  const statusEl = document.getElementById('clip-status');
+  const btn = document.getElementById('clip-export-btn');
+  if(!currentChannelId){
+    statusEl.textContent = 'Nothing is playing right now.';
+    statusEl.className = 'clip-status error';
+    return;
+  }
+  const startSeconds = parseClipTime(document.getElementById('clip-start').value);
+  const endSeconds = parseClipTime(document.getElementById('clip-end').value);
+  if(!Number.isFinite(startSeconds) || !Number.isFinite(endSeconds)){
+    statusEl.textContent = 'Enter start/end as mm:ss, e.g. 0:15.';
+    statusEl.className = 'clip-status error';
+    return;
+  }
+  if(endSeconds <= startSeconds){
+    statusEl.textContent = 'End time must be after start time.';
+    statusEl.className = 'clip-status error';
+    return;
+  }
+
+  clipExporting = true;
+  btn.disabled = true;
+  statusEl.textContent = 'Exporting clip...';
+  statusEl.className = 'clip-status';
+
+  try {
+    const res = await fetch('/v/api/clip/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        channelId: currentChannelId,
+        startSeconds,
+        endSeconds,
+        format: document.getElementById('clip-format').value,
+        quality: document.getElementById('clip-quality').value,
+        channels: document.getElementById('clip-channels').value,
+      }),
+    });
+    if(!res.ok){
+      let message = 'Export failed.';
+      try { const err = await res.json(); if(err && err.error) message = err.error; } catch(e){}
+      statusEl.textContent = message;
+      statusEl.className = 'clip-status error';
+      return;
+    }
+    const blob = await res.blob();
+    let filename = 'clip.' + document.getElementById('clip-format').value;
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="([^"]+)"/);
+    if(match) filename = match[1];
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    statusEl.textContent = 'Downloaded ' + filename;
+    statusEl.className = 'clip-status ok';
+  } catch(e){
+    statusEl.textContent = 'Export failed -- check your connection and try again.';
+    statusEl.className = 'clip-status error';
+  } finally {
+    clipExporting = false;
+    btn.disabled = false;
+  }
+}
+
+// ---------------- Play Now ----------------
+function openPlayNow(){
+  const row = document.getElementById('pn-genres');
+  row.innerHTML = '<span class="chip selected" data-val="all">All</span>' +
+    [...genreSet].sort().map(g => '<span class="chip" data-val="'+g+'">'+g+'</span>').join('');
+  row.querySelectorAll('.chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      if(chip.dataset.val === 'all'){
+        row.querySelectorAll('.chip').forEach(c=>c.classList.remove('selected'));
+        chip.classList.add('selected');
+      } else {
+        row.querySelector('.chip[data-val="all"]').classList.remove('selected');
+        chip.classList.toggle('selected');
+        const any = [...row.querySelectorAll('.chip')].some(c=>c.classList.contains('selected'));
+        if(!any) row.querySelector('.chip[data-val="all"]').classList.add('selected');
+      }
+    });
+  });
+  document.getElementById('playnow-modal').classList.add('open');
+}
+function closePlayNow(){ document.getElementById('playnow-modal').classList.remove('open'); }
+document.querySelectorAll('#pn-type button').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    document.querySelectorAll('#pn-type button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+  });
+});
+
+async function surpriseMe(){
+  const selGenres = [...document.querySelectorAll('#pn-genres .chip.selected')].map(c=>c.dataset.val).filter(v=>v!=='all');
+  const type = document.querySelector('#pn-type button.active').dataset.val;
+  closePlayNow();
+
+  const res = await fetch('/v/api/playnow', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ genres: selGenres, type }),
+  });
+  if(!res.ok){
+    const body = await res.json().catch(()=>({}));
+    showToast(body.error || 'Nothing matched those filters.');
+    return;
+  }
+  const pick = await res.json();
+  showToast('Tuned to <strong>'+esc(pick.channelName)+'</strong> — '+esc(pick.program.title));
+  playChannel(pick.channelId, pick.channelName);
+}
+
+let toastTimer;
+function showToast(html){
+  const el = document.getElementById('toast');
+  el.innerHTML = html;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>el.classList.remove('show'), 3200);
+}
+
+// periodically refresh the guide so "on now" stays accurate
+setInterval(loadGuide, 60000);
+
+initAirPlayButton(); // one-time -- the <video> element persists across channel changes
+initPopOutButton(); // one-time -- same reasoning as initAirPlayButton()
+checkAuth();
+</script>
+
+<script>
+/* ===== Lackluster Plus+ (2026-11-08): Browse toggle, channel-icon info/watch, guide auto-crawl ===== */
+(function(){
+  var KEY = 'llp.browseOpen';
+  var layout = document.querySelector('.guide-layout');
+  function label(){
+    var a = document.querySelector('#filter-sidebar .fs-item.active');
+    var el = document.getElementById('bb-label');
+    if(el) el.textContent = a ? a.textContent.trim() : 'Browse';
+  }
+  function setOpen(open){
+    layout.classList.toggle('sb-collapsed', !open);
+    try { localStorage.setItem(KEY, open ? '1' : '0'); } catch(e){}
+    label();
+  }
+  window.toggleBrowse = function(){ setOpen(layout.classList.contains('sb-collapsed')); };
+  var stored = null; try { stored = localStorage.getItem(KEY); } catch(e){}
+  setOpen(stored === '1');            // hidden until asked for
+  document.getElementById('filter-sidebar').addEventListener('click', function(e){
+    if(!e.target.closest('.fs-item')) return;
+    setTimeout(function(){
+      label();
+      if(window.innerWidth < 900) setOpen(false);   // small screens: get it out of the way after a pick
+    }, 0);
+  });
+
+  // ---- channel icon: 1st click = info drawer for what's on, 2nd click = watch ----
+  var primed = null;
+  function clearPrimed(){
+    primed = null;
+    document.querySelectorAll('.logo-tile.primed').forEach(function(t){ t.classList.remove('primed'); });
+  }
+  function onIcon(tile){
+    var id = tile.dataset.chan;
+    var chan = (typeof CHANNELS !== 'undefined' ? CHANNELS : []).find(function(c){ return String(c.id) === id; });
+    if(!chan) return;
+    var drawerOpen = document.getElementById('detail-drawer').classList.contains('open');
+    if(primed === id && drawerOpen && currentDetail && String(currentDetail.chan.id) === id){
+      clearPrimed();
+      playChannel(chan.id, chan.name);
+      return;
+    }
+    var now = Date.now();
+    var progs = ((GUIDE[chan.id] || {}).programs || []);
+    var cur = progs.find(function(p){ return Date.parse(p.start) <= now && now < Date.parse(p.stop); });
+    var next = progs.find(function(p){ return Date.parse(p.start) > now; });
+    var prog = cur || next || { title: chan.name, summary: 'Nothing is scheduled on this channel right now.' };
+    showDetail(chan, prog, !!cur);
+    clearPrimed();
+    primed = id;
+    document.querySelectorAll('.logo-tile[data-chan="' + id + '"]').forEach(function(t){ t.classList.add('primed'); });
+    tile.focus({ preventScroll: true });
+  }
+  var rows = document.getElementById('guide-rows');
+  rows.addEventListener('click', function(e){
+    var tile = e.target.closest('.logo-tile[data-chan]');
+    if(tile){ e.stopPropagation(); onIcon(tile); }
+  });
+  rows.addEventListener('keydown', function(e){
+    var tile = e.target.closest('.logo-tile[data-chan]');
+    if(tile && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); onIcon(tile); glideTo(tile.closest('.guide-row')); }
+  });
+  // anything else that changes or closes the drawer un-primes the icon
+  var _close = window.closeDetail;
+  window.closeDetail = function(){ clearPrimed(); return _close.apply(this, arguments); };
+  document.getElementById('guide-rows').addEventListener('click', function(e){
+    if(e.target.closest('.prog-cell')) clearPrimed();
+  }, true);
+  // the guide re-renders every minute; keep the highlight on the primed channel
+  new MutationObserver(function(){
+    if(primed) document.querySelectorAll('.logo-tile[data-chan="' + primed + '"]').forEach(function(t){ t.classList.add('primed'); });
+  }).observe(rows, { childList: true });
+
+  // ---- clicking a channel (its icon or any show on it) glides that row up to just under the time ruler ----
+  var glide = null;
+  function glideTo(row){
+    var sc = document.getElementById('guide-scroll');
+    if(glide) cancelAnimationFrame(glide.raf);
+    var from = sc.scrollTop, t0 = performance.now(), DUR = 650;
+    glide = { raf: 0 };
+    (function step(t){
+      // recompute each frame: the info drawer is still opening and changes the guide's height
+      var max = sc.scrollHeight - sc.clientHeight;
+      if(!row.isConnected){ row = document.querySelector('.guide-row[data-row="' + row.dataset.row + '"]') || row; }
+      var ruler = sc.querySelector('.guide-ruler-row');
+      var off = row.getBoundingClientRect().top - (ruler ? ruler.getBoundingClientRect().bottom : sc.getBoundingClientRect().top);
+      var to = Math.max(0, Math.min(max, Math.round(sc.scrollTop + off)));
+      var k = Math.min(1, (t - t0) / DUR), e = 1 - Math.pow(1 - k, 3);   // ease-out: quick start, soft landing
+      sc.scrollTop = from + (to - from) * e;
+      if(k < 1 || Math.abs(sc.scrollTop - to) > 1 && t - t0 < DUR + 400){ glide.raf = requestAnimationFrame(step); }
+      else { sc.scrollTop = to; glide = null; }
+    })(t0);
+  }
+  rows.addEventListener('click', function(e){
+    var row = e.target.closest('.guide-row');
+    if(!row || e.target.closest('.chan-fav-controls')) return;
+    glideTo(row);
+  }, true);
+
+  // ---- slow up/down crawl of the channel list; stops while the channel area has focus ----
+  var sc = document.getElementById('guide-scroll');
+  var wrap = sc.closest('.guide-wrap');
+  var SPEED = 12;                 // px per second: a row every ~7 s
+  var dir = 1, acc = 0, last = null;
+  var hover = false, focused = false, touched = false;
+  var dwellUntil = performance.now() + 3000;
+  function rest(ms){ dwellUntil = Math.max(dwellUntil, performance.now() + ms); }
+  wrap.addEventListener('pointerenter', function(e){ if(e.pointerType === 'mouse') hover = true; });
+  wrap.addEventListener('pointerleave', function(e){ if(e.pointerType === 'mouse'){ hover = false; rest(1500); } });
+  wrap.addEventListener('focusin', function(){ focused = true; });
+  wrap.addEventListener('focusout', function(e){
+    if(!e.relatedTarget || !wrap.contains(e.relatedTarget)){ focused = false; rest(1500); }
+  });
+  document.addEventListener('pointerdown', function(e){
+    if(e.pointerType === 'mouse') return;
+    var inside = wrap.contains(e.target);
+    if(touched && !inside) rest(1500);
+    touched = inside;
+  }, true);
+  function paused(){
+    return hover || focused || touched || wrap.contains(document.activeElement) || document.hidden ||
+      !document.getElementById('app').classList.contains('visible');
+  }
+  function tick(t){
+    if(last === null) last = t;
+    var dt = Math.min(0.1, (t - last) / 1000); last = t;
+    var max = sc.scrollHeight - sc.clientHeight;
+    if(!paused() && t >= dwellUntil && max > 4){
+      acc += dir * SPEED * dt;
+      var step = acc > 0 ? Math.floor(acc) : Math.ceil(acc);
+      if(step){ acc -= step; sc.scrollTop += step; }
+      if(dir > 0 && sc.scrollTop >= max - 1){ dir = -1; acc = 0; rest(4000); }
+      else if(dir < 0 && sc.scrollTop <= 0){ dir = 1; acc = 0; rest(4000); }
+    } else { acc = 0; }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

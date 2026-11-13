@@ -20,6 +20,13 @@
    "Never put a window, dialog or menu on the person's desktop while you work, and never call anything that waits for a person (mainloop, tk_popup, messagebox, filedialog): the build stalls until the time runs out. To look at a window, keep it off-screen: app.geometry(\"1200x800+-4000+-4000\"), app.update() for half a second, then read winfo_width().",
    "Tk details that pass tests and fail in use: keep every tk.PhotoImage in a list (an image without a reference shows blank); give the panes of a ttk.PanedWindow weights (without them a pane can start with no width); call mainloop() once, in the entry point.",
    "Windows paths: \"C:\" alone is the current folder on C:, not the drive (use \"C:\\\"); a file dialog answers with forward slashes; a folder junction is not a symlink to Python (test st_file_attributes & 0x400 before following a folder)."
+  ],
+  "web-app": [
+   "This is an EXISTING app that people use every day, not a new one. Find the exact lines the brief names (search the file for the text it quotes) and change only those; a big file is read around the place you change, not from top to bottom. Everything the brief does not name stays exactly as it is.",
+   "The files in dist/ are the app's real source here (plain JavaScript, ES modules, run by Node as they are). There is no TypeScript to compile and no build step: edit the .js file itself, and check it with `node --check <file>`.",
+   "Never start the server yourself (`node dist/server.js`): it does not exit, and the attempt runs out of time waiting. The tests start it, on a free port, against a stand-in for Plex; run the test to see what the server does.",
+   "No new packages: use what is in node_modules and what the browser has. No `npm install`, no new script tags.",
+   "In the page, a thing exists when a person can reach it with a mouse, a finger AND a keyboard or TV remote: use real <button> elements (they take focus and answer Enter), give them the ids the brief names, and never open a window or a new tab (TV browsers cannot handle one)."
   ]
  }
 }
