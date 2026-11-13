@@ -4,9 +4,11 @@ import os
 import threading
 import tkinter as tk
 import tkinter.filedialog
+import tkinter.messagebox
+import wiztry.actions as actions
 from tkinter import ttk
 
-from wiztry.scanner import Node, clean_root, scan
+from wiztry.scanner import Node, clean_root, scan, summary, ext_of
 from wiztry.filetypes import OTHER, PALETTE, color_map, ext_rows, human
 from wiztry.treemap import layout
 
@@ -71,6 +73,11 @@ class App(tk.Tk):
         self._build_toolbar()
         self._build_panes()
 
+        self.menu = tk.Menu(self, tearoff=0)
+        self.menu.add_command(label="Show in Explorer", command=self.show_in_explorer)
+        self.menu.add_command(label="Copy path", command=self.copy_path)
+        self.menu.add_command(label="Delete (Recycle Bin)...", command=self.delete_selected)
+
         self._resize_id = None
 
     def _build_toolbar(self):
@@ -86,6 +93,8 @@ class App(tk.Tk):
         self.scan_btn.pack(side=tk.LEFT, padx=(0, 4))
 
         ttk.Button(toolbar, text="Top", command=self.zoom_top).pack(side=tk.LEFT, padx=(0, 4))
+
+        ttk.Button(toolbar, text="Export...", command=self.export).pack(side=tk.LEFT, padx=(0, 4))
 
         ttk.Label(toolbar, textvariable=self.status).pack(side=tk.LEFT, padx=(4, 0))
 
@@ -121,6 +130,9 @@ class App(tk.Tk):
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         self.tree.bind("<Button-1>", self._on_tree_click)
         self.tree.bind("<ButtonRelease-1>", self._on_tree_release)
+        self.tree.bind("<Double-1>", self._on_tree_double_click)
+        self.tree.bind("<Button-3>", self._on_tree_right_click)
+        self.tree.bind("<Delete>", self._on_delete_key)
 
         types_frame = ttk.Frame(self._hp)
         self._hp.add(types_frame, weight=1)
@@ -150,6 +162,7 @@ class App(tk.Tk):
 
         self.canvas.bind("<Motion>", self._on_motion)
         self.canvas.bind("<Button-1>", self._on_canvas_click)
+        self.canvas.bind("<Button-3>", self._on_canvas_right_click)
 
         self._tooltip_label = None
 
@@ -223,6 +236,7 @@ class App(tk.Tk):
         self.top = top
         self.view = top
         self.nodes = {}
+        self.by_ext = by_ext
         self.tree.delete(*self.tree.get_children())
 
         self.colors = color_map(by_ext)
@@ -236,38 +250,49 @@ class App(tk.Tk):
         total_size = top.size
         self.status.set(f"{total_files:,} files, {total_folders:,} folders, {human(total_size)} in {secs:.1f} s")
 
-    def _fill_tree(self, parent):
-        """Fill tree rows for all children of *parent* node."""
-        if parent is None:
-            return
-
-        # Show top-level root row
-        if parent is self.top and not self.tree.get_children():
-            item = self.tree.insert("", tk.END, text=parent.name, open=True, values=self._row_values(parent))
-            self.nodes[item] = parent
-            for child in parent.children:
-                self._insert_tree_item(item, child)
-        else:
-            for child in parent.children:
-                item = self.tree.insert(parent, tk.END, text=child.name, open=False, values=self._row_values(child))
-                self.nodes[item] = child
-
-    def _insert_tree_item(self, parent, node):
-        """Insert a single tree item for *node* under *parent*."""
-        item = self.tree.insert(parent, tk.END, text=node.name, open=False, values=self._row_values(node))
+    def _add_row(self, parent_iid, node):
+        """Insert one row for *node* under *parent_iid*. Returns the row id."""
+        item = self.tree.insert(parent_iid, tk.END, text=node.name, open=False, values=self._row_values(node))
         self.nodes[item] = node
+        self.items[id(node)] = item
+        if node.is_dir and node.children:
+            self.tree.insert(item, tk.END, text="")
+        return item
+
+    def _fill_row(self, iid):
+        """Fill *iid* row's children from its Node. If already filled, return."""
+        node = self.nodes.get(iid)
+        if node is None or not node.is_dir:
+            return
+        kids = self.tree.get_children(iid)
+        if kids and self.nodes.get(kids[0]) is not None:
+            return
+        self.tree.delete(*kids)
+        for child in node.children:
+            self._add_row(iid, child)
+
+    def _fill_tree(self, top):
+        """Empty the tree and build the cascade from *top* down."""
+        self.tree.delete(*self.tree.get_children())
+        self.nodes = {}
+        self.items = {}
+        root_iid = self._add_row("", top)
+        self._fill_row(root_iid)
+        self.tree.item(root_iid, open=True)
 
     def _row_values(self, node):
         """Return the tuple of column values for *node*."""
-        total = self.top.size if self.top else 1
-        pct = (node.size / total * 100) if total else 0.0
+        parent_size = node.parent.size if node.parent else 1
+        pct = (node.size / parent_size * 100) if parent_size else 0.0
+        if node.parent is None:
+            pct = 100.0
         items_count = node.files + node.folders
         modified = ""
         if node.mtime:
             import datetime
             dt = datetime.datetime.fromtimestamp(node.mtime)
             modified = dt.strftime("%Y-%m-%d %H:%M")
-        return (f"{pct:.1f}%", human(node.size), str(items_count), str(node.files),
+        return (bar(pct), human(node.size), str(items_count), str(node.files),
                 str(node.folders) if node.is_dir else "", modified)
 
     def _fill_types(self, by_ext):
@@ -386,71 +411,63 @@ class App(tk.Tk):
 
     def select_node(self, node):
         """Open parent rows, select and show the row for *node*, return the item id."""
-        # Walk up to find the item ids and build the path
-        path_items = []
+        if node is None:
+            return None
+
+        # Walk up from node collecting Nodes that have no row yet
+        ancestors = []
         current = node
-        while current is not None and current.parent is not None:
-            parent = current.parent
-            # Find the tree item for parent
-            parent_iid = None
-            for iid, n in self.nodes.items():
-                if n is parent:
-                    parent_iid = iid
-                    break
-            if parent_iid is None:
-                # Parent not in tree - insert it
-                parent_iid = self.tree.insert("", tk.END, text=parent.name, open=False, values=self._row_values(parent))
-                self.nodes[parent_iid] = parent
-            path_items.append((parent_iid, current))
-            current = parent
-
-        # Open parent rows (fill placeholders)
-        for parent_iid, child_node in reversed(path_items):
-            if not self.tree.item(parent_iid, "open"):
-                self._open_placeholder(parent_iid)
-
-        # Find the item for the node itself
-        target_iid = None
-        for iid, n in self.nodes.items():
-            if n is node:
-                target_iid = iid
+        has_row = None
+        while current is not None:
+            row = self.items.get(id(current))
+            if row is not None:
+                has_row = current
                 break
+            ancestors.append(current)
+            current = current.parent
 
+        if current is None:
+            return None
+
+        # Going back down, _fill_row each parent
+        for anc in reversed(ancestors):
+            parent = anc.parent
+            if parent is not None:
+                parent_row = self.items.get(id(parent))
+                if parent_row is not None:
+                    self._fill_row(parent_row)
+
+        # Find the row for the node itself
+        target_iid = self.items.get(id(node))
         if target_iid is None:
-            # Node not in tree - insert it under its parent
-            parent_iid = None
-            for iid, n in self.nodes.items():
-                if n is node.parent:
-                    parent_iid = iid
-                    break
-            if parent_iid is None:
-                return None
-            target_iid = self.tree.insert(parent_iid, tk.END, text=node.name, open=False, values=self._row_values(node))
-            self.nodes[target_iid] = node
+            return None
+
+        # Open every ancestor row of node's row
+        row = target_iid
+        while row:
+            self.tree.item(row, open=True)
+            row = self.tree.parent(row)
 
         self.tree.selection_set(target_iid)
         self.tree.see(target_iid)
         self.tree.focus(target_iid)
         return target_iid
 
-    def _open_placeholder(self, item):
-        """Open a placeholder folder row by inserting its children."""
-        node = self.nodes.get(item)
-        if node is None or not node.is_dir:
-            return
-        if node.children:
-            self.tree.item(item, open=True)
-            for child in node.children:
-                found = False
-                for kid in self.tree.get_children(item):
-                    if self.nodes.get(kid) is child:
-                        found = True
-                        break
-                if not found:
-                    kid = self.tree.insert(item, tk.END, text=child.name, open=False,
-                                           values=self._row_values(child))
-                    self.nodes[kid] = child
-            self.tree.item(item, open=True)
+    def _on_tree_open(self, event):
+        """Handle tree expansion: fill in children for a folder."""
+        self._fill_row(self.tree.focus())
+
+    def zoom_row(self, iid):
+        """If *iid* is a folder row, zoom the treemap into its Node."""
+        node = self.nodes.get(iid)
+        if node is not None and node.is_dir:
+            self.zoom(node)
+
+    def _on_tree_double_click(self, event):
+        """Handle double-click on a tree row: zoom into the folder."""
+        iid = self.tree.identify_row(event.y)
+        if iid:
+            self.zoom_row(iid)
 
     def zoom(self, node):
         """Zoom the treemap to show *node*'s children."""
@@ -466,20 +483,6 @@ class App(tk.Tk):
             self.canvas.delete("all")
             self.blocks = {}
             self.draw_treemap()
-
-    def _on_tree_open(self, event):
-        """Handle tree expansion: fill in children for a folder."""
-        item = self.tree.focus()
-        node = self.nodes.get(item)
-        if node is None or not node.is_dir:
-            return
-        if self.tree.item(item, "open"):
-            return
-        # Insert children
-        for child in node.children:
-            kid = self.tree.insert(item, tk.END, text=child.name, open=False, values=self._row_values(child))
-            self.nodes[kid] = child
-        self.tree.item(item, open=True)
 
     def _on_tree_select(self, event):
         """Handle tree selection - only for folders."""
@@ -504,6 +507,175 @@ class App(tk.Tk):
         self._resize_id = None
         if self.view is not None:
             self.draw_treemap()
+
+    def _on_tree_right_click(self, event):
+        """Handle right-click on the tree: show context menu on the row under the pointer."""
+        row = self.tree.identify_row(event.y)
+        if row and row in self.nodes:
+            self.tree.selection_set(row)
+            self.tree.see(row)
+            self.tree.focus(row)
+            self.menu.tk_popup(event.x_root, event.y_root)
+
+    def _on_canvas_right_click(self, event):
+        """Handle right-click on the treemap canvas: show context menu on the node at the pointer."""
+        node = self.node_at(event.x, event.y)
+        if node is not None:
+            self.select_node(node)
+            self.menu.tk_popup(event.x_root, event.y_root)
+
+    def _on_delete_key(self, event):
+        """Handle Delete key press in the tree."""
+        self.delete_selected()
+
+    def selected_node(self):
+        """Return the Node of the first selected tree row, or None."""
+        sel = self.tree.selection()
+        if not sel:
+            return None
+        row = sel[0]
+        return self.nodes.get(row)
+
+    def copy_path(self):
+        """Copy the path of the selected node to the clipboard."""
+        node = self.selected_node()
+        if node is None:
+            return
+        self.clipboard_clear()
+        self.clipboard_append(node.path)
+        self.status.set(f"Copied: {node.path}")
+
+    def show_in_explorer(self):
+        """Show the selected node's folder in Explorer."""
+        node = self.selected_node()
+        if node is None:
+            return
+        actions.show_in_explorer(node.path)
+
+    def delete_selected(self):
+        """Move the selected item to the Recycle Bin. Returns True on success."""
+        node = self.selected_node()
+        if node is None or self.top is None:
+            return False
+
+        why = actions.can_delete(node.path, self.top.path)
+        if why:
+            self.status.set(f"Cannot delete: {why}")
+            return False
+
+        if not tkinter.messagebox.askyesno("WizTry", f"Move this to the Recycle Bin?\n\n{node.path}\n{human(node.size)}", parent=self):
+            return False
+
+        try:
+            actions.trash(node.path, self.top.path)
+        except (OSError, ValueError) as e:
+            self.status.set(f"Could not delete: {e}")
+            return False
+
+        # (a) Compute what was removed
+        if node.is_dir:
+            gone = summary(node)["by_ext"]
+        else:
+            ext = ext_of(node.name)
+            gone = {ext: {"size": node.size, "files": 1}}
+
+        # (b) Remember parent and row id, then forget the node
+        parent = node.parent
+        row_id = self.items.get(id(node))
+
+        actions.forget(node)
+
+        # (c) Remove the row and every child row from self.nodes and self.items
+        if row_id:
+            stack = [row_id]
+            deleted_rows = []
+            node_ids_to_remove = []
+            while stack:
+                rid = stack.pop()
+                if rid in self.nodes:
+                    del self.nodes[rid]
+                # Find and remove the node id that maps to this row
+                for nid in list(self.items.keys()):
+                    if self.items[nid] == rid:
+                        node_ids_to_remove.append(nid)
+                        break
+                deleted_rows.append(rid)
+                kids = self.tree.get_children(rid)
+                for child_iid in kids:
+                    stack.append(child_iid)
+            for nid in node_ids_to_remove:
+                del self.items[nid]
+            for rid in deleted_rows:
+                try:
+                    self.tree.delete(rid)
+                except tk.TclError:
+                    pass
+
+        # (d) Update parent rows up to top, and their child rows' % of Parent
+        current = parent
+        while current is not None:
+            parent_row = self.items.get(id(current))
+            if parent_row is not None and parent_row in self.nodes:
+                self.tree.item(parent_row, values=self._row_values(current))
+                # Also update child rows that are still in self.nodes
+                for child_iid in self.tree.get_children(parent_row):
+                    if child_iid in self.nodes:
+                        child_node = self.nodes[child_iid]
+                        self.tree.item(child_iid, values=self._row_values(child_node))
+                        # If the child folder now has no children, delete leftover child rows
+                        if child_node.is_dir and not child_node.children:
+                            leftover = self.tree.get_children(child_iid)
+                            for li in leftover:
+                                if li in self.nodes:
+                                    del self.nodes[li]
+                                if li in self.items:
+                                    del self.items[li]
+                            self.tree.delete(*leftover)
+            current = current.parent
+
+        # (e) Subtract gone from self.by_ext, rebuild colors and File Types list
+        for ext, info in gone.items():
+            if ext in self.by_ext:
+                self.by_ext[ext]["size"] -= info["size"]
+                self.by_ext[ext]["files"] -= info["files"]
+                if self.by_ext[ext]["files"] <= 0:
+                    del self.by_ext[ext]
+            else:
+                if ext not in self.by_ext:
+                    self.by_ext[ext] = {"size": 0, "files": 0}
+                self.by_ext[ext]["size"] -= info["size"]
+                self.by_ext[ext]["files"] -= info["files"]
+                if self.by_ext[ext]["files"] <= 0:
+                    del self.by_ext[ext]
+
+        self.colors = color_map(self.by_ext)
+        self._fill_types(self.by_ext)
+
+        # (f) If self.view is the deleted node or inside it, reset to top
+        if self.view is not None:
+            check = self.view
+            while check is not None:
+                if check is node:
+                    self.view = self.top
+                    break
+                check = check.parent
+
+        # (g) Redraw treemap
+        self.draw_treemap()
+
+        # (h) Status message and return
+        self.status.set(f"Moved to the Recycle Bin: {node.name} ({human(node.size)})")
+        return True
+
+    def export(self):
+        """Export the current tree to a CSV file."""
+        if self.top is None:
+            return
+        file = tkinter.filedialog.asksaveasfilename(parent=self, defaultextension=".csv", filetypes=[("CSV", "*.csv")])
+        if not file:
+            return
+        rows = actions.export_csv(self.top, file)
+        self.status.set(f"Exported {rows:,} rows to {file}")
 
 
 def main():

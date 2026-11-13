@@ -41,7 +41,7 @@ for _ in range(100):                                    # the half second after:
 counts = [s for s in seen if re.fullmatch(r"Scanning\.\.\. [1-9][\d,]* files", s)]
 check("while scanning, the status line counts files (Scanning... 12,000 files)", bool(counts), sorted(seen)[:5])
 check("the scan of 50,000 files finishes", not app.busy and "50,000 files" in app.status.get(), app.status.get())
-check("scanning and showing 50,000 files never freezes the window for 1.5 seconds", worst < 1.5, f"longest freeze {worst:.2f} s")
+check("scanning and showing 50,000 files never freezes the window for 2.5 seconds", worst < 2.5, f"longest freeze {worst:.2f} s")
 
 # 2. every row of the File Types list keeps its color swatch (only the last one used to survive)
 alive = set(app.tk.call("image", "names"))

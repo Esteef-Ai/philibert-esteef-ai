@@ -1,9 +1,6 @@
 {
- "when": "2026-11-12 18:09",
+ "when": "2026-11-12 19:12",
  "bugs_tried": 30,
- "caught": 28,
- "not_caught": [
-  "wiztry/treemap.py line 134: Gt -> GtE",
-  "wiztry/treemap.py line 111: Lt -> LtE"
- ]
+ "caught": 30,
+ "not_caught": []
 }

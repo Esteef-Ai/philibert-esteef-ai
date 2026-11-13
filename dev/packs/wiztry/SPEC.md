@@ -1,7 +1,7 @@
 # WizTry - the spec
 
 A portable Windows disk space analyzer, a simplified clone of WizTree (diskanalyzer.com).
-It is read-only: it never deletes, moves, renames or writes any file it scans. No admin rights.
+Scanning is read-only: it never deletes, moves, renames or writes any file it scans. The one thing that changes the disk is Delete in the right-click menu: it asks first and moves the item to the Recycle Bin. No admin rights.
 
 ## Tech (fixed)
 - Python 3.11 with tkinter/ttk; standard library only in the app itself.
@@ -33,3 +33,8 @@ The scan is as fast as plain Python goes without admin rights: `os.scandir` with
 - Every test in `tests\` passes, including the exe built by `build.bat`.
 - The report for the fixture folder equals `tests\expected.json`.
 - The window opens, scans, and fills the tree, the file types list and the treemap.
+
+## Tree and tools (added 2026-11-12)
+- The folder tree always starts at the scanned folder. Every folder with something in it can be opened, level by level. Clicking a block in the treemap opens every folder on the way to that file, selects it and scrolls to it. Double-clicking a folder row zooms the treemap into it.
+- Right-click on a tree row or a treemap block: Show in Explorer, Copy path, Delete (Recycle Bin)... The Delete key does the same as Delete. Delete asks first, refuses the scanned folder itself, drives and anything outside the scanned folder, and afterwards the tree, the file types and the treemap show the new sizes without a new scan.
+- Export... in the toolbar writes the tree as a CSV file: Path, Type, Size, Files, Folders, Modified.
