@@ -79,6 +79,10 @@ RTX 5070 Ti 16 GB, Ryzen 7 9800X3D (16 threads), 64 GB RAM (125 GB commit), big 
 - Nothing is pushed without the owner's OK. Philibert ships nothing personal.
 - The builder's shell stays restricted (`opencode.json` in each workspace; proven before every build).
 - A wrong test is fixed in the pack, with a line in its NOTES.md, never in a workspace alone.
+- Every app is branded Esteef.Ai (the owner's standing rule, 2026-11-13): the title, a visible byline, and the exe's
+  file properties or a web page's footer. It goes into the pack's SPEC.md with a test, so it cannot be left out.
+- The owner's look: dark, the Philibert navy with one cyan accent; category colors muted and traditional, never
+  neon or pastel (limit Lab chroma to about 55 and lightness to 38-75 before picking for difference).
 - Do not rank setups on one run. Use the grader for many cheap samples; for full builds use 3 and trust only
   large differences.
 

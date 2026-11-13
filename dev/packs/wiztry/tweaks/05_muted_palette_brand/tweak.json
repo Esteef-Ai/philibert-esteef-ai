@@ -1,0 +1,42 @@
+{
+ "name": "05_muted_palette_brand",
+ "title": "A calmer palette, and the Esteef.Ai brand",
+ "why": "Owner, 2026-11-13, after using the tweak 04 exe: remove the brighter colors from the palette; it should be less neon and pastel and more traditionally colored. And: make sure to brand projects with Esteef.Ai (a standing rule for every project, not only this one). The tweak 04 palette was picked for contrast and difference only, which pushed it to bright, candy colors (Lab chroma up to 86, lightness up to 94). The new one adds two limits before picking for difference: chroma at most 55 (not neon) and lightness between 38 and 75 (not pastel, not murky).",
+ "proved": "2026-11-13: on a scratch copy, in order and each alone: T17 (18 checks), T18 (11 checks), T19 (12 checks, with a real exe build and Windows reading its version information); after each, the older tests still pass. On the wiztry11 build each new test fails for these reasons. New palette by calculation: contrast at least 3.2 on the treemap background, any two at least 16.7 apart (Lab), chroma at most 51, lightness 43 to 71. Whether it LOOKS right is for the owner to say.",
+ "rules": [],
+ "spec": [],
+ "spec_add": "\n## Brand and palette (added 2026-11-13)\n- Made by Esteef.Ai, and it says so: the window title is `WizTry - Esteef.Ai`, the toolbar shows `by Esteef.Ai` after the name, the status bar shows `Esteef.Ai` at its right end, and the exe's file properties name Esteef.Ai as the company and in the copyright.\n- File types use 20 calm, traditional colors (steel blue, ochre, green, wine, olive, terracotta, plum ...): none neon, none pastel, all readable on the dark background and distinct from each other.\n",
+ "tests": ["tests/test_palette_brand.py", "tests/test_brand.py", "tests/test_brand_exe.py"],
+ "tasks": [
+  {
+   "id": "T17",
+   "title": "A calmer palette and the brand names",
+   "depends_on": ["T15"],
+   "files": ["wiztry/theme.py"],
+   "context": ["tests/test_palette_brand.py", "tests/test_theme.py"],
+   "tests": "tests/test_palette_brand.py",
+   "minutes": 20,
+   "brief": "The file-type colors are too bright: neon and pastel. Replace them, and add the brand names, in wiztry/theme.py only. Use EXACTLY these values (they were chosen by calculation so that none is neon or pastel and every one can be read on the treemap's background and told from the others; a value changed by eye will fail a check). Every check in tests/test_theme.py must keep passing.\n\n1. PALETTE becomes, in this order: \"#547099\", \"#d9a557\", \"#53b87b\", \"#b85367\", \"#c781c7\", \"#a39e93\", \"#738040\", \"#53b8b8\", \"#d97157\", \"#408066\", \"#5367b8\", \"#997054\", \"#81abc7\", \"#c7819d\", \"#c7ab81\", \"#b8538f\", \"#7d5499\", \"#408040\", \"#407380\", \"#8f81c7\". None of the 20 old colors stays.\n2. OTHER becomes \"#434c5e\".\n3. Add four constants: APP_NAME = \"WizTry\"; BRAND = \"Esteef.Ai\"; TITLE = \"WizTry - Esteef.Ai\"; BYLINE = \"by Esteef.Ai\".\n4. In apply(), add one style: \"By.TLabel\" with background DEEP, foreground DIM, font (\"Segoe UI\", 8).\n\nChange nothing else in the file: every other color, the fonts, the other styles and dark_title_bar stay as they are."
+  },
+  {
+   "id": "T18",
+   "title": "The window carries the brand",
+   "depends_on": ["T16", "T17"],
+   "files": ["wiztry/app.py"],
+   "context": ["tests/test_brand.py", "wiztry/theme.py", "tests/test_look.py"],
+   "tests": "tests/test_brand.py",
+   "minutes": 20,
+   "brief": "The app is made by Esteef.Ai and must say so in three places. Only wiztry/app.py changes, and only these three things; every older test must keep passing (tests/test_look.py checks where the bars and the name WIZTRY sit).\n\n1. The window title: self.title(theme.TITLE) in place of the fixed text.\n2. The toolbar: directly after the WIZTRY label and before the path box, add ttk.Label(toolbar, text=theme.BYLINE, style=\"By.TLabel\"), packed side=LEFT with anchor=\"s\" and pady=(0, 2) so its bottom lines up with the bottom of the name, and padx=(0, 16) so the path box does not touch it. Reduce the WIZTRY label's right padding to 6 so the two read as one mark.\n3. The status bar: at its right end add ttk.Label(status_bar, text=theme.BRAND, style=\"By.TLabel\") packed side=RIGHT. The status line stays at the left.\n\nUse the theme's constants; do not write the words Esteef.Ai or WizTry - Esteef.Ai in app.py."
+  },
+  {
+   "id": "T19",
+   "title": "The exe says who made it",
+   "depends_on": ["T06"],
+   "files": ["build.bat", "version_info.txt"],
+   "context": ["tests/test_brand_exe.py", "tests/test_build.py"],
+   "tests": "tests/test_brand_exe.py",
+   "minutes": 25,
+   "brief": "Right-click the exe, Properties, Details must show Esteef.Ai. Two files; every check in tests/test_build.py must keep passing.\n\n1. A new file version_info.txt in the project folder (next to build.bat), UTF-8, in PyInstaller's version-file format. Its whole content:\n\nVSVersionInfo(\n  ffi=FixedFileInfo(\n    filevers=(1, 0, 0, 0),\n    prodvers=(1, 0, 0, 0),\n    mask=0x3f,\n    flags=0x0,\n    OS=0x40004,\n    fileType=0x1,\n    subtype=0x0,\n    date=(0, 0)\n  ),\n  kids=[\n    StringFileInfo([\n      StringTable('040904B0', [\n        StringStruct('CompanyName', 'Esteef.Ai'),\n        StringStruct('FileDescription', 'WizTry - disk space analyzer by Esteef.Ai'),\n        StringStruct('FileVersion', '1.0.0'),\n        StringStruct('InternalName', 'WizTry'),\n        StringStruct('LegalCopyright', 'Copyright (c) Esteef.Ai'),\n        StringStruct('OriginalFilename', 'WizTry.exe'),\n        StringStruct('ProductName', 'WizTry'),\n        StringStruct('ProductVersion', '1.0.0')\n      ])\n    ]),\n    VarFileInfo([VarStruct('Translation', [1033, 1200])])\n  ]\n)\n\n2. build.bat: add `--version-file \"%~dp0version_info.txt\"` to the PyInstaller command, before WizTry.py. It must be the full path through %~dp0 (the folder build.bat is in): the command uses --specpath build, and PyInstaller looks for a bare file name next to the spec file, in build\\, where it is not. Change nothing else in build.bat.\n\nBuilding takes about a minute. To read what the exe says: powershell -NoProfile -Command \"(Get-Item dist\\WizTry.exe).VersionInfo | Format-List\"."
+  }
+ ]
+}

@@ -100,3 +100,13 @@
   three of the eight misses are padding and font-size numbers in theme.py (4 -> 5 pixels), which no test can
   or should pin down; the other five are boundary comparisons in the treemap layout (> against >=) that change
   nothing visible. Looks are judged by the owner, not by this number.
+
+## 2026-11-13: tweak 05_muted_palette_brand written
+- The owner found the tweak 04 palette too bright (neon, pastel) and asked for traditional colors, and gave a
+  standing rule: brand projects with Esteef.Ai.
+- Lesson: "can be told apart and read" is not a palette. Picking only for contrast and difference pushes every
+  color to maximum brightness. Limit chroma and lightness FIRST, then pick for difference.
+- T17 theme.py (new PALETTE, OTHER, APP_NAME / BRAND / TITLE / BYLINE, By.TLabel), T18 app.py (title, byline
+  in the toolbar, name at the right of the status bar), T19 build.bat + version_info.txt (exe properties).
+- PyInstaller gotcha proven here: with --specpath build, a bare --version-file name is looked for in build\;
+  give the full path ("%~dp0version_info.txt").
