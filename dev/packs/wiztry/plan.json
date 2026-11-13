@@ -330,6 +330,60 @@
    "tests": "tests/test_look.py",
    "minutes": 45,
    "brief": "Give the window the dark house look from wiztry/theme.py. Only wiztry/app.py changes, and only how things look and where they sit: every older test must keep passing (tests/test_app.py, test_window_use.py, test_window_big.py, test_tree_path.py, test_tools.py). Add `import wiztry.theme as theme` at the top and take every color and font from it; after this task no color name or #rrggbb value is written in app.py.\n\n1. In __init__, in this order: self.status starts as tk.StringVar(value=\"Ready\"); theme.apply(self) BEFORE any widget is made; build the toolbar; build the status bar; build the panes; theme.dark_title_bar(self); show the empty-state hint (step 6).\n2. Toolbar: ttk.Frame(self, style=\"Bar.TFrame\", padding=(12, 8)) packed side=TOP, fill=X (no outer padx or pady, so it spans the window). In it, left to right: ttk.Label(text=\"WIZTRY\", style=\"Brand.TLabel\"); the path Entry (fill=X, expand=True); the buttons Browse..., Scan (self.scan_btn), Top, Export..., 8 px apart. The status label is no longer in the toolbar.\n3. Status bar: a second ttk.Frame(self, style=\"Bar.TFrame\", padding=(12, 4)) packed side=BOTTOM, fill=X, and packed BEFORE the panes so it keeps its place at the bottom edge. In it ttk.Label(textvariable=self.status, style=\"Bar.TLabel\") at the left.\n4. Pane titles: as the FIRST thing packed in each pane's frame (side=TOP, anchor=\"w\", padx=8, pady=(8, 4)), a ttk.Label with style=\"Title.TLabel\": \"TREE VIEW\" above the tree, \"FILE TYPES\" above the types list, \"TREEMAP\" above the canvas.\n5. Columns: in the tree, \"#0\" and \"pct\" and \"modified\" anchor=\"w\"; \"size\", \"items\", \"files\", \"folders\" anchor=\"e\". In the types list, \"#0\" anchor=\"w\"; \"size\", \"pct\", \"files\" anchor=\"e\".\n6. The canvas: bg=theme.CANVAS. A method show_hint(text): delete everything on the canvas, empty self.blocks, and create ONE text item in the middle (winfo_width()/2, winfo_height()/2) with fill=theme.DIM, font (theme.FONT_UI[0], 12) and tags=\"hint\". Bind the canvas's <Configure> to a handler that moves the item tagged \"hint\" (if there is one) back to the middle: at start-up the canvas is 1 px wide, so without this the hint sits in the corner. At the end of __init__ call self.show_hint(\"Pick a folder, then press Scan\"). In start_scan, where the canvas is cleared now, call self.show_hint(\"Scanning...\") instead. draw_treemap already deletes everything first, so the hint goes when a result is drawn.\n7. Treemap colors: the folder fill \"#c8c8c8\" becomes theme.FOLDER_FILL and the folder outline \"#707070\" becomes theme.FOLDER_LINE. File blocks keep taking their color from self.colors (falling back to OTHER), which now come from the theme through filetypes.\n8. The right-click menu: tk.Menu(self, tearoff=0, bg=theme.RAISE, fg=theme.TEXT, activebackground=theme.SELECT, activeforeground=theme.SELECT_TEXT, bd=0, relief=\"flat\") with the same three commands.\n9. The tooltip has never appeared: the motion handler returns before it creates the label. Rewrite it: text = self.tooltip_text_at(event.x, event.y); if it is empty, destroy the tooltip label (if any) and return. Otherwise create the label once, as a tk.Label child of self.canvas with bg=theme.RAISE, fg=theme.TEXT, relief=\"solid\", borderwidth=1, font (theme.FONT_UI[0], 9), justify=\"left\", padx=6, pady=3; set its text; and place it 16 px right of and below the pointer, pulled back inside the canvas when it would stick out (use winfo_reqwidth and winfo_reqheight). Bind the canvas's <Leave> to a handler that destroys the tooltip.\n\nTo look at the result without showing a window: app.geometry(\"1200x800+-4000+-4000\"), app.update() for half a second, then read sizes and positions (winfo_rootx, winfo_rooty, winfo_width)."
+  },
+  {
+   "id": "T17",
+   "title": "A calmer palette and the brand names",
+   "depends_on": [
+    "T15"
+   ],
+   "files": [
+    "wiztry/theme.py"
+   ],
+   "context": [
+    "tests/test_palette_brand.py",
+    "tests/test_theme.py"
+   ],
+   "tests": "tests/test_palette_brand.py",
+   "minutes": 20,
+   "brief": "The file-type colors are too bright: neon and pastel. Replace them, and add the brand names, in wiztry/theme.py only. Use EXACTLY these values (they were chosen by calculation so that none is neon or pastel and every one can be read on the treemap's background and told from the others; a value changed by eye will fail a check). Every check in tests/test_theme.py must keep passing.\n\n1. PALETTE becomes, in this order: \"#547099\", \"#d9a557\", \"#53b87b\", \"#b85367\", \"#c781c7\", \"#a39e93\", \"#738040\", \"#53b8b8\", \"#d97157\", \"#408066\", \"#5367b8\", \"#997054\", \"#81abc7\", \"#c7819d\", \"#c7ab81\", \"#b8538f\", \"#7d5499\", \"#408040\", \"#407380\", \"#8f81c7\". None of the 20 old colors stays.\n2. OTHER becomes \"#434c5e\".\n3. Add four constants: APP_NAME = \"WizTry\"; BRAND = \"Esteef.Ai\"; TITLE = \"WizTry - Esteef.Ai\"; BYLINE = \"by Esteef.Ai\".\n4. In apply(), add one style: \"By.TLabel\" with background DEEP, foreground DIM, font (\"Segoe UI\", 8).\n\nChange nothing else in the file: every other color, the fonts, the other styles and dark_title_bar stay as they are."
+  },
+  {
+   "id": "T18",
+   "title": "The window carries the brand",
+   "depends_on": [
+    "T16",
+    "T17"
+   ],
+   "files": [
+    "wiztry/app.py"
+   ],
+   "context": [
+    "tests/test_brand.py",
+    "wiztry/theme.py",
+    "tests/test_look.py"
+   ],
+   "tests": "tests/test_brand.py",
+   "minutes": 20,
+   "brief": "The app is made by Esteef.Ai and must say so in three places. Only wiztry/app.py changes, and only these three things; every older test must keep passing (tests/test_look.py checks where the bars and the name WIZTRY sit).\n\n1. The window title: self.title(theme.TITLE) in place of the fixed text.\n2. The toolbar: directly after the WIZTRY label and before the path box, add ttk.Label(toolbar, text=theme.BYLINE, style=\"By.TLabel\"), packed side=LEFT with anchor=\"s\" and pady=(0, 2) so its bottom lines up with the bottom of the name, and padx=(0, 16) so the path box does not touch it. Reduce the WIZTRY label's right padding to 6 so the two read as one mark.\n3. The status bar: at its right end add ttk.Label(status_bar, text=theme.BRAND, style=\"By.TLabel\") packed side=RIGHT. The status line stays at the left.\n\nUse the theme's constants; do not write the words Esteef.Ai or WizTry - Esteef.Ai in app.py."
+  },
+  {
+   "id": "T19",
+   "title": "The exe says who made it",
+   "depends_on": [
+    "T06"
+   ],
+   "files": [
+    "build.bat",
+    "version_info.txt"
+   ],
+   "context": [
+    "tests/test_brand_exe.py",
+    "tests/test_build.py"
+   ],
+   "tests": "tests/test_brand_exe.py",
+   "minutes": 25,
+   "brief": "Right-click the exe, Properties, Details must show Esteef.Ai. Two files; every check in tests/test_build.py must keep passing.\n\n1. A new file version_info.txt in the project folder (next to build.bat), UTF-8, in PyInstaller's version-file format. Its whole content:\n\nVSVersionInfo(\n  ffi=FixedFileInfo(\n    filevers=(1, 0, 0, 0),\n    prodvers=(1, 0, 0, 0),\n    mask=0x3f,\n    flags=0x0,\n    OS=0x40004,\n    fileType=0x1,\n    subtype=0x0,\n    date=(0, 0)\n  ),\n  kids=[\n    StringFileInfo([\n      StringTable('040904B0', [\n        StringStruct('CompanyName', 'Esteef.Ai'),\n        StringStruct('FileDescription', 'WizTry - disk space analyzer by Esteef.Ai'),\n        StringStruct('FileVersion', '1.0.0'),\n        StringStruct('InternalName', 'WizTry'),\n        StringStruct('LegalCopyright', 'Copyright (c) Esteef.Ai'),\n        StringStruct('OriginalFilename', 'WizTry.exe'),\n        StringStruct('ProductName', 'WizTry'),\n        StringStruct('ProductVersion', '1.0.0')\n      ])\n    ]),\n    VarFileInfo([VarStruct('Translation', [1033, 1200])])\n  ]\n)\n\n2. build.bat: add `--version-file \"%~dp0version_info.txt\"` to the PyInstaller command, before WizTry.py. It must be the full path through %~dp0 (the folder build.bat is in): the command uses --specpath build, and PyInstaller looks for a bare file name next to the spec file, in build\\, where it is not. Change nothing else in build.bat.\n\nBuilding takes about a minute. To read what the exe says: powershell -NoProfile -Command \"(Get-Item dist\\WizTry.exe).VersionInfo | Format-List\"."
   }
  ]
 }

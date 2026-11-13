@@ -1,15 +1,18 @@
 {
- "when": "2026-11-12 19:35",
+ "when": "2026-11-12 20:01",
  "bugs_tried": 30,
- "caught": 22,
+ "caught": 19,
  "not_caught": [
-  "wiztry/treemap.py line 111: Or -> And",
-  "wiztry/theme.py line 72: 4 -> 5",
-  "wiztry/treemap.py line 12: Or -> And",
-  "wiztry/theme.py line 94: 8 -> 9",
+  "wiztry/theme.py line 78: 12 -> 13",
+  "wiztry/treemap.py line 134: Gt -> GtE",
+  "wiztry/theme.py line 78: 4 -> 5",
   "wiztry/treemap.py line 46: Gt -> GtE",
-  "wiztry/theme.py line 41: 12 -> 13",
-  "wiztry/treemap.py line 155: Lt -> LtE",
+  "wiztry/treemap.py line 12: LtE -> Lt",
+  "wiztry/treemap.py line 163: 2 -> 3",
+  "wiztry/treemap.py line 46: Gt -> GtE",
+  "wiztry/actions.py line 32: Or -> And",
+  "wiztry/theme.py line 46: 12 -> 13",
+  "wiztry/treemap.py line 138: Lt -> LtE",
   "wiztry/treemap.py line 163: Gt -> GtE"
  ]
 }

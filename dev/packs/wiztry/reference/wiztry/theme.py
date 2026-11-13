@@ -27,14 +27,19 @@ BAD: str = "#ff5c5c"
 CANVAS: str = DEEP
 FOLDER_FILL: str = RAISE
 FOLDER_LINE: str = "#707070"
-OTHER: str = "#4b5a78"
+OTHER: str = "#434c5e"
 
 PALETTE: list[str] = [
-    "#38bdf8", "#f472b6", "#a3e635", "#fbbf24", "#a78bfa",
-    "#34d399", "#fb923c", "#3b82f6", "#f87171", "#2dd4bf",
-    "#e879f9", "#c2410c", "#94a3b8", "#16a34a", "#fda4af",
-    "#0e7490", "#be185d", "#d4a373", "#7c3aed", "#fef08a",
+    "#547099", "#d9a557", "#53b87b", "#b85367", "#c781c7",
+    "#a39e93", "#738040", "#53b8b8", "#d97157", "#408066",
+    "#5367b8", "#997054", "#81abc7", "#c7819d", "#c7ab81",
+    "#b8538f", "#7d5499", "#408040", "#407380", "#8f81c7",
 ]
+
+APP_NAME: str = "WizTry"
+BRAND: str = "Esteef.Ai"
+TITLE: str = "WizTry - Esteef.Ai"
+BYLINE: str = "by Esteef.Ai"
 
 # ── fonts ─────────────────────────────────────────────────────────────────
 FONT_UI: tuple = ("Segoe UI", 10)
@@ -65,6 +70,7 @@ def apply(root: tk.Tk) -> None:
     st.configure("Bar.TLabel", background=DEEP, foreground=DIM)
     st.configure("Brand.TLabel", background=DEEP, foreground=ACCENT, font=FONT_BRAND)
     st.configure("Title.TLabel", background=BG, foreground=FAINT, font=("Segoe UI", 8, "bold"))
+    st.configure("By.TLabel", background=DEEP, foreground=DIM, font=("Segoe UI", 8))
 
     # buttons
     st.configure("TButton", background=RAISE, foreground=TEXT,

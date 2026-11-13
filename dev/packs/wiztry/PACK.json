@@ -32,10 +32,12 @@
   }
  ],
  "slow_tests": [
+  "tests/test_brand_exe.py",
   "tests/test_build.py"
  ],
  "window_tests": [
   "tests/test_app.py",
+  "tests/test_brand.py",
   "tests/test_look.py"
  ],
  "mutation_skip": [

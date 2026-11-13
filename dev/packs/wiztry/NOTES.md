@@ -110,3 +110,12 @@
   in the toolbar, name at the right of the status bar), T19 build.bat + version_info.txt (exe properties).
 - PyInstaller gotcha proven here: with --specpath build, a bare --version-file name is looked for in build\;
   give the full path ("%~dp0version_info.txt").
+
+## 2026-11-13: tweak 05 folded in
+- Built on wiztry11 in about 4 minutes, all three tasks on the first attempt. The owner tested the exe and asked
+  for the fold. Windows reads the exe's properties as Esteef.Ai / WizTry.
+- The pack now: 19 tasks, 398 checks, reference = wiztry11 at T19 (it now includes version_info.txt).
+- verify: 19 of 30 planted bugs caught (63%). The misses: three padding or font-size numbers in theme.py, seven
+  boundary comparisons and a pixel inset in the treemap layout, none of which changes anything a person sees,
+  and one in actions.can_delete (`or` -> `and` in the empty-path test): a path of only spaces is not tested.
+  The real code refuses it ("no path"); a check for it is worth adding the next time the tests are touched.

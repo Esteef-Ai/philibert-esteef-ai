@@ -55,7 +55,7 @@ class App(tk.Tk):
 
     def __init__(self, start_path=""):
         super().__init__()
-        self.title("WizTry")
+        self.title(theme.TITLE)
         self.geometry("1200x800")
 
         self.busy = False
@@ -95,7 +95,9 @@ class App(tk.Tk):
         toolbar = ttk.Frame(self, style="Bar.TFrame", padding=(12, 8))
         toolbar.pack(side=tk.TOP, fill=tk.X)
 
-        ttk.Label(toolbar, text="WIZTRY", style="Brand.TLabel").pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Label(toolbar, text="WIZTRY", style="Brand.TLabel").pack(side=tk.LEFT, padx=(0, 6))
+
+        ttk.Label(toolbar, text=theme.BYLINE, style="By.TLabel").pack(side=tk.LEFT, anchor="s", pady=(0, 2), padx=(0, 16))
 
         ttk.Entry(toolbar, textvariable=self.path_var).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
 
@@ -113,6 +115,7 @@ class App(tk.Tk):
         status_bar = ttk.Frame(self, style="Bar.TFrame", padding=(12, 4))
         status_bar.pack(side=tk.BOTTOM, fill=tk.X)
         ttk.Label(status_bar, textvariable=self.status, style="Bar.TLabel").pack(side=tk.LEFT)
+        ttk.Label(status_bar, text=theme.BRAND, style="By.TLabel").pack(side=tk.RIGHT)
 
     def _build_panes(self):
         """Create the vertical PanedWindow with tree, types and canvas."""

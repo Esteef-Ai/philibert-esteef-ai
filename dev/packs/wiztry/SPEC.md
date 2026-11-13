@@ -44,3 +44,7 @@ The scan is as fast as plain Python goes without admin rights: `os.scandir` with
 - A toolbar across the top with the name WIZTRY, the path box and the buttons; a status bar across the bottom; a small title above each pane (TREE VIEW, FILE TYPES, TREEMAP); number columns right-aligned.
 - Before a scan the treemap says what to do; while scanning it says Scanning...; hovering a block shows its path and size.
 - File types use a palette of 20 colors that can be told apart on the dark background; folders are a dark fill with a gray outline.
+
+## Brand and palette (added 2026-11-13)
+- Made by Esteef.Ai, and it says so: the window title is `WizTry - Esteef.Ai`, the toolbar shows `by Esteef.Ai` after the name, the status bar shows `Esteef.Ai` at its right end, and the exe's file properties name Esteef.Ai as the company and in the copyright.
+- File types use 20 calm, traditional colors (steel blue, ochre, green, wine, olive, terracotta, plum ...): none neon, none pastel, all readable on the dark background and distinct from each other.
