@@ -202,8 +202,14 @@ def verify(pack, full=False, n_mutants=30):
             for p in T.static_problems(empty, t):
                 bad.append(f"{t}: {p}")
         print("\n1. On " + ("the app as it is today" if m.get("base") else "an empty project") + " (every test must fail):")
+        guards = set(m.get("guard_tests") or [])               # older tests kept to guard what already works
         for t in fast:
             p, f, ok, _ = run_test(py, empty, t, 300)
+            if t in guards:
+                print(f"   {t:34} {'passes: a guard for what already works' if ok else 'A GUARD THAT FAILS TODAY'}")
+                if not ok:
+                    bad.append(f"{t} is a guard test but fails on the app as it is today")
+                continue
             print(f"   {t:34} {'fails, as it must' if not ok else 'PASSES ON NOTHING'}")
             if ok:
                 bad.append(f"{t} passes on an empty project: it checks nothing")

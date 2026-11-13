@@ -1,0 +1,40 @@
+{
+ "format": 1,
+ "name": "lackluster_remote",
+ "title": "Lackluster Plus+ - the whole app with a TV remote",
+ "kind": "web-app",
+ "written_by": "Claude (plan and tests, 2026-11-13)",
+ "base": "C:\\PCodeTest\\_bases\\lackluster_gateway",
+ "base_links": [
+  "node_modules"
+ ],
+ "python": {
+  "version": "3.11",
+  "pip": [
+   "requests",
+   "websocket-client"
+  ]
+ },
+ "fill": {},
+ "fill_in": [],
+ "needs": [
+  {
+   "path": "C:\\PCodeTest\\_bases\\lackluster_gateway\\dist\\server.js",
+   "why": "the app as it runs today (with the TV sign-in from pack lackluster_tv_login)",
+   "make": "copy dist, public, node_modules, package.json from the server's LacklusterPlus\\gateway (never .env or gateway-data)"
+  },
+  {
+   "path": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+   "why": "the tests drive a real browser, headless, with real key presses",
+   "make": "Edge ships with Windows"
+  }
+ ],
+ "guard_tests": [
+  "tests/test_signin_api.py",
+  "tests/test_signin_page.py"
+ ],
+ "slow_tests": [],
+ "window_tests": [],
+ "mutation_skip": [],
+ "reference": "reference"
+}
