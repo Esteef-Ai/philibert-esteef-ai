@@ -76,3 +76,18 @@
   (each run leaves a few tiny pc_test files there). Explorer is never opened and tk_popup never called.
 - Lesson for every pack: test what a person does (open a row, click a block, press a button) and where the
   result lands, not only that a method returns something.
+
+## 2026-11-12/13: tweak 03 folded in; tweak 04_dark_theme written
+- Tweak 03 built 13 of 13 in 16 minutes and the owner confirmed delete, zoom and the folder path work. Folded
+  in: 13 tasks, 286 checks, 30 of 30 planted bugs caught. T13's first attempt failed only the 1.5 s freeze
+  check (2.19 s under the foreman; 0.86 to 0.96 s otherwise): the limit is 2.5 s now.
+- Reading the builder's delete code found fAnyOperationsAborted declared 1 byte wide (a cancelled delete could
+  be reported as done). Nothing extra could ever be deleted. Fixed by T14, which also makes trash() check the
+  item is really gone.
+- The owner asked for a nicer, dark look in the style of the Philibert and Daily Bread notes in the vault.
+  Tweak 04: T14 (a delete that is sure), T15 (wiztry/theme.py: every color, font and ttk style), T16 (the
+  window wears it: toolbar with the name, status bar at the bottom, pane titles, right-aligned numbers, empty
+  and scanning states, and the hover tooltip, which had never appeared).
+- Looks are a new kind of task here. Tests can check that every surface is dark, that text contrast is high
+  enough, that palette colors can be told apart, and where things sit. They cannot say whether it looks good.
+  The colors were chosen by calculation and written into the brief as exact values; the owner judges the exe.

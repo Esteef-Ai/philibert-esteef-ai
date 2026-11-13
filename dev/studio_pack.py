@@ -359,6 +359,8 @@ def tweak(ws, name):
             sys.exit(f"{rel} already exists in the workspace")
         text = (td / rel).read_text(encoding="utf-8")
         (ws / rel).write_text(fill(text, m), encoding="utf-8")
+    for rel in tw.get("tests_update") or []:               # an older test the pack has corrected since this workspace was made
+        (ws / rel).write_text(fill((Path(m["pack_dir"]) / rel).read_text(encoding="utf-8"), m), encoding="utf-8")
     plan["tasks"] += tw["tasks"]
     # A tweak may change what the app is allowed to do (Delete ended "read-only"). The rules are in three places:
     # the plan, the foreman's notes (seeded from the plan once, then never overwritten) and the spec.
