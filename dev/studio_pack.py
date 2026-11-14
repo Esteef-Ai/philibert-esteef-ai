@@ -11,6 +11,10 @@ where the build stands; .studio/journal.jsonl says who did what.
     python dev/studio_pack.py tweak <workspace> <tweak>               add a tweak (new tasks + their tests) to a built workspace
     python dev/studio_pack.py rules <workspace>                       add the shared builder rules (packs/BUILDER_RULES.json)
     python dev/studio_pack.py status <workspace>                      rewrite .studio/HANDOFF.md
+    python dev/studio_pack.py look <workspace> [--vision MODEL]       pictures at several screen sizes + what is new and wrong
+    python dev/studio_pack.py quick <workspace> "<what to change>" --files a,b [--test tests/x.py] [--minutes 20]
+                                                                      a small change with no plan pack: one task, every
+                                                                      older test guarding, before/after pictures
     python dev/studio_pack.py note <workspace> "<who>" "<what>"       add a line to the journal
 
 verify answers three questions about the tests without building anything:
@@ -73,8 +77,8 @@ def tests_of(d):
     return out
 
 
-def lay_out(d, m, dest, reference=False):
-    """The pack's files as a workspace gets them (placeholders filled). reference=True adds the good build."""
+def lay_base(m, dest):
+    """The app a pack starts from, and nothing of the pack itself (an empty folder for a new app)."""
     dest.mkdir(parents=True, exist_ok=True)
     if m.get("base"):
         # An EXISTING app to change, not an empty folder to fill: the workspace starts as a copy of it. The big
@@ -84,6 +88,21 @@ def lay_out(d, m, dest, reference=False):
         for n in links:
             if (base / n).is_dir() and not (dest / n).exists():
                 subprocess.run(["cmd", "/c", "mklink", "/J", str(dest / n), str(base / n)], capture_output=True, check=True)
+
+
+def unlink_base(m, dest):
+    """Take a copy's links away before the copy is deleted, so nothing can follow them into the real folder."""
+    for n in m.get("base_links") or []:
+        if (Path(dest) / n).exists():
+            try:
+                os.rmdir(Path(dest) / n)
+            except OSError:
+                pass
+
+
+def lay_out(d, m, dest, reference=False):
+    """The pack's files as a workspace gets them (placeholders filled). reference=True adds the good build."""
+    lay_base(m, dest)
     shutil.copytree(d / "tests", dest / "tests", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
     for n in ("plan.json", "SPEC.md", ".gitignore", ".gitattributes"):
         if (d / n).is_file():
@@ -127,6 +146,36 @@ def run_test(py, ws, name, timeout=900):
     p, f = int(mm.group(1)), int(mm.group(2))
     fails = [ln.strip() for ln in out.splitlines() if ln.strip().startswith("FAIL")]
     return p, f, r.returncode == 0 and f == 0 and p > 0, "\n".join(fails[:6])
+
+
+def judge(ws, timeout=900):
+    """Every test of the workspace's pack, AS THE PACK HAS THEM TODAY, run on a copy of what the workspace holds.
+    A workspace keeps the tests of the day it was made; a test corrected since would judge old builds unfairly.
+    -> {test: {"passed": n, "failed": n (-1: crashed), "ok": bool, "fails": [...]}}"""
+    ws = Path(ws)
+    m = json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8"))
+    d = Path(m["pack_dir"])
+    links = set(m.get("base_links") or [])
+    py = str(ws / ".venv" / "Scripts" / "python.exe")
+    scratch = Path(tempfile.mkdtemp(prefix="pack_judge_"))
+    out = {}
+    try:
+        copy = scratch / "built"
+        shutil.copytree(ws, copy, ignore=shutil.ignore_patterns(".venv", ".foreman", ".git", "__pycache__", ".studio", "tests", *links))
+        for n in links:
+            if (ws / n).is_dir():
+                subprocess.run(["cmd", "/c", "mklink", "/J", str(copy / n), str((ws / n).resolve())], capture_output=True)
+        shutil.copytree(d / "tests", copy / "tests", ignore=shutil.ignore_patterns("__pycache__"))
+        for rel in m.get("fill_in") or []:
+            if rel.startswith("tests/") and (copy / rel).is_file():
+                (copy / rel).write_text(fill((copy / rel).read_text(encoding="utf-8"), m), encoding="utf-8")
+        for t in tests_of(d):
+            p, f, ok, tail = run_test(py, copy, t, timeout)
+            out[t] = {"passed": p, "failed": f, "ok": ok, "fails": tail.splitlines()[:6]}
+    finally:
+        unlink_base(m, scratch / "built")
+        shutil.rmtree(scratch, ignore_errors=True)
+    return out
 
 
 # ── verify ───────────────────────────────────────────────────────────────────
@@ -406,6 +455,192 @@ def tweak(ws, name):
     print(f"added {', '.join(t['id'] for t in tw['tasks'])} to {ws}\nbuild them with:\n  \"{sys.executable}\" \"{Path(__file__).resolve()}\" build \"{ws}\"")
 
 
+def pack_now(m):
+    """The pack's PACK.json as it is today (a workspace keeps the copy from the day it was made)."""
+    try:
+        return json.loads((Path(m["pack_dir"]) / "PACK.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError, KeyError):
+        return {}
+
+
+def look(ws, vision=None, log=print):
+    """The look step (dev/studio_look.py) on a workspace: pictures of every screen at several sizes, and the findings
+    that were not there before. "Before" is the pictures a quick change took when it started, else the app the pack
+    started from. -> the summary (also .studio/look/summary.json), or None when the pack has no look driver."""
+    import studio_look as LK
+    ws = Path(ws)
+    m = json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8"))
+    lk = m.get("look") or pack_now(m).get("look") or {}
+    driver = ws / lk.get("driver", "-")
+    if not driver.is_file():
+        driver = Path(m["pack_dir"]) / lk.get("driver", "-")
+    if not lk or not driver.is_file():
+        return None
+    ex = ws / ".git" / "info" / "exclude"                     # pictures stay out of git and out of the builder's diff
+    if ex.parent.is_dir() and ".studio/look" not in (ex.read_text(encoding="utf-8") if ex.exists() else ""):
+        with open(ex, "a", encoding="utf-8") as h:
+            h.write("\n.studio/look/\n.studio/look_before/\n.studio/look_base/\n")
+    py = str(ws / ".venv" / "Scripts" / "python.exe")
+    tool = str(Path(LK.__file__).resolve())
+
+    def shoot(folder, out, more=()):
+        shutil.rmtree(out, ignore_errors=True)
+        r = subprocess.run([py, tool, "run", str(folder), str(out), "--driver", str(driver), *more], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", env=ENV, timeout=1800)
+        f = Path(out) / "look.json"
+        if not f.is_file():
+            raise RuntimeError("the look step did not run: " + ((r.stdout or "") + (r.stderr or ""))[-400:])
+        return json.loads(f.read_text(encoding="utf-8"))
+
+    def usable(folder):                                       # pictures judged by the checks as they are today
+        try:
+            return json.loads((folder / "look.json").read_text(encoding="utf-8")).get("audit") == LK.audit_version()
+        except (OSError, ValueError):
+            return False
+
+    before_dir, before = ws / ".studio" / "look_before", None
+    if not usable(before_dir):
+        before_dir = ws / ".studio" / "look_base"
+        if not usable(before_dir) and m.get("base"):
+            scratch = Path(tempfile.mkdtemp(prefix="look_base_"))
+            try:
+                log("look: pictures of the app as it was (once per workspace) ...")
+                lay_out(Path(m["pack_dir"]), {**m, **{k: v for k, v in pack_now(m).items() if k in ("base", "base_links")}}, scratch / "app")
+                shoot(scratch / "app", before_dir)
+            finally:
+                unlink_base(m, scratch / "app")
+                shutil.rmtree(scratch, ignore_errors=True)
+    if usable(before_dir):
+        before = json.loads((before_dir / "look.json").read_text(encoding="utf-8"))
+    log("look: pictures of the app as it is now ...")
+    out = ws / ".studio" / "look"
+    after = shoot(ws, out, ["--vision", vision] if vision else [])
+    new, gone, okd = LK.compare(before, after, lk.get("accept") or [])
+    md = LK.report(after, new, gone, okd, out, before_dir if before else None, title=f"{m['title']}: the look step")
+    summary = {"when": after["when"], "screens": len(after["screens"]), "new": new, "gone": len(gone), "accepted": len(okd),
+               "not_reached": after["not_reached"], "report": str(md), "compared_with": str(before_dir) if before else None}
+    (out / "summary.json").write_text(json.dumps(summary, indent=1, ensure_ascii=False), encoding="utf-8")
+    log(f"look: {summary['screens']} screens, {len(new)} new finding(s), {len(after['not_reached'])} not reached -> {md}")
+    return summary
+
+
+QUICK_TEST = '''"""{tid}: {title}
+
+Written by studio_pack.py quick. It proves only that the named files changed and still parse. Whether the change is
+RIGHT is judged by every older test (they must all still pass) and by the before/after pictures of the look step.
+"""
+import hashlib
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+WS = Path(__file__).resolve().parent.parent
+BEFORE = {before}
+passed = failed = 0
+
+
+def check(label, ok, got=""):
+    global passed, failed
+    passed, failed = passed + bool(ok), failed + (not ok)
+    print(("PASS " if ok else "FAIL ") + label + ("" if ok or got == "" else f" - got {{got}}"))
+
+
+def digest(f):
+    p = WS / f
+    return hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else ""
+
+
+changed = [f for f, h in BEFORE.items() if digest(f) != h]
+check("at least one of the named files was changed (" + ", ".join(BEFORE) + ")", bool(changed), "nothing changed")
+for f in BEFORE:
+    p = WS / f
+    if not p.is_file():
+        continue
+    if p.suffix == ".py":
+        try:
+            compile(p.read_text(encoding="utf-8"), f, "exec")
+            check(f + " is valid Python", True)
+        except SyntaxError as e:
+            check(f + " is valid Python", False, e)
+    elif p.suffix in (".js", ".mjs", ".cjs"):
+        r = subprocess.run(["node", "--check", str(p)], capture_output=True, text=True)
+        check(f + " is valid JavaScript (node --check)", r.returncode == 0, (r.stderr or "").strip()[-200:])
+    elif p.suffix == ".json":
+        try:
+            json.loads(p.read_text(encoding="utf-8"))
+            check(f + " is valid JSON", True)
+        except ValueError as e:
+            check(f + " is valid JSON", False, e)
+    elif p.suffix in (".html", ".htm"):
+        t = p.read_text(encoding="utf-8")
+        check(f + " still ends with </html> and its <script> tags are closed", t.rstrip().endswith("</html>")
+              and t.count("<script") == t.count("</script>"), (t.count("<script"), t.count("</script>")))
+print(f"{{passed}} passed, {{failed}} failed")
+sys.exit(1 if failed else 0)
+'''
+
+
+def quick(ws, request, files, test=None, minutes=20, context=()):
+    """The fast lane: a small change to a built workspace, with no plan pack. One task is added to the plan: the
+    request is its brief, the named files are all it may touch, every older test guards it (the foreman's "nothing
+    that passed may break" gate), and the look step takes the "before" pictures now. The user starts the build."""
+    import hashlib
+    ws = Path(ws)
+    m = json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8"))
+    if git(ws, "status", "--porcelain").stdout.strip():
+        sys.exit("the workspace has uncommitted changes - commit or undo them first")
+    plan = json.loads((ws / "plan.json").read_text(encoding="utf-8"))
+    sf = ws / ".foreman" / "state.json"
+    st = json.loads(sf.read_text(encoding="utf-8")).get("tasks", {}) if sf.exists() else {}
+    waiting = [t["id"] for t in plan["tasks"] if (st.get(t["id"]) or {}).get("status") != "passed"]
+    if waiting:
+        sys.exit(f"finish the build first: {', '.join(waiting)} have not passed (a quick change needs a working app to guard)")
+    files = [f.replace("\\", "/") for f in files if f]
+    if not files:
+        sys.exit("name the files the change may touch: --files public/index.html,public/tvnav.js")
+    bad = [f for f in files if f.startswith(("tests/", ".foreman/", ".studio/")) or f == "plan.json"]
+    if bad:
+        sys.exit(f"a change may not touch {', '.join(bad)}")
+    n = 1 + sum(1 for t in plan["tasks"] if re.fullmatch(r"Q\d+", t["id"]))
+    tid = f"Q{n:02d}"
+    title = " ".join(request.split())[:70]
+    if test:
+        if not (ws / test).is_file():
+            sys.exit(f"{test} is not in the workspace (write it there first, or leave --test out)")
+        tests = [test]
+    else:
+        tests = [f"tests/test_{tid.lower()}_changed.py"]
+        before = {f: (hashlib.sha256((ws / f).read_bytes()).hexdigest() if (ws / f).is_file() else "") for f in files}
+        (ws / tests[0]).write_text(QUICK_TEST.format(tid=tid, title=title.replace('"', "'"), before=json.dumps(before, indent=1)),
+                                   encoding="utf-8")
+    plan["tasks"].append({
+        "id": tid, "title": title, "depends_on": [], "files": files, "context": list(dict.fromkeys([*tests, *context])),
+        "tests": tests, "minutes": minutes, "attempts": 2,
+        "brief": (f"A small change to the app as it is now. What is wanted:\n\n{request.strip()}\n\n"
+                  f"You may change only: {', '.join(files)}. Make the smallest change that does this and nothing else: "
+                  "no tidying, no renaming, no reformatting of lines you did not need to touch. Every test already in "
+                  "tests/ passes now and must still pass when you finish; run the ones that cover what you touched. "
+                  + ("" if test else f"`{tests[0]}` only proves the files changed and still parse; it does not tell you "
+                     "the change is right, so read the code around your change and check it does what is asked.")),
+        "done_when": [f"{tests[0]} prints 0 failed", "every older test still prints 0 failed"]})
+    (ws / "plan.json").write_text(json.dumps(plan, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    journal(ws, "studio_pack", f"quick change {tid} added: {title}", files=files)
+    status(ws)
+    git(ws, "add", "-A")
+    git(ws, "commit", "-q", "-m", f"quick change {tid}: {title} (the task, nothing built yet)")
+    if m.get("look") or pack_now(m).get("look"):              # the "before" pictures, from the app as it is this minute
+        try:
+            shutil.rmtree(ws / ".studio" / "look_before", ignore_errors=True)
+            s = look(ws)
+            if s:
+                shutil.copytree(ws / ".studio" / "look", ws / ".studio" / "look_before")
+                print(f"before pictures: {ws / '.studio' / 'look_before'}")
+        except Exception as e:
+            print(f"(no before pictures: {e})")
+    print(f"added {tid} to {ws}\nbuild it with:\n  \"{sys.executable}\" \"{Path(__file__).resolve()}\" build \"{ws}\"")
+
+
 def probe_problems(score):
     """The score, read the way a person would complain: each line is something a user would hit."""
     out = []
@@ -489,6 +724,26 @@ def status(ws):
         found = probe_problems(s)
         L += ["", "### What the scripted run found wrong" if found else "### The scripted run found nothing wrong (it is not a person: open the app too)"]
         L += [f"- {x}" for x in found]
+    try:
+        suspects = json.loads((sd / "suspects.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        suspects = []
+    if suspects:
+        L += ["", "## Suspect tests (studio_suspect.py): read these before blaming the builder", ""]
+        for f in suspects:
+            L += [f"- **{f['task']}**, `{f['test']}` ({'certain' if f['certain'] else 'likely'}): {f['why']}", "",
+                  "```", str(f.get("tail") or "").strip()[:600], "```", ""]
+    try:
+        lk = json.loads((sd / "look" / "summary.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        lk = None
+    if lk:
+        L += ["", f"## The look step ({lk['when']}, {lk['screens']} screens)",
+              f"Pictures and the full list: `{lk['report']}`. Compared with: `{lk.get('compared_with') or 'nothing (a new app)'}`.", ""]
+        L += [f"- NEW {f['size']} {f['screen']}: {f['kind']} `{f['where']}`: {f['why']}" for f in lk["new"][:25]]
+        L += [f"- not reached: {n['size']} {n['screen']}: {n['why'][:160]}" for n in lk["not_reached"][:10]]
+        if not lk["new"] and not lk["not_reached"]:
+            L += ["- nothing new was found by the mechanical checks (open the pictures all the same)"]
     done = st and all((st.get(t["id"]) or {}).get("status") == "passed" for t in plan["tasks"])
     L += ["", "## Next step"]
     if not st:
@@ -528,8 +783,11 @@ def build(ws, max_hours=6.0, rounds=1):
     if not (ws / ".studio" / "pack.json").exists():
         sys.exit(f"{ws} was not made from a pack (studio_pack.py new)")
     import ctypes
+    import threading
     import studio_overnight as Q
     import studio_score
+    import studio_suspect
+    watcher_stop = threading.Event()
     Q.HOME.mkdir(parents=True, exist_ok=True)
     ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001)      # no sleep while this runs
     run = {"ws": ws, "n": ws.name}
@@ -544,9 +802,15 @@ def build(ws, max_hours=6.0, rounds=1):
             status(ws)
             return 1
         journal(ws, "studio_pack", f"build started (up to {max_hours} h, {rounds} extra round(s) for stuck tasks)")
+        threading.Thread(target=studio_suspect.watch, args=(ws, watcher_stop, Q.log), daemon=True).start()
+        # beside the foreman: is a failing test the one at fault? (studio_suspect.py)
         Q.foreman(run, "--max-hours", str(max_hours), timeout=int(max_hours * 3600) + 900)
         for r in range(rounds):                                # time is cheap here: stuck tasks get fresh attempts
-            stuck = Q.stuck(run)
+            suspect = {f["task"] for f in studio_suspect.check(ws)}
+            if suspect:
+                Q.log(f"no fresh attempts for {sorted(suspect)}: their failing test is suspect (see the handoff)")
+                journal(ws, "studio_pack", f"suspect test(s) in {', '.join(sorted(suspect))}: no fresh attempts until someone reads them")
+            stuck = [t for t in Q.stuck(run) if t not in suspect]
             if not stuck:
                 break
             Q.log(f"round {r + 1}: fresh attempts for {stuck}")
@@ -560,8 +824,18 @@ def build(ws, max_hours=6.0, rounds=1):
     except Exception as e:
         Q.log(f"build error: {e}")
         journal(ws, "studio_pack", f"build error: {e}")
+    watcher_stop.set()
     Q.close_leftovers(ws)
     Q.unload()
+    try:
+        studio_suspect.check(ws)                               # the last word, written to .studio/suspects.json
+    except Exception as e:
+        Q.log(f"suspect check failed: {e}")
+    try:
+        if not Q.DRY:
+            look(ws, log=Q.log)                                # pictures and what is new in them, for the handoff
+    except Exception as e:
+        Q.log(f"look step failed: {e}")
     try:
         if Q.DRY:
             raise RuntimeError("dry run")
@@ -590,6 +864,11 @@ def opt(argv, name, default):
 
 
 def main():
+    for stream in (sys.stdout, sys.stderr):                    # a page's own text (bullets, emoji) must not crash a Windows console
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     a = sys.argv[1:]
     if len(a) < 2:
         sys.exit(__doc__)
@@ -616,6 +895,24 @@ def main():
             git(ws, "add", "-A")
             git(ws, "commit", "-q", "-m", f"plan: {n} shared builder rules")
         print(f"{n} rules added")
+    elif cmd == "look":
+        vision = opt(a, "--vision", None)
+        s = look(a[1], vision)
+        if s is None:
+            sys.exit("this workspace's pack has no look driver (PACK.json \"look\")")
+        status(a[1])
+        git(a[1], "add", ".studio")
+        git(a[1], "commit", "-q", "-m", f"look step: {len(s['new'])} new finding(s)")
+        for f in s["new"]:
+            print(f"  NEW {f['size']} {f['screen']}: {f['kind']} {f['where']}: {f['why']}")
+        print(s["report"])
+    elif cmd == "quick":
+        files = opt(a, "--files", "").split(",")
+        test, minutes = opt(a, "--test", None), int(opt(a, "--minutes", 20))
+        context = [c for c in opt(a, "--context", "").split(",") if c]
+        if len(a) < 3:
+            sys.exit(__doc__)
+        quick(a[1], a[2], files, test, minutes, context)
     elif cmd == "status":
         status(a[1])
         print(Path(a[1]) / ".studio" / "HANDOFF.md")

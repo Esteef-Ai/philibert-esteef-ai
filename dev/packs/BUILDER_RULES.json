@@ -27,6 +27,13 @@
    "Never start the server yourself (`node dist/server.js`): it does not exit, and the attempt runs out of time waiting. The tests start it, on a free port, against a stand-in for Plex; run the test to see what the server does.",
    "No new packages: use what is in node_modules and what the browser has. No `npm install`, no new script tags.",
    "In the page, a thing exists when a person can reach it with a mouse, a finger AND a keyboard or TV remote: use real <button> elements (they take focus and answer Enter), give them the ids the brief names, and never open a window or a new tab (TV browsers cannot handle one)."
+  ],
+  "android-app": [
+   "This is an Android app built without Gradle: `build_apk.py` runs the SDK tools (aapt2, javac, d8, apksigner) and prints the compiler's errors with file and line. Build after every change to a .java or .xml file; a task is never done while the build fails.",
+   "Only android.* and java.* exist here: no AndroidX, no support library, no Kotlin, no Gradle dependencies. If you reach for one, the build cannot find it; write the few lines yourself.",
+   "You cannot run the app: there is no emulator and you must never use adb. The tests build it, read what is in the APK and, when a TV is connected, drive it there. Reason about behaviour from the code; do not claim you saw it run.",
+   "Views are made in Java code, not layout XML, and every view a remote must reach is focusable and SHOWS focus (a visible outline in its focused state): a TV has no pointer.",
+   "The build tools, the artwork and the signing key are given: never edit build_apk.py, make_art.py, app/res/drawable-*, app/res/mipmap-* or signing/."
   ]
  }
 }

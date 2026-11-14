@@ -143,3 +143,41 @@ on one card (they would only take turns).
 - Still open for this kind: planted-bug scoring for JavaScript; a scripted "person" run like studio_score for pages.
 - Next for the same app, once sign-in is in use: remote-control (arrow key) navigation of the guide, then an Android TV
   wrapper APK. Apple TV cannot run an APK or a web view; it would need a native tvOS app.
+
+## 2026-11-14: the tools around the builder (look, quick, bench, suspect, blind, Android)
+
+The last three builds showed the builder is not the weak point (5 of 5 tasks first try); the lost hours and the real
+bugs came from everything around it. Six pieces were added in one pass, in the order the owner chose. What is proven
+is said for each; `studio_selftest.py` (about 8 minutes, no model) re-proves the first five.
+
+1. **The look step** (`studio_look.py`, `studio_pack.py look <ws>`, automatic at the end of `build`). A pack names a
+   driver (`PACK.json` "look", `tests/_look.py`) that reaches the app's screens; the step photographs each at three
+   sizes and checks mechanically: cut off, covered, text clipped, tiny text, scrolls sideways, highlight out of sight.
+   Only findings that are NEW against the app as it was are reported (an old app's old warts are not blamed on the
+   change). Proven: 18 screens on lackluster2, 0 new; a planted fault (a button pushed off the edge) is found.
+   Not built: a look driver for windows apps and for Android. `--vision MODEL` (a local vision model's second
+   opinion) is written and has never been run.
+2. **The fast lane** (`studio_pack.py quick <ws> "<request>" --files a,b`). One task, two attempts, every older test
+   guarding, "before" pictures taken at once. Its own test proves only that the files changed and still parse: the
+   guards and the pictures judge the rest. Proven up to the build; no quick change has been built by a model yet.
+3. **The replay bench** (`studio_bench.py new|run|adopt|report`). Fresh workspaces from packs for a named builder;
+   the report counts tasks passed, first-try passes, attempts and minutes, and judges every build with the pack's
+   tests as they are TODAY on a copy (`studio_pack.judge`). Proven on the two existing Lackluster builds (adopted):
+   5/5 tasks first try, 281 checks pass. No new bench has been run.
+4. **Suspect tests** (`studio_suspect.py`, watched during `build`). Certain: a test that must already pass fails on
+   the code as it was before the builder touched it -> the foreman is asked to stop and the task gets no fresh round.
+   Likely: the same failing checks twice although the builder reported different work. Proven on made-up attempt
+   records (7 cases). It cannot stop the attempts of the task that is running (the foreman checks STOP between tasks).
+5. **The blind planner trial** (`studio_blind.py stage|plan|tests|check|build|grade`). The local model gets the app,
+   the spec and the test helpers; it writes the plan and the tests; the pack's own tests, never shown to it, grade
+   what gets built. Proven: staging leaks nothing of the pack, the planner prompt is 85,000 characters, and grading
+   the pack's reference gives 204 of 204. The model stages have never been run: that run is the experiment.
+6. **A third kind: `android-app`** (pack `lackluster_firetv`). See its NOTES.md: the build-and-read half is proven
+   (58 checks), the on-the-TV half (22 checks through adb) is written and has never run.
+
+### A rule this pass paid for
+A pack's base is **frozen**. After deploying the remote pack the shared snapshot was refreshed from the live app, and
+with that both older packs silently lost their starting point: their tests would have passed on "the app as it is"
+and the look step compared the new app with itself. Each pack now has its own base
+(`_bases\lackluster_gateway_before_signin`, `..._before_remote`), rebuilt from the first commit of a workspace.
+`lackluster_gateway` stays the moving copy of the live app, for the NEXT pack.

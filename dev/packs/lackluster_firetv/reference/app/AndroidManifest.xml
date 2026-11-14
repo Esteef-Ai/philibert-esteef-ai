@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lackluster Plus+ (Philibert TV, by Esteef.Ai): the Fire TV / Android TV app. It is the web app in a full-screen frame. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="ai.esteef.lacklusterplus"
+    android:versionCode="3"
+    android:versionName="1.2">
+
+    <uses-sdk android:minSdkVersion="22" android:targetSdkVersion="34" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- a TV has no touch screen; without these two lines a TV will not list the app -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@drawable/banner"
+        android:banner="@drawable/banner"
+        android:theme="@style/AppTheme"
+        android:hardwareAccelerated="true"
+        android:usesCleartextTraffic="true"
+        android:allowBackup="false">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

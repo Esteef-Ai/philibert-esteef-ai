@@ -1,0 +1,44 @@
+{
+ "format": 1,
+ "name": "lackluster_firetv",
+ "title": "Lackluster Plus+ - the Fire TV app",
+ "kind": "android-app",
+ "written_by": "Claude (plan and tests, 2026-11-14)",
+ "base": "C:\\PCodeTest\\_bases\\lackluster_firetv_kit",
+ "base_links": [],
+ "python": {
+  "version": "3.11",
+  "pip": []
+ },
+ "fill": {},
+ "fill_in": [],
+ "needs": [
+  {
+   "path": "C:\\PCodeTest\\_bases\\lackluster_firetv_kit\\build_apk.py",
+   "why": "the build tools and the art the app starts from",
+   "make": "copy build_apk.py, make_art.py and app\\res (without values) from C:\\PCodeTest\\lackluster_firetv"
+  },
+  {
+   "path": "C:\\Users\\sskro\\AppData\\Local\\Android\\Sdk\\build-tools\\36.0.0\\aapt2.exe",
+   "why": "the Android SDK build tools (no Gradle is used)",
+   "make": "install Android Studio; SDK Manager -> build-tools 36.0.0, platform 34"
+  },
+  {
+   "path": "C:\\Program Files\\Android\\Android Studio\\jbr\\bin\\javac.exe",
+   "why": "the Java compiler that ships with Android Studio",
+   "make": "install Android Studio"
+  }
+ ],
+ "guard_tests": [],
+ "slow_tests": [],
+ "window_tests": [],
+ "mutation_skip": [
+  "build_apk.py",
+  "make_art.py"
+ ],
+ "device": {
+  "env": "LP_DEVICE",
+  "why": "checks marked (on the TV) run only when LP_DEVICE names a Fire TV that adb can reach, e.g. set LP_DEVICE=192.168.0.48:5555. They install a TEST copy (ai.esteef.lacklusterplus.test) beside the real app."
+ },
+ "reference": "reference"
+}

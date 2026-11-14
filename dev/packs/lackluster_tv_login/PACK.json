@@ -4,7 +4,7 @@
  "title": "Lackluster Plus+ - a sign-in that works on a TV",
  "kind": "web-app",
  "written_by": "Claude (plan and tests, 2026-11-12)",
- "base": "C:\\PCodeTest\\_bases\\lackluster_gateway",
+ "base": "C:\\PCodeTest\\_bases\\lackluster_gateway_before_signin",
  "base_links": [
   "node_modules"
  ],
@@ -19,9 +19,9 @@
  "fill_in": [],
  "needs": [
   {
-   "path": "C:\\PCodeTest\\_bases\\lackluster_gateway\\dist\\server.js",
+   "path": "C:\\PCodeTest\\_bases\\lackluster_gateway_before_signin\\dist\\server.js",
    "why": "the app as it runs today: a copy of the gateway folder from the server, without its .env",
-   "make": "copy dist, public, node_modules, package.json from the server's LacklusterPlus\\gateway (never .env or gateway-data)"
+   "make": "a FROZEN copy of the app as it was before this pack's change (dist, public, package.json from the first commit of a workspace made from this pack; node_modules linked). Never refresh it from the live app: the tests must fail on it"
   },
   {
    "path": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",

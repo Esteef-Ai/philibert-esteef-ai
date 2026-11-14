@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Lackluster Plus+</string>
+    <string name="byline">Philibert TV, by Esteef.Ai</string>
+    <!-- what the address box shows on first launch; the person can change it -->
+    <string name="default_server">http://192.168.0.184:9191</string>
+</resources>
