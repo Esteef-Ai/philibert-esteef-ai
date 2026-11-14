@@ -55,3 +55,10 @@ them to fail on the base.
   convention now says to write a new file in steps.
 - Rule for any pack that drives a browser: **a test browser must be proven empty** (list its tabs after 20
   seconds) before its tab count is used as evidence of anything.
+
+## 2026-11-14: built
+- After the test fix the local builder (q36c-nd128k) passed T01, T02 and T03 on the first attempt each, 20 minutes
+  in all. It wrote its own file (384 lines), using the functions the briefs gave "exactly" as given. Read line by
+  line: no faults. Two small differences from the first reference, both harmless: Play/Pause is ignored until
+  remote mode is on, and Escape does nothing while the caret is in a text box. `reference/` is now that build.
+- Not yet tried on a real Fire TV remote or with a real stream.
