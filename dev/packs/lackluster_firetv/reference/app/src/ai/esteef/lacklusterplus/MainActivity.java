@@ -168,12 +168,12 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPageStarted(WebView v, String url, android.graphics.Bitmap icon) {
-                loadFailed = false;
+                if (!"about:blank".equals(url)) loadFailed = false;   // failed() loads a blank page: that is not a new try
             }
 
             @Override
             public void onPageFinished(WebView v, String url) {
-                if (loadFailed) return;
+                if (loadFailed || "about:blank".equals(url)) return;
                 pageShown = true;
                 hidePanel();
             }

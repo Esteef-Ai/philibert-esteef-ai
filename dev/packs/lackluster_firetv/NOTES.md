@@ -19,13 +19,21 @@ holds what a builder is given and must not change: `build_apk.py`, `make_art.py`
 - Without `LP_DEVICE` the TV checks print `SKIP` and do not count. A build judged without a TV has only been
   judged by the weak half: say so when you report it.
 
-## NOT PROVEN YET (2026-11-14)
-- **The on-the-TV checks have never run.** The TV was asleep when they were written. Before trusting a build
-  judged by them, run the three tests on the reference with `LP_DEVICE` set and read every line. Likely first
-  faults: typing into the address box (does an on-screen keyboard take the keys?), `uiautomator dump` timing,
-  and whether `input keyevent KEYCODE_MEDIA_PLAY_PAUSE` reaches the app or the TV's own media session.
+## On the TV: proven 2026-11-14
+- All three tests were run on the reference with `LP_DEVICE=192.168.0.48:5555` (TCL AFTDEC012E, Fire OS 8, awake):
+  83 checks, of which 25 on the TV, all pass. Typing with `input text`, `uiautomator dump` and
+  `KEYCODE_MEDIA_PLAY_PAUSE` all work as the tests assume; no on-screen keyboard gets in the way.
+- **The first run found a real fault in the hand-written app.** `failed()` loads `about:blank`; that blank page's
+  `onPageStarted` cleared `loadFailed` and its `onPageFinished` hid the "Cannot reach" screen, so a dead address left
+  a blank screen. Fixed in the app (v1.3), the reference and T02's brief: the blank page is ignored in both
+  callbacks. No source check could have seen this; only the TV did.
+- When the box is empty, `uiautomator dump` reports the box's HINT as its text (`http://192.168.0.10:9191`).
+- Chromium refuses port 9 itself; any closed port gives the same result.
+
+## NOT PROVEN YET
 - The tasks were not proven one at a time in order (T01 alone, then T01+T02); only the whole reference was.
 - No local model has built this pack.
+- `studio_pack.py verify` runs without the TV: it proves the 58 static checks only.
 
 ## What was learned on the real TV (by hand, before the pack)
 - A Fire TV reports 960 x 540 to a page (density 2 at 1920 x 1080): everything is twice too big. The app draws a
