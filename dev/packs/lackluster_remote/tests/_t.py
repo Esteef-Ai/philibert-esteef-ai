@@ -212,6 +212,11 @@ class Browser:
         port = free_port()
         self.proc = subprocess.Popen([EDGE, "--headless=new", f"--remote-debugging-port={port}", f"--user-data-dir={self.profile}",
                                       "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--window-size=1280,720",
+                                      # A new profile is NOT empty by itself: Edge signs in the Windows account and syncs the
+                                      # person's extensions into it. Their welcome tabs look like popups and their scripts run
+                                      # inside the page under test. These switches give a browser with nothing of the person's.
+                                      "--disable-extensions", "--disable-sync", "--disable-default-apps",
+                                      "--disable-component-extensions-with-background-pages", "--disable-background-networking",
                                       "about:blank"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                      creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         self.http = f"http://127.0.0.1:{port}"
@@ -219,7 +224,7 @@ class Browser:
         end = time.time() + 30
         while time.time() < end and page is None:
             try:
-                page = next(t for t in self.targets() if t["type"] == "page")
+                page = next(t for t in self.targets() if t["type"] == "page" and t["url"].startswith("about:"))
             except Exception:
                 time.sleep(0.25)
         self.ws = websocket.create_connection(page["webSocketDebuggerUrl"], timeout=30, suppress_origin=True)
@@ -234,7 +239,7 @@ class Browser:
 
     def pages(self):
         """How many tabs and windows are open. A popup would make this 2."""
-        return len([t for t in self.targets() if t["type"] == "page"])
+        return len([t for t in self.targets() if t["type"] == "page" and not t["url"].startswith(("edge:", "chrome-extension:"))])
 
     def cmd(self, method, **params):
         self.n += 1

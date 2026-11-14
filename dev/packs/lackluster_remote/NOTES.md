@@ -40,3 +40,18 @@ them to fail on the base.
 - T01 alone: basics 42 pass; guide and player tests fail. T01+T02: basics 42, guide 31; player fails.
   All three: 42 + 31 + 54, and the sign-in guards 38 + 39.
 - On the base all three remote tests fail at "tvnav.js is not there".
+
+## 2026-11-13: the first build stuck on T01, and it was the tests' fault
+- Six attempts (2.4 h) failed on `still one tab, no popup - got 2` in the sign-in guard test. Cause: a fresh Edge
+  profile is not empty on this PC. Edge signs in the Windows account and syncs the owner's extensions into it;
+  their welcome tabs counted as popups and their content scripts raised errors inside the page under test. It
+  did not show the day before (sync is slower than a 25-second test, some days).
+- Fix in `tests/_t.py` (both Lackluster packs): `--disable-extensions --disable-sync --disable-default-apps
+  --disable-component-extensions-with-background-pages --disable-background-networking`; attach to the
+  `about:` page; `pages()` ignores `edge:` and `chrome-extension:` pages.
+- Also hardened: the Browse column slides open with a CSS transition; the test now waits for its width instead
+  of sleeping half a second.
+- Also seen: the builder tried to write the whole 180-line file in one reply and was cut off twice. A
+  convention now says to write a new file in steps.
+- Rule for any pack that drives a browser: **a test browser must be proven empty** (list its tabs after 20
+  seconds) before its tab count is used as evidence of anything.

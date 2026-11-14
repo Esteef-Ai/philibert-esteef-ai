@@ -20,7 +20,8 @@
  "conventions": [
   "public/tvnav.js: plain browser JavaScript in one (function(){ 'use strict'; ... })(); two-space indents, single quotes, var and function (no modules, no build, no libraries).",
   "Run a task's test with: .venv\\Scripts\\python.exe tests\\<file>.py (it prints PASS/FAIL lines and starts the server and a headless browser itself).",
-  "Scratch files and experiments go in the system temp folder, never in the project folder."
+  "Scratch files and experiments go in the system temp folder, never in the project folder.",
+  "A new file is written in steps: save a short skeleton first, then add one function at a time with edits, running `node --check` as you go. One reply that holds the whole file is cut off before anything is saved, and the attempt is lost."
  ],
  "tasks": [
   {

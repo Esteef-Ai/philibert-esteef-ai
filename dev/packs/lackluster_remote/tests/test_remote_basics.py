@@ -111,7 +111,10 @@ br.js("toggleOptions()")
 br.focus("#btn-browse")
 br.press("ok")                                             # a real button: Enter works by itself
 check("OK on Browse opens the Browse column", br.wait("!document.querySelector('.guide-layout').classList.contains('sb-collapsed')", 3))
-time.sleep(0.5)
+# the column slides open (a CSS transition): wait until it has its full width, however slow the machine is right now
+br.wait("document.getElementById('filter-sidebar').getBoundingClientRect().width >= 170 && "
+        "getComputedStyle(document.getElementById('filter-sidebar')).opacity === '1'", 6)
+time.sleep(0.3)
 br.press("left")
 a = active()
 check("Left from Browse goes into the column", "fs-item" in a.get("cls", ""), a)
