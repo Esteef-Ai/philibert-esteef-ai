@@ -76,7 +76,12 @@ exact names, ids and strings from the spec, the order to do it in, and what NOT 
 }}
 
 Rules for the plan:
-- 1 to 5 tasks. Each task leaves the app working. A later task builds on an earlier one (depends_on).
+- 2 to 5 tasks. Each task leaves the app working. A later task builds on an earlier one (depends_on).
+- A task is a SLICE OF THE APP'S OWN CODE that one programmer finishes in about 40 minutes: the first task makes the smallest thing that works (the new file exists, is loaded, its entry points exist); each later task adds one group of behaviours from the spec. Never put the whole spec into one task.
+- EVERY task changes the app: its "files" names at least one file that is NOT under tests/. A task with an empty "files" list is refused and the whole plan with it.
+- NEVER make a task whose job is to write, extend or run tests. The tests are written by the test writer in the next step, one file per task; the programmer never writes them.
+- Use only ids, class names and function names you can SEE in the source outline above or in the spec. Do not guess an id; if you need one that does not exist, the brief says to add it and under which name.
+- Where the spec does not fix a detail (a class name, the exact text of a tag), do not present your choice as a requirement: say "for example" so the test writer does not demand that exact spelling.
 - Prefer a NEW file the programmer owns over scattered edits in a big existing file; a big file gets the smallest edit.
 - Never list a file under tests/ in "files". One test file per task; give each a different name.
 - Every exact name the spec gives (file names, function names, ids, class names, strings) must appear in a brief, \
@@ -113,6 +118,8 @@ with a check that the new file, function or id exists, and stop early (finish())
 not by reading the source for a string, except for "this exact line is in this file" facts the brief fixes.
 - Never sleep for a fixed time to wait for the app: use the helpers' wait functions.
 - At least 10 checks. Close everything you start (browser, server), also when a check fails.
+- CHECK ONLY WHAT THE SPEC STATES. A second programmer who built the spec correctly, without reading this brief, must also pass. So never demand an exact spelling the spec does not give (the text of a script tag, a class name, a private helper's name, an exact return value): check the BEHAVIOUR instead (the file is served by the app, the function exists, the focus moved to another element, the drawer closed). A check that a correct build can fail is worse than no check: it blocks the programmer for good.
+- Use only helper functions that are listed above, with the arguments shown there. Use only ids and selectors you can see in the source outline or the spec.
 Reply with the complete file in one ```python block and nothing else.
 """
 
@@ -237,6 +244,15 @@ def plan(ws, model, think, dry):
     pl = S.extract_json(text)
     for t in pl.get("tasks") or []:
         t["files"] = [x for x in t.get("files") or [] if not str(x).replace("\\", "/").startswith("tests/")]
+    empty = [t.get("id") for t in pl.get("tasks") or [] if not t["files"]]
+    if empty:                                                # a "write the tests" task: not the builder's job, and the foreman refuses it
+        print(f"  dropped {', '.join(map(str, empty))}: no app file to change (the planner made a task out of testing)")
+        P.journal(ws, "studio_blind", f"plan by {model}: dropped task(s) {', '.join(map(str, empty))} that change no app file")
+        pl["tasks"] = [t for t in pl["tasks"] if t.get("id") not in empty]
+        for t in pl["tasks"]:
+            t["depends_on"] = [d for d in t.get("depends_on") or [] if d not in empty]
+        pl["dropped_tasks"] = empty
+    for t in pl.get("tasks") or []:
         if isinstance(t.get("tests"), list):
             t["tests"] = t["tests"][0] if t["tests"] else None
         t["tests"] = t.get("tests") or f"tests/test_{str(t.get('id', 'tx')).lower()}.py"
