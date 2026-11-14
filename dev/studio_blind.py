@@ -324,7 +324,7 @@ def check(ws):
     for name in sorted(set(re.findall(r"`([^`\n]{3,60})`", spec))):
         if name not in briefs:
             bad.append(f"the spec names `{name}` and no brief mentions it")
-    print(("NOT READY:\n" + "\n".join("  - " + b for b in bad)) if bad else "READY: the plan is well formed and every test fails cleanly on the app as it is.")
+    print(("NOT READY (do not build: the foreman will refuse this plan; run `plan` again or mend plan.json):\n" + "\n".join("  - " + b for b in bad)) if bad else "READY: the plan is well formed and every test fails cleanly on the app as it is.")
     (ws / ".studio" / "blind_check.json").write_text(json.dumps({"when": time.strftime("%Y-%m-%d %H:%M"), "problems": bad}, indent=1), encoding="utf-8")
     return 1 if bad else 0
 
@@ -350,6 +350,17 @@ def grade(ws):
         print("1. The pack's own tests (never shown to the local planner) on what was built:")
         tp = tf = 0
         misses = 0
+        guards = set(m.get("guard_tests") or [])               # they pass on the old app: keeping them is no credit
+        np_ = nf = 0
+        sf = ws / ".foreman" / "state.json"
+        try:
+            done = [k for k, v in json.loads(sf.read_text(encoding="utf-8")).get("tasks", {}).items() if v.get("status") == "passed"]
+        except (OSError, ValueError):
+            done = []
+        res["built"] = bool(done)
+        if not done:
+            print("   NOTHING WAS BUILT in this workspace (no task passed). What follows is the app as it was staged,\n"
+                  "   so it only shows where the old app already stands.")
         for t in P.tests_of(d):
             r = subprocess.run([py, t], cwd=str(built), capture_output=True, text=True, encoding="utf-8", errors="replace", env=P.ENV, timeout=900)
             out = (r.stdout or "") + (r.stderr or "")
@@ -360,9 +371,14 @@ def grade(ws):
             misses += len(miss)
             res["hidden"][t] = {"passed": p, "failed": f, "fails": fails[:12]}
             tp, tf = tp + p, tf + max(f, 0)
+            if t not in guards:
+                np_, nf = np_ + p, nf + max(f, 0) + (1 if f < 0 else 0)
             print(f"   {t:36} {p} passed, {'crashed' if f < 0 else str(f) + ' failed'}" + (f"   first: {fails[0][:110]}" if fails else ""))
         total = tp + tf
-        res["score"] = {"checks_pass": tp, "checks": total, "share": round(tp / total, 3) if total else 0, "contract_misses": misses}
+        res["score"] = {"checks_pass": tp, "checks": total, "share": round(tp / total, 3) if total else 0, "contract_misses": misses,
+                        "new_work_pass": np_, "new_work_checks": np_ + nf, "guards_pass": tp - np_, "guards_checks": total - np_ - nf}
+        print(f"   THE NEW WORK: {np_} of {np_ + nf} checks pass. Older work still standing (guard tests, no credit): "
+              f"{tp - np_} of {total - np_ - nf}." + ("" if done else "  NOTHING WAS BUILT."))
         print(f"   SCORE: {tp} of {total} hidden checks pass ({res['score']['share']:.0%}); {misses} failing check(s) look like a name the spec "
               f"may not have carried (a file, id or function 'not there')")
         # 2. the local tests: sound? (pass on the pack's reference, fail on the old app)
@@ -397,7 +413,10 @@ def grade(ws):
         P.unlink_base(m, scratch / "built")
         shutil.rmtree(scratch, ignore_errors=True)
     (ws / ".studio" / "blind_grade.json").write_text(json.dumps(res, indent=1, ensure_ascii=False), encoding="utf-8")
-    P.journal(ws, "studio_blind", f"graded: {res['score']['checks_pass']} of {res['score']['checks']} hidden checks pass; local tests sound: {res.get('local_tests_sound', 'not judged')}")
+    s = res["score"]
+    P.journal(ws, "studio_blind", ("graded" if res["built"] else "graded, but NOTHING WAS BUILT") + f": new work {s['new_work_pass']} of "
+              f"{s['new_work_checks']} hidden checks, guards {s['guards_pass']} of {s['guards_checks']}; local tests sound: "
+              f"{res.get('local_tests_sound', 'not judged')}")
     print(f"\nwritten: {ws / '.studio' / 'blind_grade.json'}")
     return res
 

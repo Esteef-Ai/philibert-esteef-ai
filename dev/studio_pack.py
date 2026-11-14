@@ -805,6 +805,13 @@ def build(ws, max_hours=6.0, rounds=1):
         threading.Thread(target=studio_suspect.watch, args=(ws, watcher_stop, Q.log), daemon=True).start()
         # beside the foreman: is a failing test the one at fault? (studio_suspect.py)
         Q.foreman(run, "--max-hours", str(max_hours), timeout=int(max_hours * 3600) + 900)
+        if not (ws / ".foreman" / "state.json").is_file():       # the foreman refused the plan before any task
+            Q.log("build not started: the foreman refused the plan (its reasons are just above). Nothing was built.")
+            journal(ws, "studio_pack", "build not started: the foreman refused the plan; nothing was built")
+            watcher_stop.set()
+            Q.unload()
+            status(ws)
+            return 1
         for r in range(rounds):                                # time is cheap here: stuck tasks get fresh attempts
             suspect = {f["task"] for f in studio_suspect.check(ws)}
             if suspect:
