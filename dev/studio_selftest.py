@@ -193,7 +193,7 @@ try:
         prompt = (b / ".studio" / "blind_plan.prompt.txt").read_text(encoding="utf-8") if (b / ".studio" / "blind_plan.prompt.txt").is_file() else ""
         check("the planner is told each test file and its checks in plain words",
               "TEST FILE 1: tests/test_remote_basics.py" in prompt and "walking with the arrows never loses the highlight" in prompt
-              and "EXACTLY 3 tasks" in prompt)
+              and "EXACTLY 5 tasks" in prompt)                    # the guide is three files since 2026-11-15
         leaked = [n for n in ("anchorX", "br.press(", "def active(", "DESCRIBE =") if n in prompt.split("THE TESTS ALREADY EXIST")[-1]]
         check("... and none of their code", not leaked, leaked)
         r = subprocess.run([sys.executable, str(DEV / "studio_blind.py"), "tests", str(b), "--dry"], capture_output=True, text=True, encoding="utf-8", errors="replace")
