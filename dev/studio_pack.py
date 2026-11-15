@@ -50,7 +50,7 @@ sys.path.insert(0, str(REPO / "shared"))
 # ── the pack ─────────────────────────────────────────────────────────────────
 
 def load(pack):
-    d = Path(pack) if Path(pack).is_dir() else PACKS / str(pack)
+    d = (Path(pack) if Path(pack).is_dir() else PACKS / str(pack)).resolve()   # workspaces keep it: never relative
     if not (d / "PACK.json").is_file():
         sys.exit(f"no pack at {d} (PACK.json missing)")
     m = json.loads((d / "PACK.json").read_text(encoding="utf-8"))
