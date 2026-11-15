@@ -283,3 +283,50 @@ it will stick.
 Still open from section 8, in order: 3 (install v1.3, the owner), the plan-only run above, 5 stage B (tests written
 after the code, checked mechanically), 6 (first bench), 7 (three real quick changes), 8 and 9 (foreman changes, the
 owner's copy), 10 (local build of the Android pack), 11 (vision), 12 (the Studio window).
+
+## 12. The first plan-only run (blind3, night of 2026-11-14) and what was built from it
+
+**Result: a valid plan, nothing built.** `C:\PCodeTest\blind3`, planner `q36c-nd64k`, builder `q36c-nd128k`.
+- The plan took 165 s (45 tokens a second: the card was free) and `check` said READY. Three tasks, one per test
+  file, real names from the spec and the labels (`window.tvNav`, `tv-nav`, `#options-dropdown`, `isTvBrowser()`).
+  This is the first local plan the foreman accepted. The plan's SHAPE is solved.
+- T01 stuck after 6 attempts (3, then one fresh round of 3); T02 and T03 were skipped. Four attempts ran out of
+  their 40 minutes. Best: 27 of 42 checks, twice. In both, every "arrows alone reach X" check failed with the
+  highlight still on the first programme: the builder never got "nearest element in a direction" right.
+- The builder's model ran 47% on the processor (`ollama ps`), so each attempt was slower than usual.
+
+**Why, by comparison with the build that passed.** Same tests, same builder, same 40 minutes. The cloud plan's brief
+for T01 is 7,117 characters: lettered parts, the scope rules, and the `nearest()` function WRITTEN OUT ("use exactly
+this, it was tuned against the real page"). The local brief is 1,508 characters and says what must be true, not how.
+So the missing thing is not the builder's ability; it is that the cloud planner had solved the hard part before
+writing the brief. Mine was tuned by running it. A planner that only writes cannot tune.
+
+**Built in answer (no model run yet):** `studio_blind.py briefs <workspace>` (plan-only trials). A second pass, one
+call per task: the model sees the spec, the plan, the task's check labels, the earlier rewritten briefs and the
+source outline, and must write a brief with fixed parts: the exact file edits, the code in numbered parts with the
+deciding algorithms written out in code, a table from every check label to the part that satisfies it, a "do not"
+list, and debugging hints. A rewrite shorter than the original is thrown away. The short brief is kept as
+`brief_short`. Also fixed: the foreman swept `.studio/suspects.json` away as a stray file; it is now git-excluded.
+
+**Staged for the owner: `C:\PCodeTest\blind4`** (plan-only). Order: `plan`, `briefs`, `check`, `build`, `grade`.
+Compare with blind3 (0 of 3, best 27 of 42 on T01) and with the cloud plan (3 of 3 first try).
+
+**What I expect and what to do with each outcome (unmeasured):**
+- Longer briefs with an untuned algorithm may still stick on the same checks. If T01 gets further than 27 of 42 but
+  sticks, the next lever is NOT a better prompt. It is one of these, in the order I would try them:
+  1. **Keep a failed attempt's work.** The foreman undoes everything on a fail, so 27 of 42 after 40 minutes is thrown
+     away and the next attempt starts from nothing. A "continue from the best attempt" mode (keep the diff when the
+     attempt raised the number of passing checks and broke nothing older; give the next attempt only the failing
+     checks) would have turned six restarts into one long climb. This is a foreman change: the owner's copy
+     (`G:\!Ai\ND3\nd_foreman.py`, `undo()` at the three places it is called after a failed gate).
+  2. **Smaller tasks.** One task per test file is my rule, made for like-for-like grading. T01 carries 42 checks.
+     Splitting a test file into two or three (basics: file, script line, mode on/off, first highlight; then moving;
+     then options and Browse) gives the builder steps it can finish. Needs the pack's tests split the same way.
+  3. **A planner that tunes.** Let the planner run code: a "spike" step where the model writes the deciding
+     function, runs it against the real page with the test helpers, and only then writes the brief. This is what I
+     did by hand, and it is the honest description of what "planning" this task took.
+  4. More time per attempt (60 or 90 minutes) while the builder is half on the processor. Cheap to try, but it
+     changes two things at once if tried together with the briefs step.
+- If blind4 passes all three: run it twice more before believing it, then try the same on `lackluster_tv_login` and
+  `lackluster_firetv`.
+

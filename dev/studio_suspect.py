@@ -151,6 +151,13 @@ def check(ws, run_untouched=True):
                                      f"spending more attempts.", "tail": "\n".join(signature(fails[-1])[2])[:600]})
     sd = ws / ".studio"
     if sd.is_dir():
+        ex = Path(ws) / ".git" / "info" / "exclude"            # else the foreman removes it as a stray file (blind3, 2026-11-14)
+        try:
+            if ex.parent.is_dir() and ".studio/suspects.json" not in (ex.read_text(encoding="utf-8") if ex.exists() else ""):
+                with open(ex, "a", encoding="utf-8") as h:
+                    h.write("\n.studio/suspects.json\n")
+        except OSError:
+            pass
         (sd / "suspects.json").write_text(json.dumps(found, indent=1, ensure_ascii=False), encoding="utf-8")
     return found
 

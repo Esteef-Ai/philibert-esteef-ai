@@ -22,7 +22,9 @@ local model the planner's job too, and grades the result with tests it has never
 THE PLAN-ONLY TRIAL (stage A of the handover, added 2026-11-14 after two full trials died on the local tests):
     python dev/studio_blind.py stage <pack> <workspace> --plan-only
 The workspace also gets the pack's own tests. The local model writes only the plan: one task per test file, told
-each file's name and the plain-words labels of its checks, never its code. There is no `tests` step. The build is
+each file's name and the plain-words labels of its checks, never its code. There is no `tests` step; instead `briefs <workspace>` (model calls: YOU run it) rewrites each task's short brief
+into a detailed one: parts in order, the deciding algorithms written out, a table from every check to the part that
+satisfies it. The build is
 judged by the same tests a cloud-planned build is judged by, so `grade` (and the replay bench) compare like with like:
 what changes is who wrote the briefs.
 
@@ -220,7 +222,7 @@ def stage(pack, ws, plan_only=False):
     me = f'"{sys.executable}" "{Path(__file__).resolve()}"'
     print(f"staged: {ws}" + (" (plan-only: the pack's tests judge the build)" if plan_only else "")
           + f"\nnext (you run these; they call the local model):\n  {me} plan \"{ws}\"\n"
-          + ("" if plan_only else f"  {me} tests \"{ws}\"\n") + f"  {me} check \"{ws}\"\n"
+          + (f"  {me} briefs \"{ws}\"\n" if plan_only else f"  {me} tests \"{ws}\"\n") + f"  {me} check \"{ws}\"\n"
           f"  \"{sys.executable}\" \"{Path(P.__file__).resolve()}\" build \"{ws}\"\n  {me} grade \"{ws}\"")
 
 
@@ -365,6 +367,96 @@ def plan(ws, model, think, dry):
     P.journal(ws, "studio_blind", f"plan written by {model}: {len(pl.get('tasks') or [])} task(s)")
     P.git(ws, "add", "-A")
     P.git(ws, "commit", "-q", "-m", f"blind trial: the plan, by {model}")
+
+
+BRIEF = """You are the planner of Philibert Code. A plan exists. Its briefs are too short: the programmer (a careful \
+but literal local AI model) sees ONE task at a time, knows nothing you do not write, has about 40 minutes, and starts \
+from nothing again if it fails. A brief that only says WHAT must be true leaves the programmer to invent HOW, and it \
+runs out of time. Rewrite the brief of ONE task so that the programmer can type it in.
+
+THE SPEC:
+{spec}
+
+THE PLAN (every task, short):
+{summary}
+
+THE TASK TO REWRITE:
+{task}
+
+WHAT JUDGES IT (the label of every check, in the order they run; all must come true):
+{labels}
+
+BRIEFS ALREADY REWRITTEN for earlier tasks (this task builds on that code; reuse its names, never redefine them):
+{earlier}
+
+THE APP'S SOURCE (outline, with line numbers):
+{source}
+
+Write the new brief as plain text (no JSON, no code fence around the whole thing). It must have these parts, in order:
+A. One paragraph: what exists, what this task adds, and what is left for LATER tasks (so the programmer does not \
+write it now).
+B. For every file the task may change: the exact change. For an existing big file: the exact line to find and the \
+exact line to add, and "read nothing else in it". For a new file: its outer shape (for a browser script: one \
+function wrapping everything, plain var and function, no modules).
+C. The code in numbered parts, in the order to write them. For each part: the function's name, what it takes and \
+returns, and its rules as precisely as you can state them: which elements (by the ids and classes you can SEE in \
+the outline), which conditions, which order of checks. Where the choice of an algorithm decides whether the checks \
+pass (for example: which element is "nearest" in a direction, what counts as hidden, what is in or out of reach while \
+something is open), WRITE THE FUNCTION OUT in code, complete, 10 to 40 lines, and say "use exactly this".
+D. A table "check -> part": every label from the list above, and the part of C that makes it come true. A label with \
+no part means the brief is not finished: add the part.
+E. "Do not": the things this task must leave alone.
+F. "When a check fails": two or three hints on how to find the cause (what to print, which element to look at).
+Aim for 4,000 to 8,000 characters. Exact names beat prose. Never name an id, class or function that is neither in \
+the outline, the spec, nor defined by a brief.
+"""
+
+
+def briefs(ws, model, think, dry, only=None):
+    """Plan-only trial, second pass: each task's short brief becomes a detailed one (the first plan-only build stuck
+    on briefs of 1,500 characters where the cloud plan's, for the same tests, had 7,000 and a tuned algorithm)."""
+    ws = Path(ws)
+    m = json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8"))
+    pl = json.loads((ws / "plan.json").read_text(encoding="utf-8"))
+    _, source = source_view(ws, budget=30_000, whole=3_000)
+    summary = "\n".join(f"  {t['id']} {t['title']} (files: {', '.join(t.get('files') or [])}; test: {own(t)})" for t in pl["tasks"])
+    done, wrote = [], 0
+    for t in pl["tasks"]:
+        if only and t["id"] != only:
+            done.append(t)
+            continue
+        if not only and not dry and t.get("brief_short"):
+            print(f"  {t['id']}: already rewritten, kept (to do it again: briefs <workspace> {t['id']})")
+            done.append(t)
+            continue
+        src = (ws / str(own(t))).read_text(encoding="utf-8", errors="replace") if m.get("plan_only") and (ws / str(own(t))).is_file() else ""
+        labels = []
+        for lab in re.findall(r"""check\(\s*f?(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')""", src):
+            lab = (lab[0] or lab[1]).replace('\\"', '"').replace("\\'", "'")
+            if lab not in labels:
+                labels.append(lab)
+        task = (f"{t['id']} {t['title']}\nFiles it may change: {', '.join(t.get('files') or [])}\nAfter: "
+                f"{', '.join(t.get('depends_on') or []) or 'nothing'}\nThe short brief:\n{t.get('brief_short') or t.get('brief')}")
+        earlier = "\n\n".join(f"--- {x['id']} {x['title']} ---\n{x.get('brief')}" for x in done) or "(none: this is the first task)"
+        prompt = BRIEF.format(spec=(ws / "SPEC.md").read_text(encoding="utf-8"), summary=summary, task=task, source=source,
+                              labels="\n".join("  - " + x for x in labels) or "  (the spec is the only judge)", earlier=earlier[-24_000:])
+        text = call(ws, f"blind_brief_{t['id']}", prompt, model, think, dry)
+        if text:
+            import nd_studio as S
+            new = S.strip_think(text).strip()
+            if len(new) < len(t.get("brief") or "") or len(new) < 1500:
+                print(f"  {t['id']}: the rewrite is {len(new)} characters, no better than the short brief: kept the short one")
+            else:
+                t["brief_short"] = t.get("brief_short") or t.get("brief")
+                t["brief"] = new
+                wrote += 1
+                print(f"  {t['id']}: {len(t['brief_short'])} -> {len(new)} characters")
+                (ws / "plan.json").write_text(json.dumps(pl, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+                P.git(ws, "add", "-A")
+                P.git(ws, "commit", "-q", "-m", f"blind trial: {t['id']}'s brief rewritten in detail, by {model}")
+        done.append(t)
+    if wrote:
+        P.journal(ws, "studio_blind", f"{wrote} brief(s) rewritten in detail by {model}")
 
 
 def tests(ws, model, think, dry, only=None):
@@ -564,6 +656,8 @@ def main(a):
         stage(a[1], a[2], plan_only)
     elif cmd == "plan":
         plan(a[1], model, think, dry)
+    elif cmd == "briefs":
+        briefs(a[1], model, think, dry, a[2] if len(a) > 2 else None)
     elif cmd == "tests":
         tests(a[1], model, think, dry, a[2] if len(a) > 2 else None)
     elif cmd == "check":
