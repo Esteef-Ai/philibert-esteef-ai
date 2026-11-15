@@ -154,7 +154,10 @@ VISION_PROMPT = ("This is a screenshot of one screen of an app, at {w} x {h} pix
 def audit_version():
     """Changes when the checks change: pictures taken with other checks cannot be the "before" of a comparison."""
     import hashlib
-    return hashlib.md5(AUDIT_JS.encode()).hexdigest()[:10]
+    return hashlib.md5((AUDIT_JS + f"|passes={PASSES}").encode()).hexdigest()[:10]
+
+
+PASSES = 2          # every app is walked this many times: a finding counts when EVERY walk shows it (see run)
 
 
 def slug(s):
@@ -166,52 +169,85 @@ def key(f):
     return f"{f['size']}|{f['screen']}|{f['kind']}|{f['where']}"
 
 
-def run(folder, out, vision=None, log=print, driver=None):
+def every_not(walks):
+    seen, out = set(), []
+    for w_ in walks:
+        for x in w_["not_reached"]:
+            if (x["size"], x["screen"]) not in seen:
+                seen.add((x["size"], x["screen"]))
+                out.append(x)
+    return out
+
+
+def run(folder, out, vision=None, log=print, driver=None, passes=None):
     """Drive the pack's driver against the app in `folder`. Pictures and look.json go to `out`. The driver is
     tests/_look.py in that folder unless another file is named (a workspace made before its pack had one)."""
     folder, out = Path(folder).resolve(), Path(out).resolve()
+    passes = passes or PASSES
     out.mkdir(parents=True, exist_ok=True)
     sys.path.insert(0, str(folder / "tests"))                 # the driver's helpers (_t.py) are the folder's own
     spec = importlib.util.spec_from_file_location("_look", str(Path(driver).resolve() if driver else folder / "tests" / "_look.py"))
     drv = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(drv)
-    result = {"when": time.strftime("%Y-%m-%d %H:%M"), "folder": str(folder), "audit": audit_version(), "screens": [], "findings": [],
-              "not_reached": []}
-    for w, h in drv.SIZES:
-        size = f"{w}x{h}"
-        try:
-            ctx = drv.start(w, h)
-        except Exception as e:
-            result["not_reached"].append({"size": size, "screen": "(start)", "why": str(e)[:300]})
-            log(f"  {size}: the app did not start: {str(e)[:200]}")
-            continue
-        try:
-            for name, go in drv.SCREENS:
-                try:
-                    ok = go(ctx)
-                    if ok is False:
-                        raise RuntimeError("the driver could not reach this screen")
-                    time.sleep(0.4)
-                    data = json.loads(ctx.br.js(AUDIT_JS) or "{}")
-                    png = out / size / f"{slug(name)}.png"
-                    png.parent.mkdir(parents=True, exist_ok=True)
-                    shot = ctx.br.cmd("Page.captureScreenshot", format="png")
-                    png.write_bytes(base64.b64decode(shot["data"]))
-                    found = [{**f, "size": size, "screen": name} for f in data.get("findings") or []]
-                    seen = {"size": size, "screen": name, "png": str(png.relative_to(out)).replace("\\", "/"), "findings": len(found)}
-                    if vision:
-                        seen["vision"] = ask_vision(vision, png, w, h)
-                    result["screens"].append(seen)
-                    result["findings"] += found
-                    log(f"  {size} {name}: {len(found)} finding(s)")
-                except Exception as e:
-                    result["not_reached"].append({"size": size, "screen": name, "why": str(e)[:300]})
-                    log(f"  {size} {name}: not reached ({str(e)[:120]})")
-        finally:
+    result = None
+    walks = []
+    for n in range(passes):                                  # the same walk, more than once: a page is not a still picture
+        result = {"when": time.strftime("%Y-%m-%d %H:%M"), "folder": str(folder), "audit": audit_version(), "screens": [],
+                  "findings": [], "not_reached": []}
+        if passes > 1:
+            log(f" walk {n + 1} of {passes}")
+        for w, h in drv.SIZES:
+            size = f"{w}x{h}"
             try:
-                drv.stop(ctx)
-            except Exception:
-                pass
+                ctx = drv.start(w, h)
+            except Exception as e:
+                result["not_reached"].append({"size": size, "screen": "(start)", "why": str(e)[:300]})
+                log(f"  {size}: the app did not start: {str(e)[:200]}")
+                continue
+            try:
+                for name, go in drv.SCREENS:
+                    try:
+                        ok = go(ctx)
+                        if ok is False:
+                            raise RuntimeError("the driver could not reach this screen")
+                        time.sleep(0.4)
+                        data = json.loads(ctx.br.js(AUDIT_JS) or "{}")
+                        png = out / size / f"{slug(name)}.png"
+                        png.parent.mkdir(parents=True, exist_ok=True)
+                        shot = ctx.br.cmd("Page.captureScreenshot", format="png")
+                        png.write_bytes(base64.b64decode(shot["data"]))
+                        found = [{**f, "size": size, "screen": name} for f in data.get("findings") or []]
+                        seen = {"size": size, "screen": name, "png": str(png.relative_to(out)).replace("\\", "/"), "findings": len(found)}
+                        if vision:
+                            seen["vision"] = ask_vision(vision, png, w, h)
+                        result["screens"].append(seen)
+                        result["findings"] += found
+                        log(f"  {size} {name}: {len(found)} finding(s)")
+                    except Exception as e:
+                        result["not_reached"].append({"size": size, "screen": name, "why": str(e)[:300]})
+                        log(f"  {size} {name}: not reached ({str(e)[:120]})")
+            finally:
+                try:
+                    drv.stop(ctx)
+                except Exception:
+                    pass
+        walks.append(result)
+    # A finding counts when EVERY walk shows it. One that comes and goes (a guide that scrolled a few pixels further,
+    # a picture still loading) is kept apart as 'unstable': it never counts as new, and it still counts as 'was there
+    # before' when this run is the before of a comparison.
+    sets = [{key(f) for f in w_["findings"]} for w_ in walks]
+    always = set.intersection(*sets)
+    every = {}
+    for w_ in walks:
+        for f_ in w_["findings"]:
+            every.setdefault(key(f_), f_)
+    result["findings"] = [f_ for k_, f_ in every.items() if k_ in always]
+    result["unstable"] = [f_ for k_, f_ in every.items() if k_ not in always]
+    result["passes"] = passes
+    reached = [{(x["size"], x["screen"]) for x in w_["not_reached"]} for w_ in walks]
+    result["not_reached"] = [x for x in every_not(walks) if any((x["size"], x["screen"]) in r_ for r_ in reached)]
+    if result["unstable"]:
+        log(f" {len(result['unstable'])} finding(s) did not show on every walk and are not counted")
     (out / "look.json").write_text(json.dumps(result, indent=1, ensure_ascii=False), encoding="utf-8")
     return result
 
@@ -231,7 +267,7 @@ def ask_vision(model, png, w, h, url="http://127.0.0.1:11434"):
 
 def compare(before, after, accept=()):
     """-> (new findings, gone findings, accepted findings). `before` may be None (then everything is new)."""
-    old = {key(f) for f in (before or {}).get("findings") or []}
+    old = {key(f) for f in ((before or {}).get("findings") or []) + ((before or {}).get("unstable") or [])}
     now = {key(f): f for f in after.get("findings") or []}
     new, okd = [], []
     for k, f in now.items():

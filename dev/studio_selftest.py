@@ -60,6 +60,18 @@ try:
         print("   new:", sorted({(f["kind"], f["where"][:40]) for f in new}))
         os.rmdir(app / "node_modules")
 
+        section("look: the same app looked at twice gives nothing new (a false alarm on blind1, 2026-11-14)")
+        same = []
+        for n in ("same_a", "same_b"):
+            subprocess.run([PY2, str(DEV / "studio_look.py"), "run", str(WS2), str(tmp / n), "--driver", str(driver)],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", env=P.ENV)
+            same.append(json.loads((tmp / n / "look.json").read_text(encoding="utf-8")))
+        check("every look walks the app more than once", all(s.get("passes", 1) >= 2 for s in same), [s.get("passes") for s in same])
+        for a_, b_, label in ((0, 1, "first as before, second as after"), (1, 0, "second as before, first as after")):
+            new, gone, _ = LK.compare(same[a_], same[b_])
+            check(f"an unchanged app, {label}: 0 new findings", not new, [LK.key(f) for f in new][:4])
+        print("   findings that did not show on every walk (not counted):", [len(s.get("unstable") or []) for s in same])
+
     if "suspect" in which:
         section("suspect tests")
         ws = tmp / "sus"
