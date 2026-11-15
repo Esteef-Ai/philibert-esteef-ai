@@ -1,6 +1,7 @@
 # Philibert Code Studio: the roadmap (read this first)
 
-Last updated 2026-11-12. This file is the plan of record. Any agent or person picking the work up starts
+Last updated 2026-11-14. **Newcomers: read `STUDIO_HANDOFF.md` first** (the state of everything on 2026-11-14,
+what is and is not proven, and the ordered next steps). This file is the plan of record. Any agent or person picking the work up starts
 here, then reads the HANDOFF.md of the workspace in play.
 
 ## The goal
