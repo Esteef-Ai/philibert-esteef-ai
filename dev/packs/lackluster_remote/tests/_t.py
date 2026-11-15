@@ -139,6 +139,7 @@ class FakePlex:
                 self.send(404, {"error": "not found"})
 
         self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", self.port), H)
+        self.httpd.handle_error = lambda *a: None       # a browser hanging up mid-request is not news: keep stderr clean
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
 
     def guide(self):

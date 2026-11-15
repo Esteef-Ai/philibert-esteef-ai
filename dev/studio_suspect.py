@@ -88,7 +88,7 @@ def run_test(py, folder, name, timeout=600):
         out = ((r.stdout or "") + (r.stderr or "")).strip()
     except subprocess.TimeoutExpired:
         return False, f"timed out after {timeout} s"
-    m = re.search(r"(\d+) passed, (\d+) failed\s*$", out)
+    m = ([None] + list(re.finditer(r"(?m)^\s*(\d+) passed, (\d+) failed\s*$", out)))[-1]
     ok = bool(m) and r.returncode == 0 and int(m.group(2)) == 0 and int(m.group(1)) > 0
     fails = [ln.strip() for ln in out.splitlines() if ln.strip().startswith("FAIL")]
     return ok, "\n".join(fails[:5]) or out[-300:]

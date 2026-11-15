@@ -210,6 +210,9 @@ def stage(pack, ws):
           f"  \"{sys.executable}\" \"{Path(P.__file__).resolve()}\" build \"{ws}\"\n  {me} grade \"{ws}\"")
 
 
+CALL_LIMIT = 3 * 3600      # seconds one model call may take
+
+
 def call(ws, stage_name, prompt, model, think, dry):
     sd = Path(ws) / ".studio"
     (sd / f"{stage_name}.prompt.txt").write_text(prompt, encoding="utf-8")
@@ -218,11 +221,25 @@ def call(ws, stage_name, prompt, model, think, dry):
         return None
     import nd_studio as S
     print(f"[{time.strftime('%H:%M:%S')}] {stage_name}: asking {model} ({len(prompt)} chars) ...", flush=True)
-    text, secs, info = S.call_model(model, prompt, think=think)
+    t0 = time.time()
+    try:                                                      # blind2 lost two test files to the default 1-hour limit
+        text, secs, info = S.call_model(model, prompt, think=think, timeout=CALL_LIMIT)
+    except Exception as e:
+        why = f"{type(e).__name__}: {e}"[:300]
+        mins = round((time.time() - t0) / 60)
+        print(f"  {stage_name}: NO ANSWER after {mins} min ({why})", flush=True)
+        with open(sd / "log.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps({"stage": stage_name, "model": model, "failed": why, "minutes": mins, "at": time.strftime("%Y-%m-%d %H:%M:%S")}) + "\n")
+        P.journal(ws, "studio_blind", f"{stage_name}: no answer from {model} after {mins} min ({why})")
+        return None
     (sd / f"{stage_name}.reply.txt").write_text(text, encoding="utf-8")
     with open(sd / "log.jsonl", "a", encoding="utf-8") as f:
         f.write(json.dumps({"stage": stage_name, "model": model, "seconds": secs, **info, "at": time.strftime("%Y-%m-%d %H:%M:%S")}) + "\n")
-    print(f"  {secs} s, {info.get('eval_count')} tokens out", flush=True)
+    rate = (info.get("eval_count") or 0) / secs if secs else 0
+    print(f"  {secs} s, {info.get('eval_count')} tokens out, {rate:.1f} tokens a second", flush=True)
+    if 0 < rate < 15:
+        print(f"  SLOW: this model gives about 50 tokens a second on a free machine. At {rate:.1f} something else is using the\n"
+              "  graphics card or the model does not fit on it (check `ollama ps`: it should say 100% GPU).", flush=True)
     return text
 
 
@@ -279,6 +296,9 @@ def tests(ws, model, think, dry, only=None):
     for t in pl["tasks"]:
         if only and t["id"] != only:
             continue
+        if not only and not dry and (ws / t["tests"]).is_file():    # run again after a failure: keep what is there
+            print(f"  {t['tests']}: already written, kept (to write it again: tests <workspace> {t['id']})")
+            continue
         task = (f"{t['id']} {t['title']}\nFiles it may change: {', '.join(t.get('files') or [])}\nAfter: {', '.join(t.get('depends_on') or []) or 'nothing'}\n"
                 f"Brief:\n{t.get('brief')}")
         prompt = TESTS.format(test=t["tests"], spec=(ws / "SPEC.md").read_text(encoding="utf-8"), summary=summary, task=task,
@@ -296,6 +316,8 @@ def tests(ws, model, think, dry, only=None):
         (ws / t["tests"]).write_text(code, encoding="utf-8")
         wrote += 1
         print(f"  {t['tests']}: {code.count('check(')} check calls")
+        P.git(ws, "add", "-A")                                 # one commit per file: a later failure loses nothing
+        P.git(ws, "commit", "-q", "-m", f"blind trial: {t['tests']}, by {model}")
     if wrote:
         P.journal(ws, "studio_blind", f"{wrote} test file(s) written by {model}")
         P.status(ws)
@@ -380,7 +402,7 @@ def grade(ws):
         for t in P.tests_of(d):
             r = subprocess.run([py, t], cwd=str(built), capture_output=True, text=True, encoding="utf-8", errors="replace", env=P.ENV, timeout=900)
             out = (r.stdout or "") + (r.stderr or "")
-            mm = re.search(r"(\d+) passed, (\d+) failed\s*$", out.strip())
+            mm = ([None] + list(re.finditer(r"(?m)^\s*(\d+) passed, (\d+) failed\s*$", out)))[-1]
             p, f = (int(mm.group(1)), int(mm.group(2))) if mm else (0, -1)
             fails = [ln.strip() for ln in out.splitlines() if ln.strip().startswith("FAIL")]
             miss = [ln for ln in fails if re.search(r"exists|is not there|not found|loads it", ln)]

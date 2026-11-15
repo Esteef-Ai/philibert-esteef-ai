@@ -31,3 +31,17 @@ also what the Fire TV app (the next step) needs, since that app is this page in 
 
 ## How it is built
 One new file, `public/tvnav.js`, and one new line in `public/index.html` to load it. Nothing else changes.
+
+## Names that are fixed
+Whoever plans, builds or tests this change uses these names exactly. Everything not listed is the builder's choice.
+- The new file is `public/tvnav.js`. The app serves it at `/tvnav.js`.
+- `public/index.html` loads it with exactly one line, `<script src="/tvnav.js"></script>`, as the LAST script: the
+  file ends `<script src="/tvnav.js"></script>`, then `</body>`, then `</html>`.
+- `window.tvNav` is an object. `window.tvNav.isOn()` answers true while remote mode is on, false otherwise.
+- Remote mode: off on a computer or phone until the first arrow key; on from the start in a TV browser (the page's
+  own `isTvBrowser()` says which). While it is on, `<body>` has the class `tv-nav`.
+- `window.tvBack()` is a function. It closes the top-most open thing and answers true; with nothing open it answers
+  false.
+- Ids, classes and functions the page already has (`#guide-rows`, `.guide-row`, `.prog-cell`, `#detail-drawer`,
+  `#player-modal`, `#options-dropdown`, `watchCurrent()`, `closePlayer()` and the rest) keep their names: read them
+  from `public/index.html`, never guess one.

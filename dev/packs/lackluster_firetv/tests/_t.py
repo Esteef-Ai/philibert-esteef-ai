@@ -200,6 +200,7 @@ class Page:
                 pass
 
         self.srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+        self.srv.handle_error = lambda *a: None       # a browser hanging up mid-request is not news: keep stderr clean
         self.port = self.srv.server_address[1]
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
 

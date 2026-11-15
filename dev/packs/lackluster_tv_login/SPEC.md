@@ -31,3 +31,12 @@ the window does not open, or opens where the remote cannot reach it. So the app 
 
 ## What does not change
 Everything else: the guide, the player, chat, casting, favourites, the admin pages, the brand.
+
+## Names that are fixed
+Whoever plans, builds or tests this change uses these ids exactly (all inside the sign-in screen, `#gate`).
+- `#btn-signin`: the button "Sign in with Plex" (same-tab sign-in). It has the focus on a computer.
+- `#btn-code`: the second button, which shows a code instead.
+- `#link-panel`: the code panel, hidden until a code is shown. Inside it:
+  `#link-url` (the address to visit), `#link-code` (the code, in large type), `#link-qr` (an `<img>`: the QR picture
+  from Plex) and `#btn-back` (the Back button, which has the focus while the code shows).
+- `#gate-status`: the line of text that tells the person what is happening or what went wrong.

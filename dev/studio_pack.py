@@ -140,7 +140,7 @@ def run_test(py, ws, name, timeout=900):
         out = ((r.stdout or "") + (r.stderr or "")).strip()
     except subprocess.TimeoutExpired:
         return 0, -1, False, f"timed out after {timeout} s"
-    mm = re.search(r"(\d+) passed, (\d+) failed\s*$", out)
+    mm = ([None] + list(re.finditer(r"(?m)^\s*(\d+) passed, (\d+) failed\s*$", out)))[-1]   # the last such LINE: stderr noise may follow it
     if not mm:
         return 0, -1, False, out[-500:]
     p, f = int(mm.group(1)), int(mm.group(2))
@@ -283,12 +283,61 @@ def verify(pack, full=False, n_mutants=30):
                 bad += mutation(d, m, py, ref, fast, n_mutants, scratch)
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
+    gaps = contract_gaps(d, m)
+    print("\n4. Names the tests need (a global, an id, a served file) that the app does not have yet: are they in SPEC.md?")
+    if not gaps:
+        print("   yes: every such name is given by the spec")
+    for name, where in sorted(gaps.items()):
+        print(f"   NOT IN THE SPEC: {name}   (needed by {', '.join(sorted(set(where)))})")
+        bad.append(f"the spec never gives the name {name}, which {where[0]} needs: add it to SPEC.md under 'Names that are fixed'")
     print()
     if bad:
         print("NOT SOUND:\n" + "\n".join("  - " + b for b in bad))
         return 1
     print("SOUND: the tests fail on an empty project and pass on the reference build (see the catch rate above).")
     return 0
+
+
+NAME_RE = re.compile(r"""window\.[A-Za-z]\w+|\#[a-z][\w-]{3,}|data-[a-z][a-z-]+|/[\w-]+\.(?:js|css|html)\b""")
+TEXT_EXT = {".js", ".mjs", ".html", ".css", ".py", ".json", ".java", ".xml", ".ts", ".md", ".txt"}
+
+
+def contract_gaps(d, m):
+    """Names the pack's tests need that only the tests know: a global (window.x), an element id (#x), a data-
+    attribute or a served file (/x.js) that a non-guard test uses, that the app before the change does not have, and
+    that SPEC.md never gives. Whoever plans from the spec alone (a local planner, a person) cannot pass such a test:
+    two blind trials failed on exactly this (2026-11-14). -> {name: [test files]}"""
+    d = Path(d)
+    spec = (d / "SPEC.md").read_text(encoding="utf-8") if (d / "SPEC.md").is_file() else ""
+    guards = set(m.get("guard_tests") or [])
+    helpers = "".join(p.read_text(encoding="utf-8", errors="replace") for p in (d / "tests").glob("_*.py"))
+    old = ""
+    base = Path(fill(m["base"], m)) if m.get("base") else None
+    if base and base.is_dir():
+        skip = set(m.get("base_links") or []) | {"node_modules", ".git", "vendor", "tests"}
+        for p in base.rglob("*"):
+            if p.is_file() and p.suffix.lower() in TEXT_EXT and not (set(p.relative_to(base).parts) & skip) and p.stat().st_size < 2_000_000:
+                old += p.read_text(encoding="utf-8", errors="replace")
+    gaps = {}
+    for tname in tests_of(d):
+        if tname in guards or not (d / tname).is_file():
+            continue
+        src = (d / tname).read_text(encoding="utf-8", errors="replace")
+        for name in sorted(set(NAME_RE.findall(src))):
+            bare = name.split(".", 1)[1] if name.startswith("window.") else name.lstrip("#/")
+            if bare.startswith("__") or name in old or bare in old or name in helpers:
+                continue                                       # the test's own probe, or already in the app, or a helper's
+            if re.search(r"window\." + re.escape(bare) + r"\s*=[^=]", src):
+                continue                                       # the test itself sets it
+            if name.startswith("#") and re.fullmatch(r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8}|rgb|rrggbb)", name):
+                continue                                       # a colour, not an element id
+            if name.startswith("data-"):
+                camel = re.sub(r"-(\w)", lambda g: g.group(1).upper(), name[5:])
+                if re.search(r"dataset\." + camel + r"\s*=[^=]", src) or f"setAttribute('{name}'" in src or f'setAttribute("{name}"' in src:
+                    continue                                   # the test tags elements with it itself
+            if bare not in spec:
+                gaps.setdefault(name, []).append(tname)
+    return gaps
 
 
 def mutation(d, m, py, ref, fast, n, scratch):
