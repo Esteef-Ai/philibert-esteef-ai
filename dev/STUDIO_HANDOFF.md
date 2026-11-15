@@ -330,3 +330,30 @@ Compare with blind3 (0 of 3, best 27 of 42 on T01) and with the cloud plan (3 of
 - If blind4 passes all three: run it twice more before believing it, then try the same on `lackluster_tv_login` and
   `lackluster_firetv`.
 
+
+## 13. blind4 (night of 2026-11-15): the first task a local planner planned was built
+
+`C:\PCodeTest\blind4`, plan-only, with the `briefs` step. Planner `q36c-nd64k`, builder `q36c-nd128k`.
+- Plan 11.6 min; briefs 5-7 min each, growing 1,914 -> 7,819, 1,614 -> 9,643 and 1,781 -> 9,304 characters.
+- **T01 PASSED on attempt 2** (42 of 42, guards held). First task ever planned by the local model and built.
+  Blind3, the same setup without the briefs step, stuck on T01 after six attempts (best 27 of 42).
+- T02 stuck after six attempts; five ran out of 40 minutes, two of them because the builder also edited
+  `public/index.html` (out of scope). Best: 29 of 31. T03 skipped. Grade: new work 71 of 127.
+- The look step found NEW "covered" findings at 1280x720 (programmes under `#guide-ruler` in the browse column):
+  seen on both walks, so likely real, from T01's code scrolling the guide. Not checked against the pictures yet.
+- n=1. The briefs step is the only change from blind3, so it is the likely cause of T01 passing, not a proven one.
+
+**Built in answer: salvage (`dev/studio_salvage.py`).** The foreman threw away T02's 29-of-31 attempt. Salvage
+rebuilds what an attempt left in its allowed files from the builder's transcript (`.foreman/opencode/<task>_a<n>.jsonl`,
+every write and edit in order; indentation slips forgiven as OpenCode's edit forgives them; anything that will not
+replay exactly is dropped, never guessed), runs the task's test and every must-pass test on a copy, and commits the
+best attempt as the task's new start when it gains checks and breaks at most 2 older ones (then only if it gains 5 or
+more; the foreman's broke gate makes the next attempt mend them). `build` now does this before every fresh round.
+No foreman change needed: `retry` takes the task's start from HEAD. Self-test: salvage 4 of 4. On blind4 it rebuilds
+T02_a3 and reproduces the foreman's number exactly (29 passed, 2 failed). a1 and a2 do not replay.
+One older check (`arrows alone reach Play Now`) failed once and passed once with a3's code: flaky with that code,
+steady (42 of 42 twice) without it.
+
+**Next for the owner:** run blind4's build again with two rounds; T02 then continues from 29 of 31:
+    "C:\Heretic\venv\Scripts\python.exe" "G:\!Ai\Philibert\dev\studio_pack.py" build "C:\PCodeTest\blind4" --rounds 2
+    "C:\Heretic\venv\Scripts\python.exe" "G:\!Ai\Philibert\dev\studio_blind.py" grade "C:\PCodeTest\blind4"

@@ -35,7 +35,7 @@ def section(s):
     print(f"\n== {s} ==", flush=True)
 
 
-which = set(sys.argv[1:]) or {"look", "suspect", "quick", "blind", "bench"}
+which = set(sys.argv[1:]) or {"look", "suspect", "quick", "blind", "bench", "salvage"}
 tmp = Path(tempfile.mkdtemp(prefix="studio_selftest_"))
 try:
     if "look" in which:
@@ -207,6 +207,32 @@ try:
         r = subprocess.run([sys.executable, str(DEV / "studio_blind.py"), "check", str(b)], capture_output=True, text=True, encoding="utf-8", errors="replace")
         check("... and refuses one that leaves a test file without a task", r.returncode != 0 and "NOT READY" in r.stdout, (r.stdout + r.stderr)[-300:])
         P.unlink_base(m, b)
+
+    if "salvage" in which:
+        section("salvage: a failed attempt's files are rebuilt from the builder's transcript")
+        import studio_salvage as SV
+        sw = tmp / "salv"
+        (sw / "src").mkdir(parents=True)
+        (sw / "src" / "a.js").write_text("function one(){\n  return 1;\n}\n", encoding="utf-8")
+        subprocess.run(["git", "init", "-q", str(sw)], capture_output=True)
+        subprocess.run(["git", "-C", str(sw), "add", "-A"], capture_output=True)
+        subprocess.run(["git", "-C", str(sw), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "start"], capture_output=True)
+        sha = subprocess.run(["git", "-C", str(sw), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+        def ev(tool, **inp):
+            return json.dumps({"type": "tool_use", "part": {"tool": tool, "state": {"status": "completed", "input": inp}}})
+        p = str(sw / "src" / "a.js")
+        lines = [ev("edit", filePath=p, oldString="  return 1;", newString="  return 2;"),
+                 ev("edit", filePath=p, oldString="function one(){\nreturn 2;", newString="function two(){\n  return 2;"),  # indentation forgiven
+                 ev("edit", filePath=str(sw / "src" / "b.js"), oldString="", newString="not allowed"),
+                 json.dumps({"type": "tool_use", "part": {"tool": "edit", "state": {"status": "error", "input": {"filePath": p, "oldString": "x", "newString": "y"}}}})]
+        (sw / "t.jsonl").write_text("\n".join(lines), encoding="utf-8")
+        got = SV.replay(sw, sw / "t.jsonl", {"src/a.js"}, sha)
+        check("edits replay in order, an indentation slip is forgiven, failed edits are ignored",
+              got == {"src/a.js": "function two(){\n  return 2;\n}\n"}, got)
+        check("a file the task may not change is left out", got is not None and "src/b.js" not in got)
+        (sw / "u.jsonl").write_text(ev("edit", filePath=p, oldString="nowhere in the file", newString="z"), encoding="utf-8")
+        check("an edit that does not replay gives nothing rather than a guess", SV.replay(sw, sw / "u.jsonl", {"src/a.js"}, sha) is None)
+        check("two equal runs of lines: no guess", SV.trimmed_span("a\nb\na\nb", "a\nb") is None)
 
     if "bench" in which:
         section("bench: the two Lackluster builds that exist, adopted")

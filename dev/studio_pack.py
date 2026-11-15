@@ -872,6 +872,11 @@ def build(ws, max_hours=6.0, rounds=1):
             Q.log(f"round {r + 1}: fresh attempts for {stuck}")
             journal(ws, "studio_pack", f"fresh attempts for stuck tasks {', '.join(stuck)}")
             for tid in stuck:
+                try:                                           # the best failed attempt becomes the start (studio_salvage.py)
+                    import studio_salvage
+                    studio_salvage.salvage(ws, tid, apply=True, log=Q.log)
+                except Exception as e:
+                    Q.log(f"salvage {tid} failed, the fresh attempts start from the last pass: {e}")
                 Q.sh([sys.executable, FOREMAN, "retry", ws / "plan.json", tid], Path(FOREMAN).parent, timeout=120, name=f"foreman retry {tid}")
             Q.foreman(run, "--max-hours", str(max_hours / 2), timeout=int(max_hours * 1800) + 900)
     except Q.Stop:
