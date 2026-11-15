@@ -19,6 +19,13 @@ local model the planner's job too, and grades the result with tests it has never
     python dev/studio_blind.py grade <workspace>
 --dry on plan/tests writes the prompt to .studio/ and calls no model.
 
+THE PLAN-ONLY TRIAL (stage A of the handover, added 2026-11-14 after two full trials died on the local tests):
+    python dev/studio_blind.py stage <pack> <workspace> --plan-only
+The workspace also gets the pack's own tests. The local model writes only the plan: one task per test file, told
+each file's name and the plain-words labels of its checks, never its code. There is no `tests` step. The build is
+judged by the same tests a cloud-planned build is judged by, so `grade` (and the replay bench) compare like with like:
+what changes is who wrote the briefs.
+
 Read the grade with its limits: the hidden tests check ids, names and strings the cloud plan chose. The spec has to
 carry every such name, or a correct build fails the grade for a name it could not know. `grade` reports that as
 "contract misses" where it can tell (a check that fails with "is not there" or "exists").
@@ -173,7 +180,7 @@ def helpers_view(ws, full=False):
     return "\n\n".join(out) or "(none: write plain scripts that print PASS/FAIL lines and 'N passed, M failed')"
 
 
-def stage(pack, ws):
+def stage(pack, ws, plan_only=False):
     d, m = P.load(pack)
     ws = Path(ws)
     if ws.exists():
@@ -187,11 +194,15 @@ def stage(pack, ws):
         gets = [f"tests/{f.name}" for f in sorted((d / "tests").glob("_*.py")) if f.name != "_look.py"]
     for rel in gets:
         shutil.copy(d / rel, ws / rel)
+    if plan_only:                                             # the pack's tests judge the build; the planner sees their labels only
+        for f in sorted((d / "tests").glob("*.py")):
+            if f.name != "_look.py":
+                shutil.copy(f, ws / "tests" / f.name)
     for n in (".gitignore", ".gitattributes"):
         if (d / n).is_file():
             shutil.copy(d / n, ws / n)
     (ws / ".studio").mkdir()
-    (ws / ".studio" / "pack.json").write_text(json.dumps({**m, "pack_dir": str(d), "blind": True, "planner_got": gets,
+    (ws / ".studio" / "pack.json").write_text(json.dumps({**m, "pack_dir": str(d), "blind": True, "plan_only": bool(plan_only), "planner_got": gets,
                                                          "laid_out": time.strftime("%Y-%m-%d %H:%M")}, indent=1), encoding="utf-8")
     (ws / "opencode.json").write_text(json.dumps(Q.OPENCODE_PROJECT, indent=1), encoding="utf-8")
     gi = ws / ".gitignore"
@@ -199,14 +210,17 @@ def stage(pack, ws):
     gi.write_text(have.rstrip() + "".join(f"\n{x}" for x in (".venv/", ".foreman/", "__pycache__/", "*.pyc", ".nd_backups/") if x not in have) + "\n",
                   encoding="utf-8")
     P.git(ws, "init", "-q")
-    P.journal(ws, "studio_blind", f"blind trial staged from pack {m['name']}: the app, the spec and {len(gets)} helper file(s); no plan, no tests")
+    P.journal(ws, "studio_blind", f"blind trial staged from pack {m['name']}: the app, the spec and {len(gets)} helper file(s); "
+              + ("no plan; the pack's own tests (plan-only trial)" if plan_only else "no plan, no tests"))
     P.git(ws, "add", "-A")
     P.git(ws, "commit", "-q", "-m", f"{m['title']}: blind planner trial, nothing planned yet")
     subprocess.run([P.BASE_PY, "-m", "venv", ".venv"], cwd=str(ws), check=True)
     for pkg in (m.get("python") or {}).get("pip") or []:
         subprocess.run([str(ws / ".venv" / "Scripts" / "python.exe"), "-m", "pip", "install", "-q", pkg], cwd=str(ws), capture_output=True)
     me = f'"{sys.executable}" "{Path(__file__).resolve()}"'
-    print(f"staged: {ws}\nnext (you run these; they call the local model):\n  {me} plan \"{ws}\"\n  {me} tests \"{ws}\"\n  {me} check \"{ws}\"\n"
+    print(f"staged: {ws}" + (" (plan-only: the pack's tests judge the build)" if plan_only else "")
+          + f"\nnext (you run these; they call the local model):\n  {me} plan \"{ws}\"\n"
+          + ("" if plan_only else f"  {me} tests \"{ws}\"\n") + f"  {me} check \"{ws}\"\n"
           f"  \"{sys.executable}\" \"{Path(P.__file__).resolve()}\" build \"{ws}\"\n  {me} grade \"{ws}\"")
 
 
@@ -248,12 +262,61 @@ def kind_rules(m):
     return "\n".join(f"- {r}" for r in (src.get("kinds") or {}).get(m.get("kind"), []))
 
 
+def own(task):
+    """A task's own test file (the first; the rest of a list are older tests it must keep passing)."""
+    ts = task.get("tests")
+    return (ts[0] if ts else None) if isinstance(ts, list) else ts
+
+
+def acceptance(ws, m):
+    """Plan-only trial: -> (the new test files in the pack's order, the guard files, the text the planner is shown:
+    each file's name and the labels of its checks, in plain words; never the code)."""
+    d = Path(m["pack_dir"])
+    guards = [g for g in m.get("guard_tests") or []]
+    files = [x for x in P.tests_of(d) if x not in guards]
+    out = []
+    for n, name in enumerate(files, 1):
+        src = (Path(ws) / name).read_text(encoding="utf-8", errors="replace")
+        labels = []
+        for lab in re.findall(r"""check\(\s*f?(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')""", src):
+            lab = (lab[0] or lab[1]).replace('\\"', '"').replace("\\'", "'")
+            if lab not in labels:
+                labels.append(lab)
+        out.append(f"TEST FILE {n}: {name}   ({len(labels)} checks)\n" + "\n".join("   - " + x for x in labels))
+    text = "\n\n".join(out)
+    if guards:
+        text += ("\n\nOLDER TESTS THAT ALREADY PASS AND MUST KEEP PASSING after every task (do not plan a task for them): "
+                 + ", ".join(guards))
+    return files, guards, text
+
+
+PLAN_ONLY = """
+THE TESTS ALREADY EXIST. You do not write tests and you do not see their code. Each task of your plan is judged by ONE
+of the test files below, as it is. For each file you are given the label of every check in it, in the order they run.
+A label is what must be true for the check to pass; together they are the exact acceptance list of that task.
+
+{acceptance}
+
+Extra rules because the tests exist:
+- EXACTLY {n} tasks, one per test file, in the order given: T01 is judged by test file 1, T02 by test file 2, and so \
+on. Each task's "tests" is that file's name, spelled exactly.
+- A task's brief must make EVERY label of its file come true, and must not need anything a LATER file checks. Read \
+the labels as the specification of the task: where a label gives an exact name, text or number, the brief repeats it.
+- After each task the older tests and every earlier test file still pass.
+"""
+
+
 def plan(ws, model, think, dry):
     ws = Path(ws)
     m = json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8"))
     tree, source = source_view(ws)
+    accept_files = None
+    if m.get("plan_only"):
+        accept_files, _, acc = acceptance(ws, m)
     prompt = PLAN.format(kind=m.get("kind"), kind_rules=kind_rules(m), tree=tree, source=source,
                          spec=(ws / "SPEC.md").read_text(encoding="utf-8"), helpers=helpers_view(ws))
+    if accept_files is not None:
+        prompt += PLAN_ONLY.format(acceptance=acc, n=len(accept_files))
     text = call(ws, "blind_plan", prompt, model, think, dry)
     if text is None:
         return
@@ -269,6 +332,17 @@ def plan(ws, model, think, dry):
         for t in pl["tasks"]:
             t["depends_on"] = [d for d in t.get("depends_on") or [] if d not in empty]
         pl["dropped_tasks"] = empty
+    if accept_files is not None:                              # one task per test file, in order: by name, else by position
+        tasks = pl.get("tasks") or []
+        named = [str(t.get("tests") if not isinstance(t.get("tests"), list) else (t["tests"] or [""])[0]).replace("\\", "/") for t in tasks]
+        if sorted(named) != sorted(accept_files):
+            if len(tasks) == len(accept_files):
+                print("  the plan's test names did not match the pack's files: set by position")
+                for t, name in zip(tasks, accept_files):
+                    t["tests"] = name
+            else:
+                pl["plan_only_problem"] = f"the plan has {len(tasks)} task(s) for {len(accept_files)} test file(s)"
+                print(f"  NOT USABLE: {pl['plan_only_problem']} (run `plan` again)")
     for t in pl.get("tasks") or []:
         if isinstance(t.get("tests"), list):
             t["tests"] = t["tests"][0] if t["tests"] else None
@@ -276,12 +350,18 @@ def plan(ws, model, think, dry):
         t.setdefault("depends_on", [])
         t["context"] = [t["tests"]]
         t["done_when"] = [f"{t['tests']} prints 0 failed"]
+    if accept_files is not None and pl.get("tasks") and not pl.get("plan_only_problem"):
+        guards = [g for g in m.get("guard_tests") or [] if (ws / g).is_file()]
+        if guards:
+            first = pl["tasks"][0]
+            first["tests"] = [first["tests"], *guards]
+            first["done_when"] = [f"{x} prints 0 failed" for x in first["tests"]]
     pl.update({"workspace": ".", "model": "opencode/q36c-nd128k", "opencode_think": False, "alt_model": None,
                "defaults": {"attempts": 3, "minutes": 40}, "planned_by": model})
     (ws / "plan.json").write_text(json.dumps(pl, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     P.builder_rules(ws, m)
     for t in pl.get("tasks") or []:
-        print(f"  {t.get('id')} {t.get('title')}: {', '.join(t.get('files') or [])} -> {t.get('tests')} ({len(t.get('brief') or '')} chars)")
+        print(f"  {t.get('id')} {t.get('title')}: {', '.join(t.get('files') or [])} -> {own(t)} ({len(t.get('brief') or '')} chars)")
     P.journal(ws, "studio_blind", f"plan written by {model}: {len(pl.get('tasks') or [])} task(s)")
     P.git(ws, "add", "-A")
     P.git(ws, "commit", "-q", "-m", f"blind trial: the plan, by {model}")
@@ -289,6 +369,8 @@ def plan(ws, model, think, dry):
 
 def tests(ws, model, think, dry, only=None):
     ws = Path(ws)
+    if json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8")).get("plan_only"):
+        sys.exit("this is a plan-only trial: the pack's own tests judge the build, the local model writes none. Next: check, then build.")
     pl = json.loads((ws / "plan.json").read_text(encoding="utf-8"))
     _, source = source_view(ws, budget=30_000, whole=3_000)
     summary = "\n".join(f"  {t['id']} {t['title']} -> {t['tests']}" for t in pl["tasks"])
@@ -336,7 +418,7 @@ def check(ws):
         bad.append("the plan has no tasks")
     if len(set(ids)) != len(ids):
         bad.append("two tasks share an id")
-    names = [t.get("tests") for t in pl.get("tasks") or []]
+    names = [own(t) for t in pl.get("tasks") or []]
     if len(set(names)) != len(names):
         bad.append("two tasks share a test file")
     for t in pl.get("tasks") or []:
@@ -347,23 +429,32 @@ def check(ws):
             bad.append(f"{t['id']} may change no files")
         if len(t.get("brief") or "") < 300:
             bad.append(f"{t['id']}: the brief is {len(t.get('brief') or '')} characters; the programmer knows only what it says")
-        f = ws / str(t.get("tests"))
+        tn = own(t)
+        f = ws / str(tn)
         if not f.is_file():
-            bad.append(f"{t['id']}: {t.get('tests')} was not written")
+            bad.append(f"{t['id']}: {tn} was not written")
             continue
-        p, fl, ok, tail = P.run_test(py, ws, t["tests"], 300)
-        print(f"  {t['tests']:36} on the app as it is: {p} passed, {fl} failed")
+        p, fl, ok, tail = P.run_test(py, ws, tn, 300)
+        print(f"  {tn:36} on the app as it is: {p} passed, {fl} failed")
         if ok:
-            bad.append(f"{t['tests']} passes before anything is built: it checks nothing new")
+            bad.append(f"{tn} passes before anything is built: it checks nothing new")
         elif fl < 0:
-            bad.append(f"{t['tests']} crashes or prints no summary instead of failing cleanly: {tail[-200:]}")
+            bad.append(f"{tn} crashes or prints no summary instead of failing cleanly: {tail[-200:]}")
+    m = json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8"))
+    if m.get("plan_only"):
+        want, _, _ = acceptance(ws, m)
+        if pl.get("plan_only_problem"):
+            bad.append(pl["plan_only_problem"])
+        elif [own(t) for t in pl.get("tasks") or []] != want:
+            bad.append(f"plan-only trial: the tasks' tests must be {want}, in that order")
     spec = (ws / "SPEC.md").read_text(encoding="utf-8")
     briefs = " ".join(str(t.get("brief")) for t in pl.get("tasks") or [])
-    for name in sorted(set(re.findall(r"`([^`\n]{3,60})`", spec))):
-        if name not in briefs:
-            bad.append(f"the spec names `{name}` and no brief mentions it")
+    missing = [name for name in sorted(set(re.findall(r"`([^`\n]{3,60})`", spec))) if name not in briefs]
+    if missing:                                               # worth reading, not a reason to refuse the build
+        print(f"  note: {len(missing)} name(s) the spec gives appear in no brief: " + ", ".join("`" + x + "`" for x in missing[:12]))
     print(("NOT READY (do not build: the foreman will refuse this plan; run `plan` again or mend plan.json):\n" + "\n".join("  - " + b for b in bad)) if bad else "READY: the plan is well formed and every test fails cleanly on the app as it is.")
-    (ws / ".studio" / "blind_check.json").write_text(json.dumps({"when": time.strftime("%Y-%m-%d %H:%M"), "problems": bad}, indent=1), encoding="utf-8")
+    (ws / ".studio" / "blind_check.json").write_text(json.dumps({"when": time.strftime("%Y-%m-%d %H:%M"), "problems": bad,
+                                                                 "spec_names_in_no_brief": missing}, indent=1), encoding="utf-8")
     return 1 if bad else 0
 
 
@@ -377,7 +468,7 @@ def grade(ws):
     res = {"when": time.strftime("%Y-%m-%d %H:%M"), "pack": m["name"], "hidden": {}, "local_tests": {}}
     try:
         pl = json.loads((ws / "plan.json").read_text(encoding="utf-8")) if (ws / "plan.json").is_file() else {"tasks": []}
-        local = [t["tests"] for t in pl["tasks"] if (ws / str(t.get("tests"))).is_file()]
+        local = [own(t) for t in pl["tasks"] if own(t) and (ws / str(own(t))).is_file()]
         # 1. the pack's hidden tests on what was built
         built = scratch / "built"
         shutil.copytree(ws, built, ignore=shutil.ignore_patterns(".venv", ".foreman", ".git", "__pycache__", ".studio", "tests", *links))
@@ -420,7 +511,10 @@ def grade(ws):
         print(f"   SCORE: {tp} of {total} hidden checks pass ({res['score']['share']:.0%}); {misses} failing check(s) look like a name the spec "
               f"may not have carried (a file, id or function 'not there')")
         # 2. the local tests: sound? (pass on the pack's reference, fail on the old app)
-        if local and m.get("reference") and (d / m["reference"]).is_dir():
+        if m.get("plan_only"):
+            res["local_tests_sound"] = "none written (plan-only trial)"
+            print("\n2. Plan-only trial: the local model wrote no tests; the pack's own judged the build.")
+        elif local and m.get("reference") and (d / m["reference"]).is_dir():
             print("\n2. The local planner's own tests, judged like any test writer's:")
             ref, old = scratch / "ref", scratch / "old"
             P.lay_out(d, m, ref, reference=True)
@@ -461,13 +555,13 @@ def grade(ws):
 
 def main(a):
     model = opt(a, "--model", "q36c-nd64k")
-    dry, think = "--dry" in a, "--no-think" not in a
-    a = [x for x in a if x not in ("--dry", "--no-think")]
+    dry, think, plan_only = "--dry" in a, "--no-think" not in a, "--plan-only" in a
+    a = [x for x in a if x not in ("--dry", "--no-think", "--plan-only")]
     if len(a) < 2:
         sys.exit(__doc__)
     cmd = a[0]
     if cmd == "stage" and len(a) == 3:
-        stage(a[1], a[2])
+        stage(a[1], a[2], plan_only)
     elif cmd == "plan":
         plan(a[1], model, think, dry)
     elif cmd == "tests":

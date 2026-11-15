@@ -182,6 +182,32 @@ try:
         check("grading the pack's own reference gives every hidden check", sc.get("checks", 0) >= 200 and sc.get("checks_pass") == sc.get("checks"), sc)
         P.unlink_base(m, b)
 
+        section("blind planner trial, plan-only: the pack's tests judge, the planner sees labels and no code")
+        b = tmp / "blind_po"
+        r = subprocess.run([sys.executable, str(DEV / "studio_blind.py"), "stage", "lackluster_remote", str(b), "--plan-only"], capture_output=True,
+                           text=True, encoding="utf-8", errors="replace")
+        have = sorted(p.name for p in (b / "tests").glob("*.py")) if (b / "tests").is_dir() else []
+        check("stage --plan-only brings the pack's tests, and still no plan and no look driver",
+              "test_remote_basics.py" in have and "test_signin_api.py" in have and "_look.py" not in have and not (b / "plan.json").exists(), have)
+        subprocess.run([sys.executable, str(DEV / "studio_blind.py"), "plan", str(b), "--dry"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        prompt = (b / ".studio" / "blind_plan.prompt.txt").read_text(encoding="utf-8") if (b / ".studio" / "blind_plan.prompt.txt").is_file() else ""
+        check("the planner is told each test file and its checks in plain words",
+              "TEST FILE 1: tests/test_remote_basics.py" in prompt and "walking with the arrows never loses the highlight" in prompt
+              and "EXACTLY 3 tasks" in prompt)
+        leaked = [n for n in ("anchorX", "br.press(", "def active(", "DESCRIBE =") if n in prompt.split("THE TESTS ALREADY EXIST")[-1]]
+        check("... and none of their code", not leaked, leaked)
+        r = subprocess.run([sys.executable, str(DEV / "studio_blind.py"), "tests", str(b), "--dry"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        check("the tests step refuses: nothing is written by the model in this trial", r.returncode != 0 and "plan-only" in (r.stdout + r.stderr))
+        good = json.loads((d / "plan.json").read_text(encoding="utf-8"))          # the pack's own plan is a well-formed answer
+        (b / "plan.json").write_text(json.dumps(good), encoding="utf-8")
+        r = subprocess.run([sys.executable, str(DEV / "studio_blind.py"), "check", str(b)], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        check("check accepts a plan with one task per test file, in order", r.returncode == 0 and "READY" in r.stdout, (r.stdout + r.stderr)[-500:])
+        good["tasks"] = good["tasks"][:2]
+        (b / "plan.json").write_text(json.dumps(good), encoding="utf-8")
+        r = subprocess.run([sys.executable, str(DEV / "studio_blind.py"), "check", str(b)], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        check("... and refuses one that leaves a test file without a task", r.returncode != 0 and "NOT READY" in r.stdout, (r.stdout + r.stderr)[-300:])
+        P.unlink_base(m, b)
+
     if "bench" in which:
         section("bench: the two Lackluster builds that exist, adopted")
         name = "_selftest"

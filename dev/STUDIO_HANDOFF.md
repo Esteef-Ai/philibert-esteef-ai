@@ -122,9 +122,8 @@ Back), each naming `public/tvnav.js`, 19 minutes. Then:
 - The test for T01 took **58 minutes** and is again not sound by reading: it demands a global called `tvnav` and a
   function `tvnav.isTV()`, neither of which is in the spec (the pack's real names are `window.tvNav` and
   `window.tvBack`), and it never signs in before driving the page.
-- The tests for T02 and T03 **were never written**. A prompt file exists for T02 and no reply. I did not find the
-  cause. Look first at `call()` in `studio_blind.py` and `call_model` in `nd_studio.py` (a timeout or an exception
-  that ended the run), and ask the owner what the window printed.
+- The tests for T02 and T03 **were never written**. Cause found afterwards (section 11): one model call may take
+  an hour by default, T01's took 58 minutes, T02's ran over and the exception ended the whole run.
 - `check` therefore says NOT READY, correctly. **Do not build blind2 as it stands.**
 
 **What the two runs say (n=2, one model, one pack: a direction, not a ranking):**
@@ -136,6 +135,8 @@ Back), each naming `public/tvnav.js`, 19 minutes. Then:
    the hidden tests and in no document the planner sees. `grade` counts these as "contract misses".
 
 ## 8. What I would do next, in order, and why
+
+**Items 1, 2, 4 and stage A of item 5 are DONE: see section 11. Start at item 3, then the plan-only trial in section 11.**
 
 Each item says what "done" looks like. Items 1 to 3 are small and unblock the rest.
 
@@ -223,3 +224,62 @@ Each item says what "done" looks like. Items 1 to 3 are small and unblock the re
 | The Fire TV app | `C:\PCodeTest\lackluster_firetv\` |
 | The live web app | `N:\LacklusterPlus` (EsteefServer) |
 | Recent commits | eccce62 (the six tools), 9441620 (TV checks proven, app fix), bce6f8d and 3ee091a (blind trial fixes) |
+
+## 11. Progress after this file was first written (same day, evening)
+
+Done, each proven without a model, all committed locally:
+
+- **Item 1, the look step is stable.** Every app is now walked twice (`PASSES = 2` in `studio_look.py`). A finding
+  counts only when every walk shows it; one that comes and goes is kept apart as `unstable`, never counts as new,
+  and still counts as "was there before". Measured: the same app looked at 3 times gave 28 findings each time and 0
+  new between any two runs; the self-test now holds that as a check (look: 7 of 7). I could not make the original
+  false alarm happen again, so the cause is not known, only guarded against. A look takes twice as long (about 80 s
+  per app on Lackluster).
+- **Item 2, why blind2 lost two tests.** `call_model` allows 3600 s. T01's test took 3474 s; T02's ran over, and the
+  uncaught exception ended the run before T01 was even journalled. Now: 3 hours per call, a failed call is logged
+  and journalled and the next task goes on, each test file is committed as it is written, `tests` run again keeps
+  what exists.
+- **The local model was far too slow in both trials, and that is a finding of its own.** 3.6 and 6.6 tokens a
+  second, where this model gives about 50 on a free machine (measured 2026-11-02). Either something else was using
+  the graphics card (Discord, the x265 worker) or `q36c-nd64k` does not fit on it at a 64K window and ran partly on
+  the processor. `studio_blind.py` now prints tokens a second and says so when it is under 15. **Before the next
+  trial: close what uses the card, start the plan, and look at `ollama ps`; it must say 100% GPU.** If it does not,
+  try `--model q36c-nd32k` (the planner prompt is about 23,000 tokens and needs room for its thinking, so 32K is
+  tight but may do).
+- **Item 4, the spec carries the contract.** `studio_pack.py verify` has a step 4: a global (`window.x`), an element
+  id, a data- attribute or a served file that a non-guard test needs, that the app before the change lacks, and
+  that `SPEC.md` never gives, makes the pack NOT SOUND (`contract_gaps` in `studio_pack.py`). It found
+  `window.tvNav` missing from the remote spec and seven ids missing from the sign-in spec. Both specs gained a
+  section "Names that are fixed". All four packs now report no gap. Write that section in every new pack.
+- **A fragile parser, fixed.** A test's summary was read as the END of stdout+stderr. A stand-in server's thread
+  printing "connection reset" after the summary turned a 38-of-38 pass into "crashed". The parsers in
+  `studio_pack.py`, `studio_suspect.py` and `studio_blind.py` now take the last LINE that is a summary, and the
+  stand-in servers in the three Lackluster packs no longer print that noise. **Not checked: the foreman's own parser
+  (`G:\!Ai\ND3\nd_foreman.py`, read-only). If a build ever shows a test "crashing" with all PASS lines above it,
+  look there first.**
+- **Item 5, stage A: the plan-only trial.** `studio_blind.py stage <pack> <ws> --plan-only`. The workspace gets the
+  pack's own tests. The planner is shown each test file's name and the plain-words label of every check, never the
+  code, and must write exactly one task per test file, in order. There is no `tests` step. The guard tests ride on
+  the first task, as in a cloud plan. `check` refuses a plan whose tasks do not match the files. The build is judged
+  by the same tests as a cloud-planned build, so it compares like with like: only the briefs differ. Self-test:
+  blind 13 of 13.
+
+**Waiting for the owner to launch** (`C:\PCodeTest\blind3` is staged, plan-only, from `lackluster_remote`):
+
+    "C:\Heretic\venv\Scripts\python.exe" "G:\!Ai\Philibert\dev\studio_blind.py" plan "C:\PCodeTest\blind3"
+    "C:\Heretic\venv\Scripts\python.exe" "G:\!Ai\Philibert\dev\studio_blind.py" check "C:\PCodeTest\blind3"
+    "C:\Heretic\venv\Scripts\python.exe" "G:\!Ai\Philibert\dev\studio_pack.py" build "C:\PCodeTest\blind3"
+    "C:\Heretic\venv\Scripts\python.exe" "G:\!Ai\Philibert\dev\studio_blind.py" grade "C:\PCodeTest\blind3"
+
+How to read the result. The number to compare with is the cloud-planned build of the same pack
+(`C:\PCodeTest\lackluster2`): 3 of 3 tasks on the first attempt, 204 of 204 checks. In `grade`, "THE NEW WORK"
+is the score (127 checks when all three test files run to the end); the 77 guard checks are no credit. One run is
+an anecdote: three or more before saying what a local planner can do. If the plan is refused or a task sticks,
+read the brief of that task next to the pack's own brief for the same test file (`packs/lackluster_remote/plan.json`):
+the difference is what the planner prompt lacks. My expectation, unmeasured: the acceptance labels give the planner
+the names it used to invent, so the plan will be buildable, and the first task (31 checks, the most rules) is where
+it will stick.
+
+Still open from section 8, in order: 3 (install v1.3, the owner), the plan-only run above, 5 stage B (tests written
+after the code, checked mechanically), 6 (first bench), 7 (three real quick changes), 8 and 9 (foreman changes, the
+owner's copy), 10 (local build of the Android pack), 11 (vision), 12 (the Studio window).
