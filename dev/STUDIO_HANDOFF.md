@@ -357,3 +357,17 @@ steady (42 of 42 twice) without it.
 **Next for the owner:** run blind4's build again with two rounds; T02 then continues from 29 of 31:
     "C:\Heretic\venv\Scripts\python.exe" "G:\!Ai\Philibert\dev\studio_pack.py" build "C:\PCodeTest\blind4" --rounds 2
     "C:\Heretic\venv\Scripts\python.exe" "G:\!Ai\Philibert\dev\studio_blind.py" grade "C:\PCodeTest\blind4"
+
+## 14. Smaller tasks (2026-11-15, afternoon)
+
+**blind4 rerun with salvage, two rounds:** salvage worked (T02 started from 29 of 31), but six more attempts did not
+close the last two checks: one about scrolling, one about redrawing. Round 2 ran with the model 47% on the processor
+(the card was full of other programs) and managed 0-6 steps per 40 minutes, so round 2 says little.
+
+**Built in answer:** the remote pack's guide test is split in three (moves 19, screen 10, place 6 passing checks),
+and the cloud plan's T02 into T02-T04 to match (the player is T05). Verify says SOUND; the reference cut back to
+each task's own work passes that task's file and fails the next (proof the split is fair). See the pack's NOTES.md.
+
+**Staged: `C:\PCodeTest\blind5`** (plan-only, same as blind4 apart from the split). Order: `plan`, `briefs`,
+`check`, `build --rounds 2`, `grade`. Free the card first (`ollama ps` must say 100% GPU) or the timing means
+nothing. Compare with blind4: T01 passed, T02 stuck at 29 of 31, T03 skipped; grade 71 of 127.

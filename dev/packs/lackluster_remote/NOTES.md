@@ -62,3 +62,16 @@ them to fail on the base.
   line: no faults. Two small differences from the first reference, both harmless: Play/Pause is ignored until
   remote mode is on, and Escape does nothing while the caret is in a text box. `reference/` is now that build.
 - Not yet tried on a real Fire TV remote or with a real stream.
+
+## 2026-11-15: the guide test split in three
+- `tests/test_remote_guide.py` (31 checks) is now `test_remote_guide_moves.py` (19: along a channel, the column,
+  hidden rows), `test_remote_guide_screen.py` (10: always on screen, scrolling along the day, OK) and
+  `test_remote_guide_place.py` (6: back after a redraw, out of the guide and back). The checks are unchanged; each
+  new file repeats the sign-in preamble, so there are 35 in all. The plan's T02 is now T02, T03 and T04, each with
+  the parts of the old brief it needs; the player is T05.
+- Why: on blind4 (a local plan) the old T02 stuck after nine attempts of 40 minutes, best 29 of 31, even when
+  salvage let each attempt start from the best one. The two checks left were one about scrolling and one about
+  redrawing: two different problems inside one task.
+- Proven: verify says SOUND (all fail on the base, 208 pass on the reference). The reference cut back to T02's
+  work alone passes moves (19/19) and fails screen and place; cut back to T02+T03, it passes screen as well and
+  fails place. Each task passes on its own work, and only on it.
