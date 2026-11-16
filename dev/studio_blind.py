@@ -721,6 +721,11 @@ def grade(ws):
     finally:
         P.unlink_base(m, scratch / "built")
         shutil.rmtree(scratch, ignore_errors=True)
+        try:
+            import studio_overnight as Q                       # a test that crashed leaves its gateway and Edge behind
+            Q.close_test_servers(print)
+        except Exception as e:
+            print(f"   (could not check for leftover test servers: {e})")
     (ws / ".studio" / "blind_grade.json").write_text(json.dumps(res, indent=1, ensure_ascii=False), encoding="utf-8")
     s = res["score"]
     P.journal(ws, "studio_blind", ("graded" if res["built"] else "graded, but NOTHING WAS BUILT") + f": new work {s['new_work_pass']} of "

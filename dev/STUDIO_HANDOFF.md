@@ -406,3 +406,9 @@ nothing. Compare with blind4: T01 passed, T02 stuck at 29 of 31, T03 skipped; gr
   Self-test 42/42; tree kill and settle were tested on throwaway folders.
 - blind5 repaired by hand: the app is back at the T03 pass (c0f5eec), and the leftovers are in `git stash` there.
   The next `build` resumes at T04.
+- Orphaned test servers (2026-11-16): a pack test that crashes or is killed leaves its `node dist/server.js` gateway
+  and its headless Edge (`lp_edge_` profile) running; 13 pairs had piled up since 11/14 (stopped by hand).
+  `Q.close_test_servers` now stops them whenever their parent is gone (a live parent means a test still running,
+  or someone's own server: never touched). It runs with `close_leftovers` (before and after every foreman run, at
+  the end of a build) and at the end of `grade`. Tested: an orphan is stopped, one with a live parent is kept.
+  The cause is in the pack's `_t.py`: no `atexit` stop, so a crash skips `gw.stop()`. Not changed (pack tests).

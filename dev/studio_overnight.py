@@ -215,6 +215,34 @@ def close_leftovers(ws):
     r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True)
     if r.stdout.strip():
         log(f"closed programs left running from the build folder: {r.stdout.strip()}")
+    close_test_servers(log)
+
+
+# What the packs' tests start: a gateway (`node dist/server.js`, relative, so its path is not the build folder's) and
+# a headless Edge on a throwaway `lp_edge_` profile. A test that is killed (a timeout, OpenCode's own scripts) leaves
+# both running: 13 pairs had piled up by 2026-11-16, some two days old. They are only taken when they are orphans
+# (the program that started them is gone), so a server someone runs from a console is never touched.
+_TEST_SERVERS_PS = r"""
+$alive = @{}; Get-Process | ForEach-Object { $alive[$_.Id] = $_.StartTime }
+Get-CimInstance Win32_Process | Where-Object {
+  ($_.Name -eq 'node.exe' -and $_.CommandLine -match 'dist[/\\]server\.js') -or
+  ($_.Name -eq 'msedge.exe' -and $_.CommandLine -like '*--headless*' -and $_.CommandLine -like '*\lp_edge_*' -and $_.CommandLine -notlike '*--type=*')
+} | Where-Object {
+  $p = $alive[[int]$_.ParentProcessId]
+  -not $p -or $p -gt $_.CreationDate           # parent gone, or the id was reused by a newer program
+} | ForEach-Object { "$($_.Name) $($_.ProcessId)"; taskkill /PID $_.ProcessId /T /F | Out-Null }
+"""
+
+
+def close_test_servers(log=log):
+    """Stop orphaned test gateways and headless Edges (see above). -> how many."""
+    if DRY:
+        return 0
+    r = subprocess.run(["powershell", "-NoProfile", "-Command", _TEST_SERVERS_PS], capture_output=True, text=True)
+    gone = [ln for ln in r.stdout.splitlines() if ln.strip()]
+    if gone:
+        log(f"stopped {len(gone)} test server(s) left running by killed tests: {', '.join(gone[:8])}{'...' if len(gone) > 8 else ''}")
+    return len(gone)
 
 
 # The foreman checks --max-hours only BETWEEN tasks, and one task is up to 3 attempts of 40 min plus their tests.
