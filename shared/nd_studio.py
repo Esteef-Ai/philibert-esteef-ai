@@ -516,6 +516,9 @@ for _name in ("PLAN", "PLAN_REVIEW", "TESTS", "TEST_REVIEW", "ACCEPT_CORE", "ACC
     globals()[_name] = globals()[_name].replace("@@FACTS@@", FACTS)
 
 
+LAST_THINKING = ""
+
+
 def call_model(model, prompt, think=True, timeout=3600, url=OLLAMA, max_tokens=32000, num_ctx=None):
     """One chat call. -> (answer text, seconds, info dict). max_tokens caps a thinking loop (one review once
     thought for 62,000 tokens and never answered). think: True/False, or "low"/"medium"/"high" for
@@ -529,6 +532,8 @@ def call_model(model, prompt, think=True, timeout=3600, url=OLLAMA, max_tokens=3
     msg = r.get("message") or {}
     info = {"eval_count": r.get("eval_count"), "prompt_eval_count": r.get("prompt_eval_count"),
             "thinking_chars": len(msg.get("thinking") or "")}
+    global LAST_THINKING
+    LAST_THINKING = msg.get("thinking") or ""                 # kept apart so callers that log `info` stay small
     return msg.get("content") or "", round(time.time() - t, 1), info
 
 

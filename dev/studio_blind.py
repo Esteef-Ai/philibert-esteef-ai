@@ -227,6 +227,10 @@ def stage(pack, ws, plan_only=False):
 
 
 CALL_LIMIT = 3 * 3600      # seconds one model call may take
+MAX_TOKENS = 32000         # call_model's cap on tokens out (thinking included)
+RETRY_NOTE = ("\n\nNOTE: your last answer to this spent its whole budget thinking and wrote nothing. Think for a few "
+              "thousand tokens at most, decide, and then write the answer itself. A plain answer that follows the "
+              "rules beats a perfect one that is never written.")
 
 
 def call(ws, stage_name, prompt, model, think, dry):
@@ -240,6 +244,21 @@ def call(ws, stage_name, prompt, model, think, dry):
     t0 = time.time()
     try:                                                      # blind2 lost two test files to the default 1-hour limit
         text, secs, info = S.call_model(model, prompt, think=think, timeout=CALL_LIMIT)
+        (sd / f"{stage_name}.thinking.txt").write_text(S.LAST_THINKING, encoding="utf-8")
+        if not S.strip_think(text).strip() and (info.get("eval_count") or 0) >= MAX_TOKENS:
+            # blind5 (2026-11-15): the planner thought for all 32,000 tokens (84K characters) and wrote nothing. One more
+            # try, told so; its first thinking is kept beside the reply to see whether it went round in circles.
+            (sd / f"{stage_name}.thinking1.txt").write_text(S.LAST_THINKING, encoding="utf-8")
+            print(f"  {stage_name}: it thought for all {info.get('eval_count')} tokens ({secs} s) and wrote nothing. "
+                  "Asking once more, told to keep its thinking short.", flush=True)
+            with open(sd / "log.jsonl", "a", encoding="utf-8") as f:
+                f.write(json.dumps({"stage": stage_name, "model": model, "seconds": secs, **info, "empty": True,
+                                    "at": time.strftime("%Y-%m-%d %H:%M:%S")}) + "\n")
+            text, secs, info = S.call_model(model, prompt + RETRY_NOTE, think=think, timeout=CALL_LIMIT)
+            (sd / f"{stage_name}.thinking.txt").write_text(S.LAST_THINKING, encoding="utf-8")
+            if not S.strip_think(text).strip():
+                print(f"  {stage_name}: NO ANSWER again: {info.get('eval_count')} tokens, all thinking. Its thinking is in "
+                      f"{sd / (stage_name + '.thinking.txt')}", flush=True)
     except Exception as e:
         why = f"{type(e).__name__}: {e}"[:300]
         mins = round((time.time() - t0) / 60)
@@ -323,7 +342,13 @@ def plan(ws, model, think, dry):
     if text is None:
         return
     import nd_studio as S
-    pl = S.extract_json(text)
+    try:
+        pl = S.extract_json(text)
+    except ValueError:
+        print(f"  NO PLAN: the reply holds no JSON (it is in {Path(ws) / '.studio' / 'blind_plan.reply.txt'}). Nothing was "
+              "written; run `plan` again.", flush=True)
+        P.journal(ws, "studio_blind", f"plan by {model}: no JSON in the reply, nothing written")
+        return 1
     for t in pl.get("tasks") or []:
         t["files"] = [x for x in t.get("files") or [] if not str(x).replace("\\", "/").startswith("tests/")]
     empty = [t.get("id") for t in pl.get("tasks") or [] if not t["files"]]
