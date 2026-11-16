@@ -633,6 +633,22 @@ def grade(ws):
         # 1. the pack's hidden tests on what was built
         built = scratch / "built"
         shutil.copytree(ws, built, ignore=shutil.ignore_patterns(".venv", ".foreman", ".git", "__pycache__", ".studio", "tests", *links))
+        # Only committed work is built work: a run cut off mid-attempt leaves edits lying in the folder (blind5).
+        st = subprocess.run(["git", "-C", str(ws), "status", "--porcelain", "--untracked-files=all"], capture_output=True,
+                            text=True, encoding="utf-8", errors="replace").stdout
+        loose = [ln[3:].strip().strip('"').split(" -> ")[-1] for ln in st.splitlines() if ln.strip()]
+        loose = [p for p in loose if not p.startswith((".studio/", "tests/"))]
+        for rel in loose:
+            dst = built / rel
+            head = subprocess.run(["git", "-C", str(ws), "show", f"HEAD:{rel}"], capture_output=True)
+            if head.returncode == 0:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_bytes(head.stdout)
+            elif dst.is_file():
+                dst.unlink()
+        if loose:
+            print(f"   (graded the last commit: {len(loose)} uncommitted file(s) in the workspace were left out: {', '.join(loose[:5])})")
+        res["uncommitted_ignored"] = loose
         for n in links:
             if (ws / n).is_dir():
                 subprocess.run(["cmd", "/c", "mklink", "/J", str(built / n), str((ws / n).resolve())], capture_output=True)

@@ -175,6 +175,8 @@ try:
         d, m = P.load("lackluster_remote")
         shutil.copytree(d / m["reference"], b, dirs_exist_ok=True)
         (b / "plan.json").write_text(json.dumps({"tasks": []}), encoding="utf-8")
+        for c in (["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "a perfect build"]):
+            subprocess.run(["git", "-C", str(b), *c], capture_output=True)     # the grade judges committed work only
         r = subprocess.run([sys.executable, str(DEV / "studio_blind.py"), "grade", str(b)], capture_output=True, text=True, encoding="utf-8", errors="replace")
         print("   " + "\n   ".join((r.stdout + r.stderr).strip().splitlines()[-9:]))
         g = json.loads((b / ".studio" / "blind_grade.json").read_text(encoding="utf-8")) if (b / ".studio" / "blind_grade.json").is_file() else {}

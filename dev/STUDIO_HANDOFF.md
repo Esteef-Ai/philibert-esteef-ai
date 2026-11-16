@@ -387,3 +387,22 @@ nothing. Compare with blind4: T01 passed, T02 stuck at 29 of 31, T03 skipped; gr
   is a warning only (the pack's tests are proven on the reference). Self-test 14/14.
 - Lesson: a local planner can write a fine plan and still give the builder one wrong instruction that dooms the
   task. Mechanical checks on the brief (names, clashes) are cheap and catch what retries cannot.
+
+## 16. blind5, second build (2026-11-16): 98 of 131, the best yet; and a build that was cut off
+
+- With T01's brief redone (the clash check said READY), T01 passed on attempt 1, T02 after a fresh round,
+  T03 on attempt 3. T04 and T05 were not reached.
+- Graded on the T03 pass: basics 42/42, guide moves 19/19, screen 10/10, place 5/6, player 22/54. New work
+  98 of 131 (blind4: 94), guards 77/77. Everything the local model planned, briefed and built.
+- The first grade said 63 of 131. That was wrong, for three reasons:
+  1. The foreman checks `--max-hours` only between tasks, and one task can take 3 x 40 min. The outer timeout was
+     the limit + 15 min, so it killed the foreman mid T04 attempt 2 (overnight.log: TIMED OUT after 11700 s).
+  2. `subprocess.run` killed only the foreman. Its OpenCode carried on editing the folder.
+  3. The handoff commit (`git add -A`) took the half-done `tvnav.js` and four debug scripts (943b8a3), and the
+     grade copied the folder as it was.
+- Fixed: `Q.sh` kills the whole process tree on a timeout. The foreman's outer timeout is the limit plus a whole
+  task (`TASK_MARGIN`, 2.5 h). After every foreman run, `Q.settle` puts anything uncommitted outside `.studio/` into
+  a git stash, so nothing commits it. The grade judges committed work only (it prints what it left out).
+  Self-test 42/42; tree kill and settle were tested on throwaway folders.
+- blind5 repaired by hand: the app is back at the T03 pass (c0f5eec), and the leftovers are in `git stash` there.
+  The next `build` resumes at T04.

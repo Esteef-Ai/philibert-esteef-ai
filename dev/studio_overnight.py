@@ -132,13 +132,20 @@ def sh(cmd, cwd, timeout=7200, name=""):
     log(f"$ {name or ' '.join(str(c) for c in cmd)[:220]}")
     if DRY:
         return 0, ""
+    p = subprocess.Popen([str(c) for c in cmd], cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                         encoding="utf-8", errors="replace", env=ENV)
     try:
-        r = subprocess.run([str(c) for c in cmd], cwd=str(cwd), capture_output=True, text=True, encoding="utf-8", errors="replace",
-                           timeout=timeout, env=ENV)
-        out = (r.stdout or "") + (r.stderr or "")
-        code = r.returncode
-    except subprocess.TimeoutExpired as e:
-        out, code = f"TIMED OUT after {timeout} s: {str(e.stdout or '')[-1500:]}", 124
+        out, _ = p.communicate(timeout=timeout)
+        out, code = out or "", p.returncode
+    except subprocess.TimeoutExpired:
+        # The whole tree, not just the child: blind5 (2026-11-16) killed the foreman alone and its OpenCode
+        # went on editing the workspace after the build had committed its handoff.
+        subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"], capture_output=True)
+        try:
+            rest, _ = p.communicate(timeout=60)
+        except subprocess.TimeoutExpired:
+            rest = ""
+        out, code = f"TIMED OUT after {timeout} s (process tree killed): {str(rest or '')[-1500:]}", 124
     with open(HOME / "overnight.log", "a", encoding="utf-8") as f:
         f.write(out[-12000:] + "\n")
     return code, out
@@ -210,12 +217,38 @@ def close_leftovers(ws):
         log(f"closed programs left running from the build folder: {r.stdout.strip()}")
 
 
-def foreman(run, *args, timeout=4 * 3600 + 900):
+# The foreman checks --max-hours only BETWEEN tasks, and one task is up to 3 attempts of 40 min plus their tests.
+# So the outer kill must wait for a whole task past the limit (blind5: a 15 min margin cut T04 off mid-attempt).
+TASK_MARGIN = 3 * 50 * 60
+
+
+def settle(ws):
+    """After a foreman run: anything uncommitted outside .studio/ is an attempt that never finished (the run
+    was killed). Put it aside in a git stash, never commit it: the next commit would make it everyone's base."""
+    if DRY:
+        return []
+    st = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=str(ws), capture_output=True,
+                        text=True, encoding="utf-8", errors="replace").stdout
+    paths = [ln[3:].strip().strip('"') for ln in st.splitlines() if ln.strip()]
+    paths = [p.split(" -> ")[-1] for p in paths if not p.startswith(".studio/")]
+    if paths:
+        subprocess.run(["git", "stash", "push", "--include-untracked", "-m",
+                        f"unfinished attempt put aside {time.strftime('%Y-%m-%d %H:%M')}", "--", *paths],
+                       cwd=str(ws), capture_output=True)
+        log(f"the run left an unfinished attempt ({', '.join(paths[:6])}{'...' if len(paths) > 6 else ''}): "
+            f"put aside in `git stash` (git -C {ws} stash list), not committed")
+    return paths
+
+
+def foreman(run, *args, timeout=4 * 3600 + TASK_MARGIN):
     check_stop()
     close_leftovers(run["ws"])
     unload()
     commit(run["ws"], f"before the foreman: {' '.join(args) or 'run'}")
-    return sh([sys.executable, FOREMAN, "run", run["ws"] / "plan.json", *args], r"G:\!Ai\ND3", timeout=timeout, name=f"foreman run {' '.join(args)}")
+    r = sh([sys.executable, FOREMAN, "run", run["ws"] / "plan.json", *args], r"G:\!Ai\ND3", timeout=timeout, name=f"foreman run {' '.join(args)}")
+    close_leftovers(run["ws"])
+    settle(run["ws"])
+    return r
 
 
 def state(run):

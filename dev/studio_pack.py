@@ -854,7 +854,7 @@ def build(ws, max_hours=6.0, rounds=1):
         journal(ws, "studio_pack", f"build started (up to {max_hours} h, {rounds} extra round(s) for stuck tasks)")
         threading.Thread(target=studio_suspect.watch, args=(ws, watcher_stop, Q.log), daemon=True).start()
         # beside the foreman: is a failing test the one at fault? (studio_suspect.py)
-        Q.foreman(run, "--max-hours", str(max_hours), timeout=int(max_hours * 3600) + 900)
+        Q.foreman(run, "--max-hours", str(max_hours), timeout=int(max_hours * 3600) + Q.TASK_MARGIN)
         if not (ws / ".foreman" / "state.json").is_file():       # the foreman refused the plan before any task
             Q.log("build not started: the foreman refused the plan (its reasons are just above). Nothing was built.")
             journal(ws, "studio_pack", "build not started: the foreman refused the plan; nothing was built")
@@ -884,7 +884,7 @@ def build(ws, max_hours=6.0, rounds=1):
                 except Exception as e:
                     Q.log(f"salvage {tid} failed, the fresh attempts start from the last pass: {e}")
                 Q.sh([sys.executable, FOREMAN, "retry", ws / "plan.json", tid], Path(FOREMAN).parent, timeout=120, name=f"foreman retry {tid}")
-            Q.foreman(run, "--max-hours", str(max_hours / 2), timeout=int(max_hours * 1800) + 900)
+            Q.foreman(run, "--max-hours", str(max_hours / 2), timeout=int(max_hours * 1800) + Q.TASK_MARGIN)
     except Q.Stop:
         Q.log("STOP file found - stopping")
         journal(ws, "studio_pack", "build stopped by the STOP file")
