@@ -840,6 +840,7 @@ def build(ws, max_hours=6.0, rounds=1):
     Q.HOME.mkdir(parents=True, exist_ok=True)
     ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001)      # no sleep while this runs
     run = {"ws": ws, "n": ws.name}
+    m_ws = json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8"))
     Q.log(f"pack build started: {ws} (pid {os.getpid()})")
     t0 = time.time()
     try:
@@ -863,6 +864,11 @@ def build(ws, max_hours=6.0, rounds=1):
             return 1
         for r in range(rounds):                                # time is cheap here: stuck tasks get fresh attempts
             suspect = {f["task"] for f in studio_suspect.check(ws)}
+            if suspect and m_ws.get("plan_only"):
+                # The pack's own tests, proven on the reference build (blind5, 2026-11-16: T01's test, passed by blind4's
+                # build, was called suspect and the two fresh rounds never ran). A warning, never a stop.
+                Q.log(f"suspect test(s) for {sorted(suspect)}, but these are the pack's proven tests: fresh attempts anyway")
+                suspect = set()
             if suspect:
                 Q.log(f"no fresh attempts for {sorted(suspect)}: their failing test is suspect (see the handoff)")
                 journal(ws, "studio_pack", f"suspect test(s) in {', '.join(sorted(suspect))}: no fresh attempts until someone reads them")

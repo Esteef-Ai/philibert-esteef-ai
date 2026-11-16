@@ -371,3 +371,19 @@ each task's own work passes that task's file and fails the next (proof the split
 **Staged: `C:\PCodeTest\blind5`** (plan-only, same as blind4 apart from the split). Order: `plan`, `briefs`,
 `check`, `build --rounds 2`, `grade`. Free the card first (`ollama ps` must say 100% GPU) or the timing means
 nothing. Compare with blind4: T01 passed, T02 stuck at 29 of 31, T03 skipped; grade 71 of 127.
+
+## 15. blind5 (night of 2026-11-15): the split, planned locally; nothing built, and why
+
+- Plan: the first call thought for all 32,000 tokens and wrote nothing; the new automatic second call (told to keep
+  its thinking short) wrote a valid 5-task plan in 11 minutes. Briefs: all five rewritten (6-12K characters).
+- Build: T01 stuck, 3 attempts, best 21 of 42 (blind4's T01 passed on attempt 2). The two fresh rounds never ran:
+  the suspect check called T01's test suspect and that stopped them.
+- Cause: T01's brief told the builder to write its OWN `isTvBrowser()`. The page already has one (index.html), the
+  sign-in page uses it, and a second declaration replaces it: six sign-in checks broke in every attempt, so salvage
+  rightly kept nothing either. The spec said "the page's own isTvBrowser()"; the planner misread it.
+- Fixed (no model run): `check` refuses a brief that declares a function the app already has (vendor and .min.js
+  files skipped); the briefs step checks its own rewrite and asks once more, naming the clash; the BRIEF prompt
+  says so; a redo of one brief compares with the short brief, not the long one; in plan-only trials a suspect test
+  is a warning only (the pack's tests are proven on the reference). Self-test 14/14.
+- Lesson: a local planner can write a fine plan and still give the builder one wrong instruction that dooms the
+  task. Mechanical checks on the brief (names, clashes) are cheap and catch what retries cannot.

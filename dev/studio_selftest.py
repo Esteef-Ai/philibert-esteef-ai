@@ -198,6 +198,11 @@ try:
         check("... and none of their code", not leaked, leaked)
         r = subprocess.run([sys.executable, str(DEV / "studio_blind.py"), "tests", str(b), "--dry"], capture_output=True, text=True, encoding="utf-8", errors="replace")
         check("the tests step refuses: nothing is written by the model in this trial", r.returncode != 0 and "plan-only" in (r.stdout + r.stderr))
+        sys.path.insert(0, str(DEV))
+        import studio_blind
+        check("check catches a brief that redefines a function the app has (blind5's isTvBrowser)",
+              studio_blind.clashes(b, {"brief": "1. `isTvBrowser()` takes nothing, returns boolean."}) == [("isTvBrowser", "public/index.html")]
+              and studio_blind.clashes(b, {"brief": "function tvOnlyNewName() {} and calls isTvBrowser()"}) == [])
         good = json.loads((d / "plan.json").read_text(encoding="utf-8"))          # the pack's own plan is a well-formed answer
         (b / "plan.json").write_text(json.dumps(good), encoding="utf-8")
         r = subprocess.run([sys.executable, str(DEV / "studio_blind.py"), "check", str(b)], capture_output=True, text=True, encoding="utf-8", errors="replace")

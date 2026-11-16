@@ -422,7 +422,9 @@ A. One paragraph: what exists, what this task adds, and what is left for LATER t
 write it now).
 B. For every file the task may change: the exact change. For an existing big file: the exact line to find and the \
 exact line to add, and "read nothing else in it". For a new file: its outer shape (for a browser script: one \
-function wrapping everything, plain var and function, no modules).
+function wrapping everything, plain var and function, no modules). NEVER give a new function the name of one the \
+app already has (look in THE APP'S SOURCE): a second `function isTvBrowser()` replaces the page's own, and whatever \
+relied on it breaks. Where the spec says "the page's own X", CALL X; do not write it.
 C. The code in numbered parts, in the order to write them. For each part: the function's name, what it takes and \
 returns, and its rules as precisely as you can state them: which elements (by the ids and classes you can SEE in \
 the outline), which conditions, which order of checks. Where the choice of an algorithm decides whether the checks \
@@ -469,7 +471,20 @@ def briefs(ws, model, think, dry, only=None):
         if text:
             import nd_studio as S
             new = S.strip_think(text).strip()
-            if len(new) < len(t.get("brief") or "") or len(new) < 1500:
+            clash = clashes(ws, {"brief": new})
+            if clash:                                          # blind5: a brief that redefined the page's isTvBrowser()
+                names = ", ".join(f"`{n}()` (already in {w})" for n, w in clash)
+                print(f"  {t['id']}: the rewrite declares {names}; asking once more", flush=True)
+                again = call(ws, f"blind_brief_{t['id']}", prompt + (
+                    f"\n\nNOTE: your last brief for this task declared {names}. The app already has that function; a second "
+                    "declaration replaces the app's own and breaks what uses it (the sign-in page broke in every attempt). "
+                    "Write the brief again so the code CALLS the app's function and never declares one of that name."),
+                    model, think, dry)
+                if again and not clashes(ws, {"brief": S.strip_think(again).strip()}):
+                    new = S.strip_think(again).strip()
+                else:
+                    print(f"  {t['id']}: the second rewrite still declares it; `check` will say NOT READY", flush=True)
+            if len(new) < len(t.get("brief_short") or t.get("brief") or "") or len(new) < 1500:
                 print(f"  {t['id']}: the rewrite is {len(new)} characters, no better than the short brief: kept the short one")
             else:
                 t["brief_short"] = t.get("brief_short") or t.get("brief")
@@ -524,6 +539,32 @@ def tests(ws, model, think, dry, only=None):
         P.git(ws, "commit", "-q", "-m", f"blind trial: the tests, by {model}")
 
 
+DEFINES = (r"\bfunction\s+([A-Za-z_$][\w$]*)\s*\(",           # function name(
+           r"`([A-Za-z_$][\w$]*)\([^`]*\)`\s+takes\b")             # `name()` takes ...: how the briefs step describes a part
+
+
+def clashes(ws, task):
+    """-> [(name, file)] for each function the brief would declare that the app as it was before the build already
+    declares (blind5, 2026-11-16: T01's brief wrote its own isTvBrowser(), the page's own was replaced, and six sign-in
+    checks broke in every attempt)."""
+    ws = Path(ws)
+    root = subprocess.run(["git", "-C", str(ws), "rev-list", "--max-parents=0", "HEAD"], capture_output=True, text=True).stdout.split()
+    if not root:
+        return []
+    ls = subprocess.run(["git", "-C", str(ws), "ls-tree", "-r", "--name-only", root[-1]], capture_output=True, text=True).stdout.split("\n")
+    have = {}
+    for rel in ls:
+        if (rel.endswith((".html", ".js")) and not rel.startswith(("tests/", "node_modules/", "dist/"))
+                and "/vendor/" not in "/" + rel and not rel.endswith(".min.js")):   # a library's insides are not the page's names
+            src = subprocess.run(["git", "-C", str(ws), "show", f"{root[-1]}:{rel}"], capture_output=True, text=True,
+                                 encoding="utf-8", errors="replace").stdout
+            for n in re.findall(DEFINES[0], src):
+                have.setdefault(n, rel)
+    brief = str(task.get("brief") or "")
+    mine = {n for pat in DEFINES for n in re.findall(pat, brief)}
+    return sorted((n, have[n]) for n in mine if n in have)
+
+
 def check(ws):
     """Mechanical, no model: is the local plan buildable and do its tests fail on the app as it is?"""
     ws = Path(ws)
@@ -557,6 +598,9 @@ def check(ws):
             bad.append(f"{tn} passes before anything is built: it checks nothing new")
         elif fl < 0:
             bad.append(f"{tn} crashes or prints no summary instead of failing cleanly: {tail[-200:]}")
+        for name, where in clashes(ws, t):
+            bad.append(f"{t['id']}: the brief defines `{name}()`, which the app already has ({where}): a second one replaces "
+                       "the app's own and breaks what uses it. Run `briefs` again for this task, or mend the brief to call it")
     m = json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8"))
     if m.get("plan_only"):
         want, _, _ = acceptance(ws, m)
