@@ -428,3 +428,17 @@ nothing. Compare with blind4: T01 passed, T02 stuck at 29 of 31, T03 skipped; gr
   closing chat and then the drawer, the video filling a TV screen, the dialog's type buttons, and Back on the
   sign-in code screen.
 - Counting: 99 is what passed the foreman's gates; 117 includes salvaged work that broke nothing. Report both.
+
+## 18. blind5, fourth build (2026-11-17 night): ALL FIVE TASKS PASSED - 131 of 131
+
+- Starting T05 from its salvaged 40 of 54, T05 passed on attempt 2 (39 min). Grade: new work 131 of 131, guards
+  77 of 77, 208 of 208 hidden checks. The look step found nothing new; the guide and the full-screen player look
+  right at 1280x720. Only the allowed files changed (public/tvnav.js +1024 lines, index.html +1 line). The
+  orphan cleanup stopped 1 leftover gateway at the end.
+- This is the first whole feature where the local models did all of it: q36c-nd64k planned it from the spec alone
+  (plan-only, it never saw the pack's plan or tests) and wrote the briefs; q36c-nd128k built it. Claude only fixed
+  tooling between runs. Four builds, about 18 hours of machine time.
+- What made it work, in order of weight: tests split small (section 14), salvage carrying a failed attempt's work
+  forward (and across rounds, section 17), the brief clash check (section 15), and a build runner that cannot leak
+  a half attempt (section 16).
+- n=1. Before calling this repeatable, run a fresh blind trial (blind6) with the current tools from the start.
