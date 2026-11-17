@@ -412,3 +412,19 @@ nothing. Compare with blind4: T01 passed, T02 stuck at 29 of 31, T03 skipped; gr
   or someone's own server: never touched). It runs with `close_leftovers` (before and after every foreman run, at
   the end of a build) and at the end of `grade`. Tested: an orphan is stopped, one with a live parent is kept.
   The cause is in the pack's `_t.py`: no `atexit` stop, so a crash skips `gw.stop()`. Not changed (pack tests).
+
+## 17. blind5, third build (2026-11-16 evening): T04 passed; T05 kept at 40 of 54
+
+- T04 passed on attempt 3. T05 (the player, 54 checks, a 23-26K brief) got stuck in all three rounds: all 9
+  attempts ran out the 40 min, at 80-200 steps each. The foreman's grade: 99 of 131.
+- Lost work: the foreman names transcripts `<task>_a1..a3`, so each fresh round overwrote the last. And salvage ran
+  only BEFORE a round, so the last round was never weighed. A dry salvage afterwards: round 3's a1 reached 40 of 54
+  and broke nothing (a2 reached 48 but broke 5 basics checks).
+- Fixed: `studio_salvage.keep_rounds` renames a stuck task's transcripts to `<task>_r<k>_a<n>` before the retry,
+  and salvage weighs every round. After the last round, the build salvages each stuck task once more and keeps the
+  best as the next build's start. Self-test 42/42.
+- Done by hand on blind5: a1 kept (2d1c5b2). Graded 117 of 131 new checks, guards 77/77. The other 14 player checks:
+  channel wrap with Up/Down on the video, the player's button row (Right to Close, Left/Right along it), Back
+  closing chat and then the drawer, the video filling a TV screen, the dialog's type buttons, and Back on the
+  sign-in code screen.
+- Counting: 99 is what passed the foreman's gates; 117 includes salvaged work that broke nothing. Report both.

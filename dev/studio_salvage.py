@@ -143,6 +143,19 @@ def judge(ws, files, own, keep, links, log):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def keep_rounds(ws, tid):
+    """The foreman names its transcripts by attempt only (<tid>_a1..a3), so a fresh round overwrote the last one's:
+    blind5's T05 round 3 reached 40 of 54 player checks and nobody looked. Set this round's aside as <tid>_r<k>_a<n>."""
+    d = Path(ws) / ".foreman" / "opencode"
+    k = 1 + max([int(m.group(1)) for p in d.glob(f"{tid}_r*_a*.jsonl") for m in [re.match(rf"{tid}_r(\d+)_a", p.name)] if m] or [0])
+    moved = []
+    for p in sorted(d.glob(f"{tid}_a*.jsonl")):
+        dst = d / p.name.replace(f"{tid}_a", f"{tid}_r{k}_a", 1)
+        p.rename(dst)
+        moved.append(dst.name)
+    return moved
+
+
 def salvage(ws, tid, apply=False, log=print):
     """-> a dict saying what was found and whether it was kept."""
     ws = Path(ws)
@@ -157,7 +170,8 @@ def salvage(ws, tid, apply=False, log=print):
     base = judge(ws, {}, own, keep, links, log)
     log(f"salvage {tid}: the workspace now: {own} {base[0]} passed, {base[1]} failed")
     best = None
-    for tr in sorted((ws / ".foreman" / "opencode").glob(f"{tid}_a*.jsonl")):
+    # every round's attempts: <tid>_a<n> (the last round) and <tid>_r<k>_a<n> (earlier rounds, set aside by keep_rounds)
+    for tr in sorted((ws / ".foreman" / "opencode").glob(f"{tid}_*.jsonl")):
         files = replay(ws, tr, allowed, head)
         if not files:
             log(f"  {tr.name}: nothing to rebuild (no edits in the allowed files, or the edits do not replay)")

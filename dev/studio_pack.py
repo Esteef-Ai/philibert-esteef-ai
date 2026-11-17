@@ -883,8 +883,20 @@ def build(ws, max_hours=6.0, rounds=1):
                     studio_salvage.salvage(ws, tid, apply=True, log=Q.log)
                 except Exception as e:
                     Q.log(f"salvage {tid} failed, the fresh attempts start from the last pass: {e}")
+                try:
+                    studio_salvage.keep_rounds(ws, tid)        # else the fresh round overwrites these transcripts
+                except Exception as e:
+                    Q.log(f"could not set {tid}'s transcripts aside: {e}")
                 Q.sh([sys.executable, FOREMAN, "retry", ws / "plan.json", tid], Path(FOREMAN).parent, timeout=120, name=f"foreman retry {tid}")
             Q.foreman(run, "--max-hours", str(max_hours / 2), timeout=int(max_hours * 1800) + Q.TASK_MARGIN)
+        # The last round's attempts were never weighed (salvage only ran BEFORE a round): keep the best as the start
+        # of the next build. blind5's T05: round 3 reached 40 of 54 and the build ended at 22 (2026-11-16).
+        for tid in Q.stuck(run):
+            try:
+                import studio_salvage
+                studio_salvage.salvage(ws, tid, apply=True, log=Q.log)
+            except Exception as e:
+                Q.log(f"final salvage {tid} failed: {e}")
     except Q.Stop:
         Q.log("STOP file found - stopping")
         journal(ws, "studio_pack", "build stopped by the STOP file")
