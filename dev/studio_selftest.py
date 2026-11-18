@@ -209,6 +209,12 @@ try:
               len(studio_blind.double_ok({"brief": "} else if (e.key === 'Enter') {\n  if (cur) { cur.click(); }\n} else if (e.key === 'Escape') {"})) == 1
               and studio_blind.double_ok({"brief": "} else if (e.key === 'Enter') { e.preventDefault(); cur.click(); }"}) == []
               and studio_blind.double_ok({"brief": "OK (Enter) opens it; a mouse click() still works"}) == [])
+        g = studio_blind.ghost_names(b, {"brief": "t = row.querySelector('.channel-logo') || document.getElementById('chat-panel');"
+                                                  " x = document.querySelector('#guide-rows > .guide-row .logo-tile');"
+                                                  " if (document.body.classList.contains('tv-new-thing')) {}"},
+                                     [{"brief": "document.body.classList.add('tv-new-thing')"}])
+        check("check catches a brief that looks up ids/classes the app lacks (blind6's .channel-logo), not real or made ones",
+              g == ["#chat-panel", ".channel-logo"], g)
         good = json.loads((d / "plan.json").read_text(encoding="utf-8"))          # the pack's own plan is a well-formed answer
         (b / "plan.json").write_text(json.dumps(good), encoding="utf-8")
         r = subprocess.run([sys.executable, str(DEV / "studio_blind.py"), "check", str(b)], capture_output=True, text=True, encoding="utf-8", errors="replace")

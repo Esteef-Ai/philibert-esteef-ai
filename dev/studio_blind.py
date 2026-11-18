@@ -426,7 +426,9 @@ function wrapping everything, plain var and function, no modules). NEVER give a 
 app already has (look in THE APP'S SOURCE): a second `function isTvBrowser()` replaces the page's own, and whatever \
 relied on it breaks. Where the spec says "the page's own X", CALL X; do not write it. OK is the Enter key, and a \
 focused button or link ALREADY clicks itself on Enter: code that calls .click() on Enter must call e.preventDefault() \
-first, or every OK fires twice (Sign in asked for two pins and broke).
+first, or every OK fires twice (Sign in asked for two pins and broke). Every id and class your code looks up must be \
+one THE APP'S SOURCE really has, or one this task or an earlier one creates: never a likely-sounding name (the guide's \
+logos are `.logo-tile`; a brief that said `.channel-logo` found nothing and its checks failed).
 C. The code in numbered parts, in the order to write them. For each part: the function's name, what it takes and \
 returns, and its rules as precisely as you can state them: which elements (by the ids and classes you can SEE in \
 the outline), which conditions, which order of checks. Where the choice of an algorithm decides whether the checks \
@@ -473,14 +475,14 @@ def briefs(ws, model, think, dry, only=None):
         if text:
             import nd_studio as S
             new = S.strip_think(text).strip()
-            faults = brief_faults(ws, {"brief": new})
-            if faults:                                         # blind5: redefined isTvBrowser(); blind6: OK fired twice
+            faults = brief_faults(ws, {"brief": new}, done)
+            if faults:                                         # blind5: redefined isTvBrowser(); blind6: OK fired twice, names the app lacks
                 print(f"  {t['id']}: the rewrite has {len(faults)} fault(s): {'; '.join(f[:90] for f in faults)}; asking once more", flush=True)
                 again = call(ws, f"blind_brief_{t['id']}", prompt + (
                     "\n\nNOTE: your last brief for this task had these faults, each of which broke the app in an earlier "
                     "build:\n" + "\n".join("- " + f for f in faults) + "\nWrite the whole brief again without them."),
                     model, think, dry)
-                if again and not brief_faults(ws, {"brief": S.strip_think(again).strip()}):
+                if again and not brief_faults(ws, {"brief": S.strip_think(again).strip()}, done):
                     new = S.strip_think(again).strip()
                 else:
                     print(f"  {t['id']}: the second rewrite still has a fault; `check` will say NOT READY", flush=True)
@@ -580,11 +582,77 @@ def double_ok(task):
     return out
 
 
-def brief_faults(ws, task):
+_USES = (r"""getElementById\(\s*['"]([\w-]+)['"]""",                                   # -> id
+          r"""(?:querySelector(?:All)?|closest|matches)\(\s*['"]([^'"]+)['"]""",          # -> a selector
+          r"""classList\.(?:contains|remove)\(\s*['"]([\w-]+)['"]""")                    # -> class
+_MAKES = (r"""classList\.(?:add|toggle)\(\s*['"]([\w-]+)['"]""", r"""\.(?:id|className)\s*=\s*['"]([\w -]+)['"]""",
+          r"""\b(?:id|class)\s*=\s*\\?["']([\w -]+)\\?["']""", r"""setAttribute\(\s*['"](?:id|class)['"]\s*,\s*['"]([\w -]+)['"]""")
+_known_cache = {}
+
+
+def _known_text(ws):
+    """The app as staged (its .html/.js/.css), the spec and the pack's tests: where a page part's name may come from."""
+    ws = Path(ws)
+    root = subprocess.run(["git", "-C", str(ws), "rev-list", "--max-parents=0", "HEAD"], capture_output=True, text=True).stdout.split()
+    key = (str(ws), root[-1] if root else "")
+    if key in _known_cache:
+        return _known_cache[key]
+    parts = []
+    if root:
+        ls = subprocess.run(["git", "-C", str(ws), "ls-tree", "-r", "--name-only", root[-1]], capture_output=True, text=True).stdout.split("\n")
+        for rel in ls:
+            if rel.endswith((".html", ".js", ".css", ".py")) and not rel.startswith(("node_modules/", "dist/", ".")) \
+                    and "/vendor/" not in "/" + rel and not rel.endswith(".min.js") and (rel.startswith("tests/") or not rel.endswith(".py")):
+                parts.append(subprocess.run(["git", "-C", str(ws), "show", f"{root[-1]}:{rel}"], capture_output=True, text=True,
+                                            encoding="utf-8", errors="replace").stdout)
+    for f in [ws / "SPEC.md", *sorted((ws / "tests").glob("*.py"))]:
+        try:
+            parts.append(f.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            pass
+    _known_cache[key] = "\n".join(parts)
+    return _known_cache[key]
+
+
+def ghost_names(ws, task, earlier=()):
+    """-> ['#id' / '.class'] the brief's code looks up that exist nowhere: not in the app as staged, the spec or the
+    tests, and not made by this brief or an earlier one (blind6, 2026-11-17: T02-T04 said "use exactly this" over code
+    that looked up `.channel-logo` (the app's is `.logo-tile`) and `#chat-panel` (no such element); the logo checks failed)."""
+    brief = str(task.get("brief") or "")
+    used = set()
+    for i, pat in enumerate(_USES):
+        for v in re.findall(pat, brief):
+            if i == 0:
+                used.add("#" + v)
+            elif i == 2:
+                used.add("." + v)
+            else:
+                used |= set(re.findall(r"[#.][A-Za-z_][\w-]*", v))
+    made = set()
+    for b in [brief, *[str(x.get("brief") or "") for x in earlier]]:
+        for pat in _MAKES:
+            for v in re.findall(pat, b):
+                made |= set(v.split())
+    known = _known_text(ws)
+    out = []
+    for s in sorted(used):
+        n = s[1:]
+        if n in made or re.search(r"(?<![\w-])" + re.escape(n) + r"(?![\w-])", known):
+            continue
+        out.append(s)
+    return out
+
+
+def brief_faults(ws, task, earlier=()):
     """-> [message] for what a brief would surely break, each also said to the model when it is asked again."""
     out = [f"the brief declares `{n}()`, which the app already has ({w}): a second declaration replaces the app's own and "
            "breaks what uses it (blind5: the sign-in page). The code must CALL it and never declare one of that name"
            for n, w in clashes(ws, task)]
+    ghosts = ghost_names(ws, task, earlier)
+    if ghosts:
+        out.append(f"the brief's code looks up {', '.join('`' + g + '`' for g in ghosts)}, which the app does not have and no "
+                   "task makes (blind6: `.channel-logo` where the app's logos are `.logo-tile`; the logo checks failed). Use "
+                   "only ids and classes from the source shown above, or have the brief create the element first")
     out += [f"the brief's Enter (OK) branch calls .click() without e.preventDefault(): a focused button already clicks "
             f"itself on Enter, so every OK fires twice (blind6: Sign in asked for two pins, sign-in broke). Call "
             f"e.preventDefault() before .click(), and leave Enter alone while remote mode is off. The branch: {b}"
@@ -606,7 +674,7 @@ def check(ws):
     names = [own(t) for t in pl.get("tasks") or []]
     if len(set(names)) != len(names):
         bad.append("two tasks share a test file")
-    for t in pl.get("tasks") or []:
+    for i, t in enumerate(pl.get("tasks") or []):
         for dep in t.get("depends_on") or []:
             if dep not in ids:
                 bad.append(f"{t['id']} depends on {dep}, which is not in the plan")
@@ -625,7 +693,7 @@ def check(ws):
             bad.append(f"{tn} passes before anything is built: it checks nothing new")
         elif fl < 0:
             bad.append(f"{tn} crashes or prints no summary instead of failing cleanly: {tail[-200:]}")
-        for fault in brief_faults(ws, t):
+        for fault in brief_faults(ws, t, (pl.get("tasks") or [])[:i]):
             bad.append(f"{t['id']}: {fault}. Run `briefs` again for this task, or mend the brief")
     m = json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8"))
     if m.get("plan_only"):
