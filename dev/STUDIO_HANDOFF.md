@@ -442,3 +442,24 @@ nothing. Compare with blind4: T01 passed, T02 stuck at 29 of 31, T03 skipped; gr
   forward (and across rounds, section 17), the brief clash check (section 15), and a build runner that cannot leak
   a half attempt (section 16).
 - n=1. Before calling this repeatable, run a fresh blind trial (blind6) with the current tools from the start.
+
+## 19. blind6 (2026-11-17): the straight-through repeat did NOT repeat
+
+- Fresh plan-only trial with all the fixes above. Plan (4 min) and briefs (8 min) went fine; T01 stuck through all
+  three rounds and nothing else ran. The grade said 80 of 131 and 2 sign-in guards broken, all of it salvaged T01 work.
+- Cause 1, the brief: T01's Enter branch said `currentFocus.click()` without `e.preventDefault()`. A focused
+  button already clicks itself on Enter, so every OK fired twice: Sign in asked Plex for two pins, and the code
+  screen never signed in. The spec said only "OK does what a click does". blind5's brief happened not to do this.
+- Cause 2, the tools: salvage kept a 41/42 attempt that broke 2 sign-in checks (MAX_LOST allowed 2). Every later
+  attempt started with sign-in broken; round 2's a2 failed on ONLY those 2. The suspect check then called the test
+  "certain" at fault, because it failed "before the builder touched it". That was the salvage.
+- Fixed: salvage never keeps an attempt that breaks a guard test (MAX_LOST is for earlier tasks' checks only).
+  `brief_faults` = the clash check + `double_ok` (an Enter branch with .click() and no preventDefault); `check`
+  refuses either, `briefs` re-asks once naming them, and the BRIEF prompt says it. The suspect check says
+  "salvage-broke" (likely, not certain, no STOP) when a salvage commit lies between the last pass and the start.
+  The pack's SPEC.md has the sentence now: one press, one click; Sign in asks for one code. Self-test 43/43.
+  `double_ok` flags blind6's T01 and nothing in blind4, blind5, blind6's other tasks or the pack's own plan.
+- blind6 repaired: salvage reverted, spec sentence added. Its plan and the other four briefs are the local model's,
+  unchanged.
+- Read honestly: n=2 plan-only trials, 1 finished. Each failure so far was ONE wrong line in a brief that broke an
+  unrelated, already-working part (sign-in), twice. Guard-breaking is the pattern to watch.

@@ -126,7 +126,14 @@ def check(ws, run_untouched=True):
                     ok, tail = run_test(py, tmp, test)
                     if not ok:                               # once more: a single bad run could be the machine being busy
                         ok, tail = run_test(py, tmp, test)
-                    if not ok:
+                    salv = salvaged_since_pass(ws, sha) if not ok else None
+                    if salv:
+                        # blind6 (2026-11-17): the start held salvaged work that broke sign-in; "the test is at fault" was wrong
+                        _done[k] = {"task": tid, "test": test, "kind": "salvage-broke", "certain": False, "when": time.strftime("%Y-%m-%d %H:%M"),
+                                    "why": f"`{test}` fails on {tid}'s starting point, but that start holds salvaged work ({salv}). "
+                                           f"The salvage, not the test, is the likely cause: undo that commit if no attempt mends it.",
+                                    "tail": tail[:600]}
+                    elif not ok:
                         _done[k] = {"task": tid, "test": test, "kind": "fails-untouched", "certain": True, "when": time.strftime("%Y-%m-%d %H:%M"),
                                     "why": f"`{test}` must already pass before {tid} starts, and it fails on the code as it was "
                                            f"before the builder touched it (tried twice). The builder cannot fix this: the test "
@@ -160,6 +167,22 @@ def check(ws, run_untouched=True):
             pass
         (sd / "suspects.json").write_text(json.dumps(found, indent=1, ensure_ascii=False), encoding="utf-8")
     return found
+
+
+def salvaged_since_pass(ws, sha):
+    """-> 'abc1234 salvage: ...' when a salvage commit lies between the last passed task and `sha`, else None."""
+    out = subprocess.run(["git", "-C", str(ws), "log", "--format=%h %s", "-n", "30", sha], capture_output=True, text=True,
+                         encoding="utf-8", errors="replace").stdout.splitlines()
+    reverted = set()
+    for ln in out:
+        msg = ln.split(" ", 1)[-1]
+        if msg.startswith('Revert "salvage:'):
+            reverted.add(msg[len('Revert "'):].rstrip('"'))
+        elif msg.startswith("salvage:") and msg not in reverted:
+            return ln[:120]
+        if re.match(r"T\d+\w*: ", msg):                       # a passed task: older salvage is already proven by it
+            return None
+    return None
 
 
 def watch(ws, stop, log=print, every=60):

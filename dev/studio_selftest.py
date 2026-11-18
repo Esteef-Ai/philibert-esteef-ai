@@ -205,6 +205,10 @@ try:
         check("check catches a brief that redefines a function the app has (blind5's isTvBrowser)",
               studio_blind.clashes(b, {"brief": "1. `isTvBrowser()` takes nothing, returns boolean."}) == [("isTvBrowser", "public/index.html")]
               and studio_blind.clashes(b, {"brief": "function tvOnlyNewName() {} and calls isTvBrowser()"}) == [])
+        check("check catches an OK that clicks a button the browser already clicks (blind6), and passes one that stops the key",
+              len(studio_blind.double_ok({"brief": "} else if (e.key === 'Enter') {\n  if (cur) { cur.click(); }\n} else if (e.key === 'Escape') {"})) == 1
+              and studio_blind.double_ok({"brief": "} else if (e.key === 'Enter') { e.preventDefault(); cur.click(); }"}) == []
+              and studio_blind.double_ok({"brief": "OK (Enter) opens it; a mouse click() still works"}) == [])
         good = json.loads((d / "plan.json").read_text(encoding="utf-8"))          # the pack's own plan is a well-formed answer
         (b / "plan.json").write_text(json.dumps(good), encoding="utf-8")
         r = subprocess.run([sys.executable, str(DEV / "studio_blind.py"), "check", str(b)], capture_output=True, text=True, encoding="utf-8", errors="replace")

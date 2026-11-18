@@ -9,7 +9,9 @@ also what the Fire TV app (the next step) needs, since that app is this page in 
 - **See where they are.** One thing at a time has a bright outline (it is the real keyboard focus).
 - **Move.** An arrow key moves the outline to the nearest thing in that direction. It never gets lost and never
   lands on something hidden, on a link that would open another window, or behind an open pop-up.
-- **Press.** OK does what a click does, on buttons and on the things that are not real buttons.
+- **Press.** OK does what a click does, on buttons and on the things that are not real buttons. Exactly once: a focused
+  button or link already clicks itself on Enter, so code that clicks on OK stops the key first (one press, one
+  click; Sign in must ask Plex for one code, not two).
 - **The guide.** Left and Right walk along one channel's programmes; Up and Down go channel by channel and stay
   at the same time of day. Hidden channels are skipped. The guide scrolls so the outline is always on screen.
   When the guide redraws itself (every minute) the outline stays on the same programme.

@@ -163,6 +163,7 @@ def salvage(ws, tid, apply=False, log=print):
     state = json.loads((ws / ".foreman" / "state.json").read_text(encoding="utf-8"))
     m = json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8")) if (ws / ".studio" / "pack.json").is_file() else {}
     links = list(m.get("base_links") or [])
+    guards = set(m.get("guard_tests") or [])
     task = next(t for t in plan["tasks"] if t["id"] == tid)
     allowed = {rel_of(ws, f) for f in task.get("files") or []}
     own, keep = must_pass(ws, plan, state, tid)
@@ -180,6 +181,13 @@ def salvage(ws, tid, apply=False, log=print):
         log(f"  {tr.name}: {p} passed, {f} failed" + (f"; breaks {lost} older check(s): {'; '.join(broke)[:200]}" if lost else ""))
         # Worth keeping: it breaks nothing older, or at most MAX_LOST older checks while gaining at least MIN_GAIN of its
         # own. The foreman's "broke" gate then makes the next attempt mend what it broke, and says which checks.
+        # NEVER a guard (the parts of the app that worked before this pack, e.g. sign-in): blind6 (2026-11-17) kept a
+        # T01 at 41/42 that made Enter fire twice and broke 2 sign-in checks; every later attempt started broken, the
+        # suspect check then blamed the test, and the night was lost. MAX_LOST is for checks of earlier tasks only.
+        guard_broken = [b for b in broke if b.split(":", 1)[0] in guards]
+        if guard_broken:
+            log(f"  {tr.name}: not kept, it breaks a guard test ({'; '.join(guard_broken)[:160]})")
+            continue
         gain = p - max(base[0], 0)
         if f >= 0 and (lost == 0 or (lost <= MAX_LOST and gain >= MIN_GAIN)):
             score = p - lost

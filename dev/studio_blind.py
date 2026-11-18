@@ -424,7 +424,9 @@ B. For every file the task may change: the exact change. For an existing big fil
 exact line to add, and "read nothing else in it". For a new file: its outer shape (for a browser script: one \
 function wrapping everything, plain var and function, no modules). NEVER give a new function the name of one the \
 app already has (look in THE APP'S SOURCE): a second `function isTvBrowser()` replaces the page's own, and whatever \
-relied on it breaks. Where the spec says "the page's own X", CALL X; do not write it.
+relied on it breaks. Where the spec says "the page's own X", CALL X; do not write it. OK is the Enter key, and a \
+focused button or link ALREADY clicks itself on Enter: code that calls .click() on Enter must call e.preventDefault() \
+first, or every OK fires twice (Sign in asked for two pins and broke).
 C. The code in numbered parts, in the order to write them. For each part: the function's name, what it takes and \
 returns, and its rules as precisely as you can state them: which elements (by the ids and classes you can SEE in \
 the outline), which conditions, which order of checks. Where the choice of an algorithm decides whether the checks \
@@ -471,19 +473,17 @@ def briefs(ws, model, think, dry, only=None):
         if text:
             import nd_studio as S
             new = S.strip_think(text).strip()
-            clash = clashes(ws, {"brief": new})
-            if clash:                                          # blind5: a brief that redefined the page's isTvBrowser()
-                names = ", ".join(f"`{n}()` (already in {w})" for n, w in clash)
-                print(f"  {t['id']}: the rewrite declares {names}; asking once more", flush=True)
+            faults = brief_faults(ws, {"brief": new})
+            if faults:                                         # blind5: redefined isTvBrowser(); blind6: OK fired twice
+                print(f"  {t['id']}: the rewrite has {len(faults)} fault(s): {'; '.join(f[:90] for f in faults)}; asking once more", flush=True)
                 again = call(ws, f"blind_brief_{t['id']}", prompt + (
-                    f"\n\nNOTE: your last brief for this task declared {names}. The app already has that function; a second "
-                    "declaration replaces the app's own and breaks what uses it (the sign-in page broke in every attempt). "
-                    "Write the brief again so the code CALLS the app's function and never declares one of that name."),
+                    "\n\nNOTE: your last brief for this task had these faults, each of which broke the app in an earlier "
+                    "build:\n" + "\n".join("- " + f for f in faults) + "\nWrite the whole brief again without them."),
                     model, think, dry)
-                if again and not clashes(ws, {"brief": S.strip_think(again).strip()}):
+                if again and not brief_faults(ws, {"brief": S.strip_think(again).strip()}):
                     new = S.strip_think(again).strip()
                 else:
-                    print(f"  {t['id']}: the second rewrite still declares it; `check` will say NOT READY", flush=True)
+                    print(f"  {t['id']}: the second rewrite still has a fault; `check` will say NOT READY", flush=True)
             if len(new) < len(t.get("brief_short") or t.get("brief") or "") or len(new) < 1500:
                 print(f"  {t['id']}: the rewrite is {len(new)} characters, no better than the short brief: kept the short one")
             else:
@@ -565,6 +565,33 @@ def clashes(ws, task):
     return sorted((n, have[n]) for n in mine if n in have)
 
 
+def double_ok(task):
+    """-> the brief's Enter branches that call .click() with no preventDefault(). A focused button already clicks
+    itself on Enter, so such code fires every OK twice (blind6, 2026-11-17: T01's brief said `currentFocus.click()` on
+    Enter; Sign in asked Plex for two pins, the code screen never signed in, and every good attempt broke sign-in)."""
+    brief = str(task.get("brief") or "")
+    out = []
+    for mt in re.finditer(r"""key\s*===?\s*['"]Enter['"]|case\s+['"]Enter['"]""", brief):
+        rest = brief[mt.end():mt.end() + 900]
+        nxt = re.search(r"""key\s*===?\s*['"]|case\s+['"]|\n\s*\n""", rest)       # the next key's branch ends this one
+        branch = rest[:nxt.start()] if nxt else rest
+        if ".click()" in branch and "preventDefault" not in branch:
+            out.append(brief[mt.start():mt.end() + len(branch)].strip()[:160])
+    return out
+
+
+def brief_faults(ws, task):
+    """-> [message] for what a brief would surely break, each also said to the model when it is asked again."""
+    out = [f"the brief declares `{n}()`, which the app already has ({w}): a second declaration replaces the app's own and "
+           "breaks what uses it (blind5: the sign-in page). The code must CALL it and never declare one of that name"
+           for n, w in clashes(ws, task)]
+    out += [f"the brief's Enter (OK) branch calls .click() without e.preventDefault(): a focused button already clicks "
+            f"itself on Enter, so every OK fires twice (blind6: Sign in asked for two pins, sign-in broke). Call "
+            f"e.preventDefault() before .click(), and leave Enter alone while remote mode is off. The branch: {b}"
+            for b in double_ok(task)]
+    return out
+
+
 def check(ws):
     """Mechanical, no model: is the local plan buildable and do its tests fail on the app as it is?"""
     ws = Path(ws)
@@ -598,9 +625,8 @@ def check(ws):
             bad.append(f"{tn} passes before anything is built: it checks nothing new")
         elif fl < 0:
             bad.append(f"{tn} crashes or prints no summary instead of failing cleanly: {tail[-200:]}")
-        for name, where in clashes(ws, t):
-            bad.append(f"{t['id']}: the brief defines `{name}()`, which the app already has ({where}): a second one replaces "
-                       "the app's own and breaks what uses it. Run `briefs` again for this task, or mend the brief to call it")
+        for fault in brief_faults(ws, t):
+            bad.append(f"{t['id']}: {fault}. Run `briefs` again for this task, or mend the brief")
     m = json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8"))
     if m.get("plan_only"):
         want, _, _ = acceptance(ws, m)
