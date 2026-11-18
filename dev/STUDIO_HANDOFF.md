@@ -463,3 +463,13 @@ nothing. Compare with blind4: T01 passed, T02 stuck at 29 of 31, T03 skipped; gr
   unchanged.
 - Read honestly: n=2 plan-only trials, 1 finished. Each failure so far was ONE wrong line in a brief that broke an
   unrelated, already-working part (sign-in), twice. Guard-breaking is the pattern to watch.
+
+## 20. blind6 rebuild (2026-11-17/18): T01 passed; briefs name page parts that do not exist
+- After the T01 brief redo, T01 passed on attempt 3 (22:53) from the salvaged 4/7 start. T02 failed attempt 1 at 8/19
+  (logo and Up/Down moves); the build was still running at midnight.
+- Cause found in the briefs: code marked "use exactly this" looks up `.channel-logo` (the app's logos are `.logo-tile`)
+  and `#chat-panel` (no such element). T02-T05 of blind6 all had one; blind4 and blind5 had them too (`.fav-star`,
+  `.channel-name`), and blind5 still finished, so the builder sometimes works round them. The pack's own plan has none.
+- New: `ghost_names` in studio_blind.py (commit 0ba766c). `check` says NOT READY for a brief whose code looks up an
+  id/class that is not in the staged app, the spec or the tests, and that this or an earlier brief does not create;
+  `briefs` re-asks once. The brief prompt says it too. Self-test 44/44. blind6 itself was left alone while it builds.
