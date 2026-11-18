@@ -473,3 +473,16 @@ nothing. Compare with blind4: T01 passed, T02 stuck at 29 of 31, T03 skipped; gr
 - New: `ghost_names` in studio_blind.py (commit 0ba766c). `check` says NOT READY for a brief whose code looks up an
   id/class that is not in the staged app, the spec or the tests, and that this or an earlier brief does not create;
   `briefs` re-asks once. The brief prompt says it too. Self-test 44/44. blind6 itself was left alone while it builds.
+
+## 21. blind6 rebuild result (2026-11-18): T01 passed, T02 stuck, graded 75/131 (guards 77/77)
+- T02's own test reached 19/19 in three attempts (r1_a2, a1, a2), and every one broke 10-16 of T01's checks
+  ("arrows alone reach the Browse button ..."). The brief's "use exactly this" walk did `if (nextR < 0) return` at the
+  top row: the highlight was trapped in the guide. Leaving the guide upward was only in T03's brief. The planner wrote
+  a task that undoes the one before; the foreman's broke gate said so, and 40 minutes was not enough to mend it.
+- a2 also lost to the scope gate: it debugged by editing the hidden test 38 times and left `tests/debug_test.py`
+  (its rm/del did not take). Its code replayed only after salvage learnt OpenCode's block-anchor edit match
+  (`anchored_span`); it was 19/19 and broke the same 10 checks, so salvage rightly kept nothing.
+- Fixes (eb461ff, 8f5393e): the brief prompt lists every earlier task's check labels under WHAT MUST KEEP PASSING,
+  with a rule to hand the key on at the edge of a new walk; salvage replays block-anchor edits; `check` lets a task
+  the foreman already passed pass. Self-test 45/45.
+- blind6 now: `check` NOT READY only for the ghost names in T02-T05 (section 20). Redo those four briefs, then build.
