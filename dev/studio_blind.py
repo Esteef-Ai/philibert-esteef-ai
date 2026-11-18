@@ -411,6 +411,10 @@ THE TASK TO REWRITE:
 WHAT JUDGES IT (the label of every check, in the order they run; all must come true):
 {labels}
 
+WHAT MUST KEEP PASSING (the checks of the earlier tasks, already true when this task starts; code this task replaces \
+or adds must leave every one of them true):
+{kept}
+
 BRIEFS ALREADY REWRITTEN for earlier tasks (this task builds on that code; reuse its names, never redefine them):
 {earlier}
 
@@ -428,7 +432,10 @@ relied on it breaks. Where the spec says "the page's own X", CALL X; do not writ
 focused button or link ALREADY clicks itself on Enter: code that calls .click() on Enter must call e.preventDefault() \
 first, or every OK fires twice (Sign in asked for two pins and broke). Every id and class your code looks up must be \
 one THE APP'S SOURCE really has, or one this task or an earlier one creates: never a likely-sounding name (the guide's \
-logos are `.logo-tile`; a brief that said `.channel-logo` found nothing and its checks failed).
+logos are `.logo-tile`; a brief that said `.channel-logo` found nothing and its checks failed). Code that replaces \
+or wraps an earlier task's must keep doing everything WHAT MUST KEEP PASSING needs: at the edge of a new walk, hand \
+the key on to the old behaviour, never just `return` (blind6: a guide walk that stopped at the top row trapped the \
+highlight in the guide and broke ten checks of the task before).
 C. The code in numbered parts, in the order to write them. For each part: the function's name, what it takes and \
 returns, and its rules as precisely as you can state them: which elements (by the ids and classes you can SEE in \
 the outline), which conditions, which order of checks. Where the choice of an algorithm decides whether the checks \
@@ -441,6 +448,16 @@ F. "When a check fails": two or three hints on how to find the cause (what to pr
 Aim for 4,000 to 8,000 characters. Exact names beat prose. Never name an id, class or function that is neither in \
 the outline, the spec, nor defined by a brief.
 """
+
+
+def check_labels(src):
+    """The label of every check(...) in a test file, in order, once each."""
+    labels = []
+    for lab in re.findall(r"""check\(\s*f?(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')""", src):
+        lab = (lab[0] or lab[1]).replace('\\"', '"').replace("\\'", "'")
+        if lab not in labels:
+            labels.append(lab)
+    return labels
 
 
 def briefs(ws, model, think, dry, only=None):
@@ -461,16 +478,18 @@ def briefs(ws, model, think, dry, only=None):
             done.append(t)
             continue
         src = (ws / str(own(t))).read_text(encoding="utf-8", errors="replace") if m.get("plan_only") and (ws / str(own(t))).is_file() else ""
-        labels = []
-        for lab in re.findall(r"""check\(\s*f?(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')""", src):
-            lab = (lab[0] or lab[1]).replace('\\"', '"').replace("\\'", "'")
-            if lab not in labels:
-                labels.append(lab)
+        labels = check_labels(src)
+        kept = []
+        for x in done:                                         # blind6 T02 broke T01's checks in every attempt
+            f = ws / str(own(x))
+            if m.get("plan_only") and f.is_file():
+                kept += [f"  - ({x['id']}) " + lab for lab in check_labels(f.read_text(encoding="utf-8", errors="replace"))]
         task = (f"{t['id']} {t['title']}\nFiles it may change: {', '.join(t.get('files') or [])}\nAfter: "
                 f"{', '.join(t.get('depends_on') or []) or 'nothing'}\nThe short brief:\n{t.get('brief_short') or t.get('brief')}")
         earlier = "\n\n".join(f"--- {x['id']} {x['title']} ---\n{x.get('brief')}" for x in done) or "(none: this is the first task)"
         prompt = BRIEF.format(spec=(ws / "SPEC.md").read_text(encoding="utf-8"), summary=summary, task=task, source=source,
-                              labels="\n".join("  - " + x for x in labels) or "  (the spec is the only judge)", earlier=earlier[-24_000:])
+                              labels="\n".join("  - " + x for x in labels) or "  (the spec is the only judge)", earlier=earlier[-24_000:],
+                              kept="\n".join(kept)[-6_000:] or "  (none: this is the first task)")
         text = call(ws, f"blind_brief_{t['id']}", prompt, model, think, dry)
         if text:
             import nd_studio as S

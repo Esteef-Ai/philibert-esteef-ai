@@ -213,6 +213,11 @@ try:
                                                   " x = document.querySelector('#guide-rows > .guide-row .logo-tile');"
                                                   " if (document.body.classList.contains('tv-new-thing')) {}"},
                                      [{"brief": "document.body.classList.add('tv-new-thing')"}])
+        import studio_salvage as _SV
+        _txt = "a\nfunction f(el){\n  if(!el) return;\n  el.focus();\n  extra = 1;\n}\nz"
+        check("salvage replays an edit the way OpenCode matches a block by its first and last lines (blind6 T02_a2)",
+              _SV.anchored_span(_txt, "function f(el){\n  if(!el) return;\n  el.focus();\n}") == (1, 6)
+              and _SV.anchored_span(_txt, "a\nz") is None)
         check("check catches a brief that looks up ids/classes the app lacks (blind6's .channel-logo), not real or made ones",
               g == ["#chat-panel", ".channel-logo"], g)
         good = json.loads((d / "plan.json").read_text(encoding="utf-8"))          # the pack's own plan is a well-formed answer

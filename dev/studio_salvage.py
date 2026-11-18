@@ -75,7 +75,7 @@ def replay(ws, transcript, allowed, start_sha):
         elif old in cur:
             files[rel] = cur.replace(old, new) if inp.get("replaceAll") else cur.replace(old, new, 1)
         else:
-            span = trimmed_span(cur, old)                      # OpenCode's edit forgives indentation; so must the replay
+            span = trimmed_span(cur, old) or anchored_span(cur, old)   # OpenCode's edit forgives both; so must the replay
             if span is None:
                 return None
             lines = cur.split("\n")
@@ -90,6 +90,34 @@ def trimmed_span(text, old):
     have = [ln.strip() for ln in text.split("\n")]
     hits = [i for i in range(len(have) - len(want) + 1) if have[i:i + len(want)] == want]
     return (hits[0], hits[0] + len(want)) if len(hits) == 1 else None
+
+
+def anchored_span(text, old):
+    """OpenCode's block-anchor match: a block of 3+ lines whose first and last lines (stripped) equal those of `old`,
+    the middle allowed to differ. One candidate is taken as is; of several, the one whose middle is most alike, when at
+    least 30% alike (OpenCode's own thresholds). blind6 T02_a2 (2026-11-18): the builder's edit #69 replaced a function
+    that had gained a line, OpenCode applied it, and the replay gave up on the attempt that reached 19 of 19."""
+    import difflib
+    want = [ln.strip() for ln in old.strip("\n").split("\n")]
+    if len(want) < 3:
+        return None
+    have = [ln.strip() for ln in text.split("\n")]
+    cands = []
+    for i, h in enumerate(have):
+        if h != want[0]:
+            continue
+        for j in range(i + 2, len(have)):
+            if have[j] == want[-1]:
+                cands.append((i, j + 1))
+                break
+    if len(cands) == 1:
+        return cands[0]
+    best, score = None, 0.3
+    for a, b in cands:
+        s = difflib.SequenceMatcher(None, "\n".join(have[a + 1:b - 1]), "\n".join(want[1:-1])).ratio()
+        if s >= score:
+            best, score = (a, b), s
+    return best
 
 
 def copy_of(ws, dest, links):
