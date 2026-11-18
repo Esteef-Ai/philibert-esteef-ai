@@ -690,6 +690,11 @@ def check(ws):
         bad.append("the plan has no tasks")
     if len(set(ids)) != len(ids):
         bad.append("two tasks share an id")
+    try:
+        fst = json.loads((ws / ".foreman" / "state.json").read_text(encoding="utf-8"))
+        done_ids = {k for k, v in (fst.get("tasks") or {}).items() if v.get("status") == "passed"}
+    except (OSError, ValueError):
+        done_ids = set()
     names = [own(t) for t in pl.get("tasks") or []]
     if len(set(names)) != len(names):
         bad.append("two tasks share a test file")
@@ -708,7 +713,7 @@ def check(ws):
             continue
         p, fl, ok, tail = P.run_test(py, ws, tn, 300)
         print(f"  {tn:36} on the app as it is: {p} passed, {fl} failed")
-        if ok:
+        if ok and t["id"] not in done_ids:                    # a task the foreman passed may pass (a rebuild after briefs)
             bad.append(f"{tn} passes before anything is built: it checks nothing new")
         elif fl < 0:
             bad.append(f"{tn} crashes or prints no summary instead of failing cleanly: {tail[-200:]}")
