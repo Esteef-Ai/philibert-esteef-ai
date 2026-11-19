@@ -497,3 +497,9 @@ nothing. Compare with blind4: T01 passed, T02 stuck at 29 of 31, T03 skipped; gr
   not hold; the planner keeps writing fixed jumps at the guide's edge.
 - Salvage: a FINISHED attempt (all own checks pass) may break up to MAX_LOST_FINISHED=5 older checks, never a guard.
   Applied to blind6 (af3bd3d): T03 starts at 10/10 with 4 T01 checks to mend. Self-test 45/45.
+- (later, 2026-11-18 night) T04's brief failed `check` after three `briefs` runs: it kept declaring closePlayer()
+  (the outline sent to the planner is cut to fit, so it never sees the app's own) and looked up `#media-view` (the
+  app's is `#theater-toggle`, a button labelled "Media view"). Now (b58ecba + this commit): fault messages quote the
+  app's own function (file, line, first lines) and name the real element a ghost meant (by its visible words, else a
+  shared word); `briefs` re-asks up to twice and keeps the least-faulty; `check` exempts tasks the foreman worked on
+  (the T03 salvage made its test pass); studio_blind prints UTF-8 (a hint quoted an emoji and crashed cmd.exe).

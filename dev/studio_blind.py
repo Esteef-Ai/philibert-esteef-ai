@@ -915,6 +915,10 @@ def grade(ws):
 
 
 def main(a):
+    try:                                                      # a hint can quote the page ("🖥 Media view"); cmd.exe is cp1252
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
     model = opt(a, "--model", "q36c-nd64k")
     dry, think, plan_only = "--dry" in a, "--no-think" not in a, "--plan-only" in a
     a = [x for x in a if x not in ("--dry", "--no-think", "--plan-only")]
