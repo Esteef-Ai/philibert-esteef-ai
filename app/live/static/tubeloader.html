@@ -125,6 +125,14 @@
   .banner.good { background: rgba(16,185,129,.12); border: 1px solid var(--green); color: #b6f5dc; }
   .banner.badb { background: rgba(255,107,122,.08); border: 1px solid rgba(255,107,122,.5); color: #ffc9cf; }
   .banner .sp { flex: 1; }
+  ul.checks { list-style: none; margin-top: 4px; }
+  ul.checks li { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(30,48,84,.6); }
+  ul.checks li:last-child { border-bottom: 0; }
+  ul.checks .m { width: 20px; flex: none; font-weight: 700; }
+  ul.checks .y { color: var(--green); } ul.checks .n { color: var(--red); }
+  ul.checks small { display: block; color: var(--dim); }
+  ul.checks em { display: block; color: var(--amber); font-style: normal; font-size: 13px; margin-top: 2px; }
+  .mem li { color: var(--dim); font-size: 13px; margin: 4px 0; }
 </style>
 </head>
 <body>
@@ -269,11 +277,12 @@
       return;
     }
     var h = "<h1>" + esc(d.name) + '</h1><p class="lead">' + esc(d.kind_name + (d.model ? " · " + d.model : "") + " · " + d.ip) + "</p>";
-    h += '<div class="card"><h3>This device <span class="right pill ' + d.status + '">' +
+    h += '<div class="card"><h3>This device <span class="right"><button class="btn" id="health" type="button">HEALTH CHECK</button></span>' +
+      '<span class="pill ' + d.status + '">' +
       ({ ready: "READY", pair: "PAIR ONCE", setup: "NEEDS SETUP", no: "CAN'T TAKE APPS", unknown: "UNKNOWN" }[d.status] || "") + "</span></h3>" +
       '<div class="facts">' + fact("Kind", d.kind_name) + fact("Address", d.ip) + (d.model ? fact("Model", d.model) : "") +
       fact("Takes", d.accepts === "apk" ? "Android apps (.apk)" : d.accepts === "zip" ? "Roku channels (.zip)" : "-") + "</div>" +
-      (d.note ? '<p class="note">' + esc(d.note) + "</p>" : "") + "</div>";
+      (d.note ? '<p class="note">' + esc(d.note) + "</p>" : "") + '<div id="healthOut"></div></div>';
     if (d.kind === "appletv") {
       h += '<div class="card"><h3>About Apple TV</h3><p>An APK can never run on Apple TV - it needs a <b>tvOS</b> version of the app, written for Apple TV, ' +
         "and signed with an <b>Apple developer account</b> (a free Apple ID lasts 7 days, the paid account a year).</p>" +
@@ -294,26 +303,40 @@
         '<button class="btn" id="usePath" type="button">USE</button></div>';
       else {
         h += '<div class="facts">' + fact("File", f.name) + fact("Size", mb(f.size)) +
-          (f.type === "roku" ? fact("Channel", f.title) + fact("Version", f.version_name || "-")
+          (f.type === "roku" ? fact("Channel", f.title) + fact("Version", f.version_name || "-") +
+              fact("Kind", (f.roku_kind || "") + " · " + (f.roku_files || 0) + " files")
             : fact("App", f.package) + fact("Version", (f.version_name || "?") + " (" + f.version_code + ")") +
               fact("Needs", "Android " + (SDK[f.min_sdk] || "API " + f.min_sdk) + "+") + fact("Processors", f.abis.length ? f.abis.join(", ") : "any") +
               fact("TV home screen", f.tv_launcher ? "yes" : "no - a phone app")) + "</div>";
         var bad = "";
         if (d.accepts === "apk" && f.type === "roku") bad = "That's a Roku channel - this TV takes Android apps (.apk).";
         if (d.accepts === "zip" && f.type !== "roku") bad = "A Roku can't install an APK (it isn't Android). It takes a Roku channel .zip.";
+        if (f.type === "roku") {
+          (f.problems || []).forEach(function (x) { h += '<p class="bad">✕ ' + esc(x) + "</p>"; });
+          (f.warnings || []).forEach(function (x) { h += '<p class="warn">! ' + esc(x) + "</p>"; });
+          if (!(f.problems || []).length && !(f.warnings || []).length) h += '<p class="note">✓ The zip looks right for a Roku.</p>';
+        }
         if (bad) h += '<p class="bad">' + bad + "</p>";
         else if (f.type !== "roku" && !f.tv_launcher) h += '<p class="warn">This app has no TV home-screen entry, so it may not show on the TV\'s home row (it can still be opened from Settings &gt; Apps).</p>';
       }
       h += "</div>";
-      var can = f && !((d.accepts === "apk") !== (f.type !== "roku")) && (d.accepts !== "apk" || (st.status && st.status.adb));
+      var can = f && !((d.accepts === "apk") !== (f.type !== "roku")) && (d.accepts !== "apk" || (st.status && st.status.adb)) &&
+        !(f.problems && f.problems.length);
       h += '<div class="go">' + (st.job && !st.jobDone ? '<button class="btn danger" id="stop" type="button">STOP</button>'
         : '<button class="btn primary big" id="push" type="button"' + (can ? "" : " disabled") + ">PUSH TO " + esc(d.name.toUpperCase()) + "</button>") +
         (d.accepts === "apk" && st.status && !st.status.adb ? '<span class="warn" style="margin:0">Get ADB first (top right).</span>' : "") + "</div>";
     }
-    h += '<div id="run"></div>';
+    h += '<div id="run"></div><div id="mem"></div>';
     v.innerHTML = h;
+    api("journal").then(function (r) {
+      var mine = (r.lines || []).filter(function (l) { return l.indexOf(d.ip + ")") >= 0 || l.indexOf(d.name) >= 0; });
+      if (mine.length && $("mem")) $("mem").innerHTML = '<div class="card"><h3>What Philibert remembers about ' + esc(d.name) +
+        '</h3><ul class="mem">' + mine.slice(-6).map(function (l) { return "<li>" + esc(l) + "</li>"; }).join("") + "</ul>" +
+        '<p class="note">From your notes: ' + esc(r.path) + "</p></div>";
+    });
     if ($("setupSteps")) api("steps", { kind: d.kind }).then(function (r) { $("setupSteps").innerHTML = r.steps.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join(""); });
     if ($("recheck")) $("recheck").onclick = recheck;
+    if ($("health")) $("health").onclick = healthCheck;
     if ($("pick")) $("pick").onclick = pick;
     if ($("usePath")) $("usePath").onclick = function () {
       var path = $("path").value.trim().replace(/^"|"$/g, "");
@@ -322,6 +345,17 @@
     if ($("push")) $("push").onclick = push;
     if ($("stop")) $("stop").onclick = function () { api("cancel", { id: st.job }); };
     drawRun();
+  }
+  function healthCheck() {
+    var b = $("health"); b.disabled = true; b.textContent = "CHECKING…";
+    api("health", { device: st.sel }).then(function (r) {
+      b.disabled = false; b.textContent = "HEALTH CHECK";
+      if (!r.ok) return;
+      $("healthOut").innerHTML = '<ul class="checks">' + r.checks.map(function (c) {
+        return '<li><span class="m ' + (c.ok ? "y" : "n") + '">' + (c.ok ? "✓" : "✕") + "</span><div><b>" + esc(c.name) + "</b><small>" +
+          esc(c.detail || "") + "</small>" + (!c.ok && c.fix ? "<em>" + esc(c.fix) + "</em>" : "") + "</div></li>";
+      }).join("") + "</ul>";
+    });
   }
   function recheck() {
     $("recheck").disabled = true; $("recheck").textContent = "CHECKING…";

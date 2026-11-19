@@ -18844,7 +18844,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/tubeloader":
                 import nd_tubeloader
-                self.send_json(nd_tubeloader.handle(body, _drive_root(), _CONFIG_DIR, *tubeloader_assistant()))
+                _o = obs()
+                self.send_json(nd_tubeloader.handle(body, _drive_root(), _CONFIG_DIR, *tubeloader_assistant(),
+                                                    vault=str(_o.vault) if _o else None))
                 return
             if path == "/api/guitartab":
                 import nd_guitartab
