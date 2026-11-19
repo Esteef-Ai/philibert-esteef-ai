@@ -7,7 +7,7 @@ where the build stands; .studio/journal.jsonl says who did what.
 
     python dev/studio_pack.py verify <pack> [--full] [--mutants 30]   is the pack sound? (minutes, no model)
     python dev/studio_pack.py new <pack> <workspace>                  a fresh workspace, ready to build
-    python dev/studio_pack.py build <workspace> [--max-hours 6] [--rounds 1]   the unattended build (YOU launch it)
+    python dev/studio_pack.py build <workspace> [--max-hours 6] [--rounds 1] [--force]   the unattended build (YOU launch it); a blind trial needs `check` READY
     python dev/studio_pack.py tweak <workspace> <tweak>               add a tweak (new tasks + their tests) to a built workspace
     python dev/studio_pack.py rules <workspace>                       add the shared builder rules (packs/BUILDER_RULES.json)
     python dev/studio_pack.py status <workspace>                      rewrite .studio/HANDOFF.md
@@ -933,6 +933,24 @@ def build(ws, max_hours=6.0, rounds=1):
     return 0
 
 
+def not_ready(ws):
+    """A blind trial builds only after `check` said READY on this plan.json (blind6, 2026-11-18: built while check said
+    T04's brief re-declares three of the page's own functions). -> the reason, or None. Other workspaces: always None."""
+    ws = Path(ws)
+    try:
+        if not json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8")).get("plan_only"):
+            return None
+    except (OSError, ValueError):
+        return None
+    f = ws / ".studio" / "blind_check.json"
+    if not f.is_file():
+        return "`check` has not been run on this plan"
+    if f.stat().st_mtime < (ws / "plan.json").stat().st_mtime:
+        return "plan.json changed after the last `check`"
+    probs = json.loads(f.read_text(encoding="utf-8")).get("problems") or []
+    return f"the last `check` said NOT READY ({len(probs)} problem(s), first: {probs[0][:160]})" if probs else None
+
+
 def opt(argv, name, default):
     if name in argv:
         i = argv.index(name)
@@ -960,6 +978,9 @@ def main():
         new(a[1], a[2])
     elif cmd == "build":
         hours, rounds = float(opt(a, "--max-hours", 6)), int(opt(a, "--rounds", 1))
+        why = not_ready(a[1])
+        if why and "--force" not in a:
+            sys.exit(f"not building: {why}\nRun `studio_blind.py check {a[1]}` until it says READY (or add --force).")
         sys.exit(build(a[1], hours, rounds))
     elif cmd == "tweak":
         tweak(a[1], a[2])

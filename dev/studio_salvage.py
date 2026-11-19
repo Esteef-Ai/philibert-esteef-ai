@@ -26,6 +26,7 @@ import studio_pack as P  # noqa: E402
 
 MAX_LOST = 2        # older checks a kept attempt may break (the next attempt must mend them)
 MIN_GAIN = 5        # own checks it must gain to be allowed to break any
+MAX_LOST_FINISHED = 5   # older checks an attempt that passes ALL its own may break (never a guard's)
 SKIP = (".git", ".venv", ".foreman", ".studio", "node_modules", "__pycache__", ".nd_backups")
 
 
@@ -217,7 +218,11 @@ def salvage(ws, tid, apply=False, log=print):
             log(f"  {tr.name}: not kept, it breaks a guard test ({'; '.join(guard_broken)[:160]})")
             continue
         gain = p - max(base[0], 0)
-        if f >= 0 and (lost == 0 or (lost <= MAX_LOST and gain >= MIN_GAIN)):
+        # A FINISHED attempt (all its own checks pass) that breaks a few older checks is a mending job for the next
+        # attempt, which the foreman's broke gate names exactly. blind6 T03 (2026-11-18): three attempts reached 10 of 10,
+        # the best broke 4 of T01's "arrows alone reach ..." checks; the rule above threw it away and the task stuck.
+        finished = f == 0 and p > 0 and lost <= MAX_LOST_FINISHED
+        if f >= 0 and (lost == 0 or (lost <= MAX_LOST and gain >= MIN_GAIN) or finished):
             score = p - lost
             if best is None or score > best["score"]:
                 best = {"transcript": tr.name, "passed": p, "failed": f, "older_broken": lost, "score": score, "files": files}

@@ -486,3 +486,14 @@ nothing. Compare with blind4: T01 passed, T02 stuck at 29 of 31, T03 skipped; gr
   with a rule to hand the key on at the edge of a new walk; salvage replays block-anchor edits; `check` lets a task
   the foreman already passed pass. Self-test 45/45.
 - blind6 now: `check` NOT READY only for the ghost names in T02-T05 (section 20). Redo those four briefs, then build.
+
+## 22. blind6 third build (2026-11-18 evening): T02 passed, T03 stuck, graded 94/131 (guards 77/77)
+- Built while `check` said NOT READY (T04's brief re-declares openPlayNow/closePlayNow/closePlayer). New gate:
+  `studio_pack.py build` refuses a blind trial unless the last `check` said READY after plan.json last changed
+  (`--force` overrides).
+- T02 passed on its first attempt of round 2. T03: three attempts reached 10/10 of its own test, each breaking T01's
+  "arrows alone reach ..." checks (best: 4). The new brief had T01's labels under WHAT MUST KEEP PASSING and the edge
+  rule, and still wrote "Up from the top row returns #avatar", skipping Browse/search/zoom. The prompt rule alone does
+  not hold; the planner keeps writing fixed jumps at the guide's edge.
+- Salvage: a FINISHED attempt (all own checks pass) may break up to MAX_LOST_FINISHED=5 older checks, never a guard.
+  Applied to blind6 (af3bd3d): T03 starts at 10/10 with 4 T01 checks to mend. Self-test 45/45.
