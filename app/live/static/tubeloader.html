@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Philibert TubeLoader</title>
+<link href="/live/fonts/fonts.css" rel="stylesheet">
+<link rel="icon" href="/live/philibert-p1.svg">
+<!-- TubeLoader (nd_tubeloader.py): find the TVs on the home network, put an app on one (APK through ADB,
+     Roku .zip through its developer installer), with Philibert assisting when the TV says no. -->
+<style>
+  :root {
+    --navy: #0f172a; --deep: #0a1120; --panel: #111d36; --raise: #162544; --line: #1e3054;
+    --cyan: #00f2fe; --amber: #f59e0b; --green: #10b981; --pink: #ff2e88; --red: #ff6b7a;
+    --txt: #d7e3f4; --dim: #8ea3c4; --faint: #6f86a8;
+    --font: 'Inter', system-ui, sans-serif; --mono: 'JetBrains Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--navy); color: var(--txt); font: 14px/1.45 var(--font); overflow: hidden; }
+  button, input { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+  .app { display: grid; grid-template-rows: 56px 1fr; height: 100%; }
+  header { display: flex; align-items: center; gap: 12px; padding: 0 18px; background: linear-gradient(180deg, #101b33, #0d1729);
+           border-bottom: 1px solid var(--line); position: relative; }
+  header::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+                  background: linear-gradient(90deg, transparent, rgba(0,242,254,.5), transparent); }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand svg { width: 30px; height: 30px; color: var(--cyan); filter: drop-shadow(0 0 6px rgba(0,242,254,.4)); }
+  .brand b { font: 800 16px Montserrat, var(--font); letter-spacing: .1em; color: #fff; display: block; line-height: 1.1; }
+  .brand span { font: 10px var(--mono); letter-spacing: .2em; color: var(--cyan); }
+  .spacer { flex: 1; }
+  .chip { font: 11px var(--mono); letter-spacing: .04em; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line);
+          color: var(--dim); background: rgba(22,37,68,.5); display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+  .chip.ok i { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .chip.warn i { background: var(--amber); }
+  .btn { font: 11px var(--mono); letter-spacing: .1em; color: var(--dim); background: rgba(22,37,68,.5); border: 1px solid var(--line);
+         border-radius: 7px; padding: 8px 13px; cursor: pointer; white-space: nowrap; transition: color .15s, border-color .15s, background .15s; }
+  .btn:hover:not(:disabled) { color: var(--cyan); border-color: rgba(0,242,254,.5); }
+  .btn.primary { color: #04131c; background: var(--cyan); border-color: var(--cyan); font-weight: 700; }
+  .btn.primary:hover:not(:disabled) { color: #04131c; background: #5ff7ff; }
+  .btn.big { font-size: 13px; padding: 12px 22px; }
+  .btn.danger { color: var(--pink); border-color: rgba(255,46,136,.5); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn:focus-visible, input:focus-visible, .dev:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  .main { display: grid; grid-template-columns: 340px minmax(0, 1fr); min-height: 0; }
+  aside { border-right: 1px solid var(--line); background: var(--deep); display: flex; flex-direction: column; min-height: 0; }
+  .side-head { padding: 14px 14px 10px; display: flex; align-items: center; gap: 8px; }
+  .side-head h2 { font: 600 11px var(--mono); letter-spacing: .16em; color: var(--faint); text-transform: uppercase; flex: 1; }
+  .bar { height: 4px; border-radius: 4px; background: var(--raise); overflow: hidden; margin: 0 14px 8px; }
+  .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--cyan), #7af6ff); transition: width .3s; }
+  .scanmsg { font-size: 12px; color: var(--dim); padding: 0 14px 8px; }
+  .list { overflow: auto; padding: 0 10px 12px; flex: 1; }
+  .group { font: 600 10px var(--mono); letter-spacing: .16em; color: var(--faint); text-transform: uppercase; margin: 12px 4px 6px; }
+  .dev { display: flex; gap: 11px; align-items: center; width: 100%; text-align: left; background: var(--panel); border: 1px solid var(--line);
+         border-radius: 10px; padding: 10px 11px; margin-bottom: 7px; cursor: pointer; transition: border-color .15s, background .15s; }
+  .dev:hover { border-color: rgba(0,242,254,.35); }
+  .dev.on { border-color: var(--cyan); background: #12244a; box-shadow: 0 0 0 1px rgba(0,242,254,.25) inset; }
+  .dev .ico { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; flex: none; font-size: 17px;
+              background: var(--raise); border: 1px solid var(--line); }
+  .dev b { display: block; font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dev small { display: block; color: var(--faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dev .grow { flex: 1; min-width: 0; }
+  .pill { font: 600 10px var(--mono); letter-spacing: .06em; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+  .pill.ready { color: #04131c; background: var(--green); }
+  .pill.pair, .pill.setup { color: #1a1204; background: var(--amber); }
+  .pill.no, .pill.unknown { color: var(--dim); background: var(--raise); }
+  .more { font-size: 12px; color: var(--cyan); background: none; border: 0; cursor: pointer; padding: 4px; }
+  .addip { display: flex; gap: 6px; padding: 10px 14px 14px; border-top: 1px solid var(--line); }
+  .addip input { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 7px 10px; }
+  section.view { overflow: auto; padding: 22px 28px 40px; }
+  h1 { font: 700 22px Montserrat, var(--font); color: #fff; margin-bottom: 4px; }
+  .lead { color: var(--dim); max-width: 760px; margin-bottom: 18px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; max-width: 900px; }
+  .card h3 { font: 600 11px var(--mono); letter-spacing: .16em; color: var(--faint); text-transform: uppercase; margin-bottom: 10px;
+             display: flex; align-items: center; gap: 10px; }
+  .card h3 .right { margin-left: auto; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px 18px; }
+  .facts small { display: block; font: 600 10px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+  .facts b { font-weight: 500; color: #fff; word-break: break-word; }
+  .note { color: var(--dim); font-size: 13px; margin-top: 10px; }
+  .warn { color: var(--amber); font-size: 13px; margin-top: 8px; }
+  .bad { color: var(--red); font-size: 13px; margin-top: 8px; }
+  ol.steps { margin: 8px 0 4px 20px; color: var(--txt); }
+  ol.steps li { margin: 4px 0; }
+  .three { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; max-width: 900px; }
+  .three .card { margin: 0; }
+  .three b { color: #fff; display: block; margin-bottom: 4px; }
+  .three p { color: var(--dim); font-size: 13px; }
+  .go { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  /* the timeline */
+  .tl { list-style: none; max-width: 900px; }
+  .tl li { display: flex; gap: 12px; padding: 7px 0; animation: in .25s ease-out; }
+  @keyframes in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .tl .mk { width: 24px; height: 24px; border-radius: 50%; flex: none; display: grid; place-items: center; font-size: 13px; font-weight: 700;
+            background: var(--raise); border: 1px solid var(--line); color: var(--dim); }
+  .tl .ok .mk { background: rgba(16,185,129,.15); border-color: var(--green); color: var(--green); }
+  .tl .fail .mk { background: rgba(255,107,122,.12); border-color: var(--red); color: var(--red); }
+  .tl .info .mk { border-color: var(--amber); color: var(--amber); }
+  .tl .rule .mk { border-color: #7aa2ff; color: #9bb8ff; }
+  .tl .step.live .mk { border-color: var(--cyan); border-top-color: transparent; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .tl .tx { flex: 1; min-width: 0; }
+  .tl .tx b { font-weight: 500; color: #fff; }
+  .tl pre { font: 11.5px/1.4 var(--mono); color: var(--faint); white-space: pre-wrap; word-break: break-word; margin-top: 4px;
+            background: var(--deep); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; max-height: 140px; overflow: auto; }
+  .phil { display: flex; gap: 12px; padding: 10px 0; animation: in .3s ease-out; }
+  .phil .av { width: 38px; height: 38px; border-radius: 12px; flex: none; background: radial-gradient(circle at 35% 30%, #1e3054, #0b1222);
+              border: 1px solid rgba(0,229,255,.5); display: grid; place-items: center; box-shadow: 0 0 12px rgba(0,229,255,.25); }
+  .phil .av svg { width: 26px; height: 26px; }
+  .phil .bub { flex: 1; background: linear-gradient(180deg, #13284d, #102040); border: 1px solid rgba(0,229,255,.3); border-radius: 4px 14px 14px 14px;
+               padding: 11px 14px; max-width: 760px; }
+  .phil .who { font: 700 10px var(--mono); letter-spacing: .16em; color: var(--cyan); margin-bottom: 4px; }
+  .phil.off .bub { border-color: rgba(245,158,11,.45); background: #241c0e; }
+  .phil.off .who { color: var(--amber); }
+  .dots i { display: inline-block; width: 6px; height: 6px; margin-right: 4px; border-radius: 50%; background: var(--cyan); animation: dot 1.2s infinite; }
+  .dots i:nth-child(2) { animation-delay: .2s; } .dots i:nth-child(3) { animation-delay: .4s; }
+  @keyframes dot { 0%, 80%, 100% { opacity: .25; transform: scale(.8); } 40% { opacity: 1; transform: none; } }
+  .ask { margin: 8px 0 8px 50px; padding: 12px 14px; border: 1px dashed rgba(0,242,254,.5); border-radius: 12px; max-width: 710px;
+         background: rgba(0,242,254,.04); animation: in .3s ease-out; }
+  .ask p { margin-bottom: 10px; }
+  .ask .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .ask input { background: var(--deep); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; width: 150px; }
+  .banner { max-width: 900px; border-radius: 12px; padding: 16px 18px; margin: 12px 0; font-weight: 600; display: flex; align-items: center; gap: 14px; }
+  .banner.good { background: rgba(16,185,129,.12); border: 1px solid var(--green); color: #b6f5dc; }
+  .banner.badb { background: rgba(255,107,122,.08); border: 1px solid rgba(255,107,122,.5); color: #ffc9cf; }
+  .banner .sp { flex: 1; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 6h18v12H3zM8 21h8M12 9v6M9 12l3 3 3-3M9 3l3 3 3-3"/></svg>
+      <div><b>TUBELOADER</b><span>BY PHILIBERT</span></div>
+    </div>
+    <div class="spacer"></div>
+    <div class="chip" id="aiChip" title="Philibert assists when an install fails"><i></i><span>Philibert assist…</span></div>
+    <div class="chip" id="adbChip"><i></i><span>ADB…</span></div>
+    <button class="btn" id="adbGet" type="button" hidden>GET ADB (13 MB)</button>
+  </header>
+  <div class="main">
+    <aside>
+      <div class="side-head"><h2>Your home network</h2><button class="btn" id="scan" type="button">SCAN</button></div>
+      <div class="bar"><i id="scanBar"></i></div>
+      <div class="scanmsg" id="scanMsg">Press Scan to find the TVs and streaming sticks.</div>
+      <div class="list" id="list"></div>
+      <div class="addip"><input id="ip" placeholder="Not found? Type its IP (192.168.0.42)" aria-label="Device IP address">
+        <button class="btn" id="add" type="button">ADD</button></div>
+    </aside>
+    <section class="view" id="view"></section>
+  </div>
+</div>
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var st = { status: null, devices: [], sel: null, file: null, job: null, since: 0, events: [], allShown: false, typing: {} };
+  var ICON = { firetv: "🔥", googletv: "📺", androidtv: "📺", shield: "🎮", roku: "🟣", appletv: "", samsung: "🖥️", lg: "🖥️",
+               chromecast: "📡", other: "·" };
+  var BOOM = '<svg viewBox="20 28 160 148" aria-hidden="true"><path d="M62 62 V46 Q62 34 74 34 H126 Q138 34 138 46 V62" fill="none" stroke="#00e5ff" stroke-width="10" stroke-linecap="round"/>' +
+    '<rect x="26" y="60" width="148" height="100" rx="16" fill="#00e5ff"/><circle cx="70" cy="104" r="25" fill="#0b1222"/><circle cx="70" cy="104" r="17" fill="#00e5ff"/>' +
+    '<circle cx="70" cy="104" r="6" fill="#0b1222"/><circle cx="130" cy="104" r="25" fill="#0b1222"/><circle cx="130" cy="104" r="17" fill="#00e5ff"/>' +
+    '<circle cx="130" cy="104" r="6" fill="#0b1222"/><path d="M48 143 H86 L93 134 L100 150 L107 138 L112 143 H152" fill="none" stroke="#0b1222" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<path d="M100 150 L107 138 L112 143" fill="none" stroke="#ff2e88" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  function api(op, data) {
+    return fetch("/api/tubeloader", { method: "POST", headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify(Object.assign({ op: op }, data || {})) })
+      .then(function (r) { return r.json(); })
+      .catch(function (e) { return { ok: false, msg: "Philibert couldn't do that (" + e.message + ")." }; });
+  }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function mb(b) { return (b / 1048576).toFixed(1) + " MB"; }
+  var SDK = { 21: "5.0", 22: "5.1", 23: "6", 24: "7", 25: "7.1", 26: "8", 27: "8.1", 28: "9", 29: "10", 30: "11", 31: "12", 32: "12L",
+              33: "13", 34: "14", 35: "15", 36: "16" };
+
+  // ---- header: ADB and the assistant -------------------------------------------------------------
+  function head() {
+    api("status").then(function (s) {
+      st.status = s;
+      var a = $("adbChip");
+      a.className = "chip " + (s.adb ? "ok" : "warn");
+      a.querySelector("span").textContent = s.adb ? "ADB ready" : "ADB not downloaded";
+      $("adbGet").hidden = !!s.adb || (s.download && s.download.state === "running");
+      var c = $("aiChip");
+      c.className = "chip " + (s.assistant ? "ok" : "warn");
+      c.querySelector("span").textContent = s.assistant ? "Philibert assist · " + s.model.split("/").pop() : "Philibert assist off - no AI model";
+      c.title = s.assistant ? "When an install fails, Philibert (" + s.model + ") works out why with you."
+                            : "Add a model in the Model Manager and Philibert will help when an install fails.";
+      if (s.download && s.download.state === "running") adbPoll();
+    });
+  }
+  $("adbGet").onclick = function () {
+    if (!confirm("TubeLoader uses ADB, Google's own Android tool, to talk to Android and Fire TVs.\n\nDownload it from Google now (about " +
+                 ((st.status && st.status.adb_mb) || 13) + " MB)? It goes in Philibert's tools folder on this drive.")) return;
+    api("adb_get").then(adbPoll);
+  };
+  function adbPoll() {
+    $("adbGet").hidden = true;
+    api("adb_progress").then(function (p) {
+      var a = $("adbChip");
+      if (p.state === "running") { a.querySelector("span").textContent = "Getting ADB… " + p.pct + "%"; setTimeout(adbPoll, 500); }
+      else if (p.state === "error") { a.querySelector("span").textContent = "ADB download failed"; $("adbGet").hidden = false; alert(p.msg); }
+      else head();
+    });
+  }
+
+  // ---- devices --------------------------------------------------------------------------------------
+  $("scan").onclick = function () { api("scan").then(scanPoll); };
+  function scanPoll() {
+    api("scan_status").then(function (s) {
+      $("scanBar").style.width = s.progress + "%";
+      $("scanMsg").textContent = s.msg || "";
+      $("scan").disabled = s.state === "running";
+      if (s.state === "running") return setTimeout(scanPoll, 500);
+      if (s.state === "done" || s.devices.length) { st.devices = s.devices; drawList(); }
+    });
+  }
+  $("add").onclick = function () {
+    var ip = $("ip").value.trim();
+    if (!ip) return;
+    $("add").disabled = true;
+    api("add", { ip: ip }).then(function (r) {
+      $("add").disabled = false;
+      if (!r.ok) return alert(r.msg);
+      st.devices = st.devices.filter(function (d) { return d.ip !== r.device.ip; }).concat([r.device]);
+      $("ip").value = ""; drawList(); select(r.device.ip);
+    });
+  };
+  function drawList() {
+    var apps = st.devices.filter(function (d) { return d.accepts; }),
+        tvs = st.devices.filter(function (d) { return !d.accepts && d.kind !== "other"; }),
+        rest = st.devices.filter(function (d) { return d.kind === "other"; });
+    function row(d) {
+      var pill = { ready: "READY", pair: "PAIR", setup: "SET UP", no: "CAN'T", unknown: "?" }[d.status] || "";
+      return '<button class="dev' + (st.sel && st.sel.ip === d.ip ? " on" : "") + '" type="button" data-ip="' + esc(d.ip) + '">' +
+        '<span class="ico">' + (ICON[d.kind] || "·") + '</span><span class="grow"><b>' + esc(d.name) + "</b><small>" +
+        esc(d.kind_name + (d.model ? " · " + d.model : "") + " · " + d.ip) + '</small></span><span class="pill ' + d.status + '">' + pill + "</span></button>";
+    }
+    var h = "";
+    if (apps.length) h += '<div class="group">Takes your apps</div>' + apps.map(row).join("");
+    if (tvs.length) h += '<div class="group">Other TVs</div>' + tvs.map(row).join("");
+    if (!apps.length && !tvs.length) h += '<p class="scanmsg">No TVs found. Is the TV on, and on the same Wi-Fi? You can also type its IP below.</p>';
+    if (rest.length) h += '<div class="group">Everything else (' + rest.length + ')</div>' +
+      (st.allShown ? rest.map(row).join("") : '<button class="more" id="showAll" type="button">Show them - a TV may be hiding here</button>');
+    $("list").innerHTML = h;
+    if ($("showAll")) $("showAll").onclick = function () { st.allShown = true; drawList(); };
+    $("list").querySelectorAll(".dev").forEach(function (b) { b.onclick = function () { select(b.dataset.ip); }; });
+  }
+  function select(ip) {
+    st.sel = st.devices.filter(function (d) { return d.ip === ip; })[0] || null;
+    if (!st.job || st.jobDone) { st.job = null; st.events = []; }
+    drawList(); draw();
+  }
+
+  // ---- the view -------------------------------------------------------------------------------------
+  function fact(k, v) { return "<div><small>" + k + "</small><b>" + esc(v) + "</b></div>"; }
+  function draw() {
+    var d = st.sel, v = $("view");
+    if (!d) {
+      v.innerHTML = '<h1>Put an app on your TV</h1><p class="lead">TubeLoader finds the TVs and streaming sticks on your home network and installs an app ' +
+        "from this computer - and when the TV says no, Philibert works out why with you, step by step.</p>" +
+        '<div class="three"><div class="card"><b>🔥 Fire TV · 📺 Google TV · Android TV</b><p>Any APK, sent over Wi-Fi with ADB. The TV needs debugging turned on once - TubeLoader shows how.</p></div>' +
+        '<div class="card"><b>🟣 Roku</b><p>No APKs (Roku isn\'t Android), but a Roku channel (.zip) goes on in developer mode.</p></div>' +
+        '<div class="card"><b> Apple TV · Samsung · LG</b><p>Found and explained: they run their own systems and can\'t take an APK.</p></div></div>' +
+        '<p class="note" style="margin-top:16px">Press <b>Scan</b> on the left to start.</p>';
+      return;
+    }
+    var h = "<h1>" + esc(d.name) + '</h1><p class="lead">' + esc(d.kind_name + (d.model ? " · " + d.model : "") + " · " + d.ip) + "</p>";
+    h += '<div class="card"><h3>This device <span class="right pill ' + d.status + '">' +
+      ({ ready: "READY", pair: "PAIR ONCE", setup: "NEEDS SETUP", no: "CAN'T TAKE APPS", unknown: "UNKNOWN" }[d.status] || "") + "</span></h3>" +
+      '<div class="facts">' + fact("Kind", d.kind_name) + fact("Address", d.ip) + (d.model ? fact("Model", d.model) : "") +
+      fact("Takes", d.accepts === "apk" ? "Android apps (.apk)" : d.accepts === "zip" ? "Roku channels (.zip)" : "-") + "</div>" +
+      (d.note ? '<p class="note">' + esc(d.note) + "</p>" : "") + "</div>";
+    if (d.kind === "appletv") {
+      h += '<div class="card"><h3>About Apple TV</h3><p>An APK can never run on Apple TV - it needs a <b>tvOS</b> version of the app, written for Apple TV, ' +
+        "and signed with an <b>Apple developer account</b> (a free Apple ID lasts 7 days, the paid account a year).</p>" +
+        '<ol class="steps"><li>Easiest: a Mac with Xcode - Window &gt; Devices and Simulators pairs with the Apple TV over Wi-Fi ' +
+        "(on the Apple TV: Settings &gt; Remotes and Devices &gt; Remote App and Devices).</li><li>Without a Mac it's possible but fiddly: the app must " +
+        "already be signed for this Apple TV, then a tool like pymobiledevice3 can install it.</li></ol>" +
+        '<p class="note">TubeLoader may add Apple TV pushing for signed tvOS apps later.</p></div>';
+    }
+    if (d.status === "setup" || d.status === "pair") h += '<div class="card" id="setupCard"><h3>Turn it on, once <span class="right">' +
+      '<button class="btn" id="recheck" type="button">I DID IT - CHECK AGAIN</button></span></h3><ol class="steps" id="setupSteps"></ol></div>';
+    if (d.accepts) {
+      var f = st.file;
+      h += '<div class="card"><h3>The app <span class="right"><button class="btn" id="pick" type="button">' + (f ? "CHOOSE ANOTHER" : "CHOOSE FILE") +
+        "</button></span></h3>";
+      if (!f) h += '<p class="note">Pick ' + (d.accepts === "apk" ? "an Android app (.apk, or a split .apks / .xapk)" : "a Roku channel (.zip)") + " from this computer.</p>" +
+        '<div class="go" style="margin-top:10px"><input id="path" placeholder="…or paste the file&#39;s full path" aria-label="File path" ' +
+        'style="flex:1;min-width:220px;background:var(--deep);border:1px solid var(--line);border-radius:7px;padding:8px 10px">' +
+        '<button class="btn" id="usePath" type="button">USE</button></div>';
+      else {
+        h += '<div class="facts">' + fact("File", f.name) + fact("Size", mb(f.size)) +
+          (f.type === "roku" ? fact("Channel", f.title) + fact("Version", f.version_name || "-")
+            : fact("App", f.package) + fact("Version", (f.version_name || "?") + " (" + f.version_code + ")") +
+              fact("Needs", "Android " + (SDK[f.min_sdk] || "API " + f.min_sdk) + "+") + fact("Processors", f.abis.length ? f.abis.join(", ") : "any") +
+              fact("TV home screen", f.tv_launcher ? "yes" : "no - a phone app")) + "</div>";
+        var bad = "";
+        if (d.accepts === "apk" && f.type === "roku") bad = "That's a Roku channel - this TV takes Android apps (.apk).";
+        if (d.accepts === "zip" && f.type !== "roku") bad = "A Roku can't install an APK (it isn't Android). It takes a Roku channel .zip.";
+        if (bad) h += '<p class="bad">' + bad + "</p>";
+        else if (f.type !== "roku" && !f.tv_launcher) h += '<p class="warn">This app has no TV home-screen entry, so it may not show on the TV\'s home row (it can still be opened from Settings &gt; Apps).</p>';
+      }
+      h += "</div>";
+      var can = f && !((d.accepts === "apk") !== (f.type !== "roku")) && (d.accepts !== "apk" || (st.status && st.status.adb));
+      h += '<div class="go">' + (st.job && !st.jobDone ? '<button class="btn danger" id="stop" type="button">STOP</button>'
+        : '<button class="btn primary big" id="push" type="button"' + (can ? "" : " disabled") + ">PUSH TO " + esc(d.name.toUpperCase()) + "</button>") +
+        (d.accepts === "apk" && st.status && !st.status.adb ? '<span class="warn" style="margin:0">Get ADB first (top right).</span>' : "") + "</div>";
+    }
+    h += '<div id="run"></div>';
+    v.innerHTML = h;
+    if ($("setupSteps")) api("steps", { kind: d.kind }).then(function (r) { $("setupSteps").innerHTML = r.steps.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join(""); });
+    if ($("recheck")) $("recheck").onclick = recheck;
+    if ($("pick")) $("pick").onclick = pick;
+    if ($("usePath")) $("usePath").onclick = function () {
+      var path = $("path").value.trim().replace(/^"|"$/g, "");
+      if (path) api("inspect", { path: path }).then(function (r) { if (r.ok) { st.file = r; draw(); } else alert(r.msg); });
+    };
+    if ($("push")) $("push").onclick = push;
+    if ($("stop")) $("stop").onclick = function () { api("cancel", { id: st.job }); };
+    drawRun();
+  }
+  function recheck() {
+    $("recheck").disabled = true; $("recheck").textContent = "CHECKING…";
+    api("add", { ip: st.sel.ip }).then(function (r) {
+      if (r.ok) { st.devices = st.devices.map(function (x) { return x.ip === r.device.ip ? r.device : x; }); st.sel = r.device; }
+      drawList(); draw();
+    });
+  }
+  function pick() {
+    $("pick").disabled = true; $("pick").textContent = "CHOOSE IN THE WINDOW…";
+    api("pick").then(function (r) {
+      if (r.ok) st.file = r; else if (!r.cancelled) alert(r.msg);
+      draw();
+    });
+  }
+  function push() {
+    api("push", { device: st.sel, path: st.file.path }).then(function (r) {
+      if (!r.ok) return alert(r.msg);
+      st.job = r.id; st.since = 0; st.events = []; st.jobDone = false; st.jobState = "running"; st.pending = null;
+      draw(); poll();
+    });
+  }
+
+  // ---- the run: steps, Philibert, questions -----------------------------------------------------------
+  function poll() {
+    if (!st.job) return;
+    var id = st.job;
+    api("job", { id: id, since: st.since }).then(function (j) {
+      if (!j.ok || st.job !== id) return;
+      st.events = st.events.concat(j.events); st.since = j.total;
+      var changed = j.events.length || JSON.stringify(j.pending) !== JSON.stringify(st.pending) || j.state !== st.jobState;
+      st.pending = j.pending; st.jobState = j.state;
+      if (j.state === "done" || j.state === "failed" || j.state === "cancelled") st.jobDone = true;
+      if (changed) { if (st.jobDone) draw(); else drawRun(); }
+      if (!st.jobDone) setTimeout(poll, 600);
+    });
+  }
+  var MARK = { step: "", ok: "✓", fail: "✕", info: "!", rule: "i" };
+  function drawRun() {
+    var box = $("run");
+    if (!box || !st.events.length) return;
+    var live = !st.jobDone && !st.pending;
+    var lastStep = -1;
+    st.events.forEach(function (e, i) { if (e.kind === "step") lastStep = i; });
+    var h = '<div class="card"><h3>Pushing</h3><ul class="tl">';
+    st.events.forEach(function (e, i) {
+      if (e.kind === "thinking") {
+        var answered = st.events.slice(i + 1).some(function (x) { return x.kind === "philibert"; });
+        if (!answered) h += '</ul><div class="phil"><div class="av">' + BOOM + '</div><div class="bub"><div class="who">PHILIBERT IS ASSISTING</div>' +
+          '<span class="dots"><i></i><i></i><i></i></span> <span style="color:var(--dim)">' + esc(e.text) + '</span></div></div><ul class="tl">';
+        return;
+      }
+      if (e.kind === "philibert" || e.kind === "philibert-off") {
+        var steps = []; try { steps = JSON.parse(e.detail || "[]"); } catch (x) { steps = []; }
+        h += '</ul><div class="phil' + (e.kind === "philibert-off" ? " off" : "") + '"><div class="av">' + BOOM + '</div><div class="bub">' +
+          '<div class="who">' + (e.kind === "philibert-off" ? "PHILIBERT ISN'T AVAILABLE" : "PHILIBERT IS ASSISTING") + "</div>" +
+          '<div class="say" data-i="' + e.i + '">' + esc(e.text) + "</div>" +
+          (steps.length ? '<ol class="steps">' + steps.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ol>" : "") +
+          (e.kind === "philibert-off" ? '<p class="note">Open <b>Models</b> on the Philibert desktop to add one.</p>' : "") + '</div></div><ul class="tl">';
+        return;
+      }
+      var cls = e.kind + (e.kind === "step" && i === lastStep && live && i === st.events.length - 1 ? " live" : "");
+      var detail = "";
+      if (e.kind === "rule") {
+        var rs = []; try { rs = JSON.parse(e.detail || "[]"); } catch (x) { rs = []; }
+        detail = rs.length ? '<ol class="steps">' + rs.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ol>" : "";
+      } else if (e.detail && (e.kind === "fail" || e.kind === "info")) {
+        var dsteps = null; try { dsteps = JSON.parse(e.detail); } catch (x) { dsteps = null; }
+        detail = Array.isArray(dsteps) ? '<ol class="steps">' + dsteps.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ol>"
+          : "<pre>" + esc(e.detail) + "</pre>";
+      }
+      h += '<li class="' + cls + '"><span class="mk">' + (MARK[e.kind] || "") + '</span><div class="tx"><b>' +
+        (e.kind === "rule" ? "What this usually means: " : "") + esc(e.text) + "</b>" + detail + "</div></li>";
+    });
+    h += "</ul>";
+    var p = st.pending;
+    if (p) {
+      if (p.kind === "fix") h += '<div class="ask"><p><b>Philibert suggests:</b> ' + esc(p.label) + "</p><div class=\"row\">" +
+        '<button class="btn ' + (p.danger ? "danger" : "primary") + '" id="yes" type="button">DO IT</button><button class="btn" id="no" type="button">NO THANKS</button></div></div>';
+      else if (p.kind === "retry") h += '<div class="ask"><p>When you\'ve done that on the TV, try again.</p><div class="row">' +
+        '<button class="btn primary" id="yes" type="button">TRY AGAIN</button><button class="btn" id="no" type="button">STOP</button></div></div>';
+      else if (p.kind === "pair") h += '<div class="ask"><p>' + esc(p.text) + '</p><div class="row"><input id="code" inputmode="numeric" placeholder="6-digit code" aria-label="Pairing code">' +
+        '<input id="port" inputmode="numeric" placeholder="port (e.g. 37099)" value="' + esc(p.port || "") + '" aria-label="Pairing port">' +
+        '<button class="btn primary" id="yes" type="button">PAIR</button><button class="btn" id="no" type="button">STOP</button></div></div>';
+      else if (p.kind === "password") h += '<div class="ask"><p>' + esc(p.text) + '</p><div class="row"><input id="pw" type="password" placeholder="developer password" aria-label="Roku developer password">' +
+        '<button class="btn primary" id="yes" type="button">SEND</button><button class="btn" id="no" type="button">STOP</button></div></div>';
+    }
+    if (st.jobDone) {
+      h += st.jobState === "done" ? '<div class="banner good">✓ It\'s on the TV.<span class="sp"></span><button class="btn" id="again" type="button">PUSH ANOTHER</button></div>'
+        : '<div class="banner badb">' + (st.jobState === "cancelled" ? "Stopped." : "It didn't make it this time - the steps above are the way forward.") +
+          '<span class="sp"></span><button class="btn" id="again" type="button">START AGAIN</button></div>';
+    }
+    box.innerHTML = h + "</div>";
+    box.querySelectorAll(".say").forEach(typewrite);
+    if ($("yes")) $("yes").onclick = function () {
+      var a = { yes: true };
+      if (p.kind === "fix" && p.danger && !confirm(p.confirm)) return;
+      if (p.kind === "pair") { a.code = $("code").value; a.port = $("port").value; }
+      if (p.kind === "password") a.password = $("pw").value;
+      answer(a);
+    };
+    if ($("no")) $("no").onclick = function () { answer(p.kind === "fix" ? { yes: false } : null); };
+    if ($("again")) $("again").onclick = function () { st.job = null; st.events = []; st.jobDone = false; draw(); };
+    var last = box.querySelector(".ask, .banner, .phil:last-of-type");
+    if (last) last.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+  function answer(a) {
+    if (a === null) { api("cancel", { id: st.job }); return; }
+    st.pending = null; drawRun();
+    api("answer", { id: st.job, answer: a });
+  }
+  /* Philibert's words type out the first time they appear */
+  function typewrite(el) {
+    var i = el.dataset.i;
+    if (st.typing[i]) return;
+    st.typing[i] = true;
+    var full = el.textContent, n = 0;
+    el.textContent = "";
+    (function tick() {
+      n += 3;
+      el.textContent = full.slice(0, n);
+      if (n < full.length) setTimeout(tick, 14);
+    })();
+  }
+
+  head();
+  draw();
+  api("scan_status").then(function (s) { if (s.devices && s.devices.length) { st.devices = s.devices; drawList(); } else $("scan").click(); });
+})();
+</script>
+</body>
+</html>

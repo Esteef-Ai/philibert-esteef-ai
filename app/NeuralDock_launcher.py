@@ -8054,6 +8054,21 @@ def handler_model():
     gen.sort(key=_model_size_hint)
     return gen[0] if gen else (installed[0] if installed else "")
 
+def tubeloader_assistant():
+    """(llm, model name) for TubeLoader's "Philibert is assisting": the chat model, if one is really
+    installed (not a picture-reading or embedding model) - else (None, "") and it says so."""
+    try:
+        installed = _get_models() or []
+    except Exception:
+        installed = []
+    m = handler_model()
+    if m not in installed or re.search(r"embed|llava|vision|-vl|vl:", m, re.I):
+        m = next((x for x in installed if not re.search(r"embed|llava|vision|-vl|vl:|cod", x, re.I)), "")
+    if not m:
+        return None, ""
+    return (lambda msgs: ollama_chat(m, msgs, timeout=300)), m
+
+
 def tool_delegate(specialist, task, context="", req_id=None):
     """Hand a job to a specialist model and bring back its answer."""
     roster = model_roster()
@@ -18476,6 +18491,8 @@ class Handler(BaseHTTPRequestHandler):
             bare_path = "/live/yoteach.html"
         elif bare_path == "/guitartab":
             bare_path = "/live/guitartab.html"
+        elif bare_path == "/tubeloader":
+            bare_path = "/live/tubeloader.html"
         elif bare_path == "/images":
             bare_path = "/live/images.html"
         elif bare_path == "/files":
@@ -18774,7 +18791,7 @@ class Handler(BaseHTTPRequestHandler):
             import nd_chatref
             self.send_json(nd_chatref.handle(body, "philibert" if PORTABLE else "code", _drive_root()))
             return
-        if path in ("/api/notes", "/api/chats", "/api/desktop", "/api/band", "/api/images", "/api/files", "/api/feedback", "/api/board", "/api/yoteach", "/api/modelshare", "/api/guitartab"):
+        if path in ("/api/notes", "/api/chats", "/api/desktop", "/api/band", "/api/images", "/api/files", "/api/feedback", "/api/board", "/api/yoteach", "/api/modelshare", "/api/guitartab", "/api/tubeloader"):
             # The Notes app (nd_notes.py) and saved chats (nd_chats.py). They
             # write files, so a page from another site in the user's own browser
             # must not be able to drive them.
@@ -18824,6 +18841,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/modelshare":
                 self.send_json(modelshare_handle(body))
+                return
+            if path == "/api/tubeloader":
+                import nd_tubeloader
+                self.send_json(nd_tubeloader.handle(body, _drive_root(), _CONFIG_DIR, *tubeloader_assistant()))
                 return
             if path == "/api/guitartab":
                 import nd_guitartab
