@@ -220,6 +220,9 @@ try:
               and _SV.anchored_span(_txt, "a\nz") is None)
         check("check catches a brief that looks up ids/classes the app lacks (blind6's .channel-logo), not real or made ones",
               g == ["#chat-panel", ".channel-logo"], g)
+        h = studio_blind.ghost_hints(b, ["#media-view", ".channel-logo"])
+        check("... and names the real element it meant (Media view -> #theater-toggle, .channel-logo -> .logo-tile)",
+              "#theater-toggle" in h.get("#media-view", "") and ".logo-tile" in h.get(".channel-logo", ""), h)
         good = json.loads((d / "plan.json").read_text(encoding="utf-8"))          # the pack's own plan is a well-formed answer
         (b / "plan.json").write_text(json.dumps(good), encoding="utf-8")
         r = subprocess.run([sys.executable, str(DEV / "studio_blind.py"), "check", str(b)], capture_output=True, text=True, encoding="utf-8", errors="replace")

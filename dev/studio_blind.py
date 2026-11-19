@@ -495,16 +495,26 @@ def briefs(ws, model, think, dry, only=None):
             import nd_studio as S
             new = S.strip_think(text).strip()
             faults = brief_faults(ws, {"brief": new}, done)
-            if faults:                                         # blind5: redefined isTvBrowser(); blind6: OK fired twice, names the app lacks
-                print(f"  {t['id']}: the rewrite has {len(faults)} fault(s): {'; '.join(f[:90] for f in faults)}; asking once more", flush=True)
+            # blind5: redefined isTvBrowser(); blind6: OK fired twice, names the app lacks. Up to two more asks, each told
+            # every fault seen so far (blind6 T04, 2026-11-18: three runs of one re-ask each all kept closePlayer()).
+            seen = list(faults)
+            for k in range(2):
+                if not faults:
+                    break
+                print(f"  {t['id']}: the rewrite has {len(faults)} fault(s): {'; '.join(f[:90] for f in faults)}; asking again ({k + 1} of 2)", flush=True)
                 again = call(ws, f"blind_brief_{t['id']}", prompt + (
-                    "\n\nNOTE: your last brief for this task had these faults, each of which broke the app in an earlier "
-                    "build:\n" + "\n".join("- " + f for f in faults) + "\nWrite the whole brief again without them."),
+                    "\n\nNOTE: your earlier briefs for this task had these faults, each of which broke the app in an earlier "
+                    "build:\n" + "\n".join("- " + f for f in dict.fromkeys(seen)) + "\nWrite the whole brief again without them."),
                     model, think, dry)
-                if again and not brief_faults(ws, {"brief": S.strip_think(again).strip()}, done):
-                    new = S.strip_think(again).strip()
-                else:
-                    print(f"  {t['id']}: the second rewrite still has a fault; `check` will say NOT READY", flush=True)
+                if not again:
+                    break
+                cand = S.strip_think(again).strip()
+                cf = brief_faults(ws, {"brief": cand}, done)
+                if len(cf) < len(faults):
+                    new, faults = cand, cf
+                seen += cf
+            if faults:
+                print(f"  {t['id']}: the best rewrite still has {len(faults)} fault(s); `check` will say NOT READY", flush=True)
             if len(new) < len(t.get("brief_short") or t.get("brief") or "") or len(new) < 1500:
                 print(f"  {t['id']}: the rewrite is {len(new)} characters, no better than the short brief: kept the short one")
             else:
@@ -662,14 +672,64 @@ def ghost_names(ws, task, earlier=()):
     return out
 
 
+def _root_file(ws, rel):
+    root = subprocess.run(["git", "-C", str(ws), "rev-list", "--max-parents=0", "HEAD"], capture_output=True, text=True).stdout.split()
+    if not root:
+        return ""
+    return subprocess.run(["git", "-C", str(ws), "show", f"{root[-1]}:{rel}"], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace").stdout
+
+
+def app_function(ws, rel, name):
+    """-> ', line N: `function name(...){ first lines }`' of the app's own function, so the model can see what to call."""
+    lines = _root_file(ws, rel).split("\n")
+    for i, ln in enumerate(lines):
+        if re.search(r"\bfunction\s+" + re.escape(name) + r"\s*\(", ln):
+            body = " ".join(x.strip() for x in lines[i:i + 4])
+            return f", line {i + 1}: `{body[:220]}`"
+    return ""
+
+
+def ghost_hints(ws, ghosts):
+    """-> {ghost: ' (the app has ...)'}: the element whose visible text holds the ghost's words (`#media-view` -> the
+    button that says "Media view", `#theater-toggle`), else ids/classes sharing a word with it (`.channel-logo` ->
+    `.logo-tile`)."""
+    ws = Path(ws)
+    root = subprocess.run(["git", "-C", str(ws), "rev-list", "--max-parents=0", "HEAD"], capture_output=True, text=True).stdout.split()
+    if not root:
+        return {}
+    ls = subprocess.run(["git", "-C", str(ws), "ls-tree", "-r", "--name-only", root[-1]], capture_output=True, text=True).stdout.split("\n")
+    src = "\n".join(_root_file(ws, r) for r in ls if r.endswith(".html") and not r.startswith(("tests/", "node_modules/", "dist/")))
+    ids = set(re.findall(r'\bid="([\w-]+)"', src))
+    classes = {c for v in re.findall(r'\bclass="([^"]+)"', src) for c in v.split()}
+    out = {}
+    for g in ghosts:
+        words = [w for w in re.split(r"[-_]", g[1:].lower()) if len(w) > 2]
+        found = []
+        if len(words) >= 2:
+            pat = r"\W+".join(map(re.escape, words))
+            for mt in re.finditer(r"<(\w+)[^>]*\bid=\"([\w-]+)\"[^>]*>([^<]{0,80})", src):
+                if re.search(pat, mt.group(3), re.I):
+                    found.append(f"`#{mt.group(2)}`, the {mt.group(1)} that says \"{mt.group(3).strip()[:40]}\"")
+        if not found:
+            pool = ids if g[0] == "#" else classes
+            near = sorted(n for n in pool if any(w in n.lower().split("-") for w in words))
+            found = [f"`{g[0]}{n}`" for n in near[:4]]
+        if found:
+            out[g] = " (the app has " + ", ".join(found[:3]) + ")"
+    return out
+
+
 def brief_faults(ws, task, earlier=()):
     """-> [message] for what a brief would surely break, each also said to the model when it is asked again."""
-    out = [f"the brief declares `{n}()`, which the app already has ({w}): a second declaration replaces the app's own and "
-           "breaks what uses it (blind5: the sign-in page). The code must CALL it and never declare one of that name"
+    out = [f"the brief declares `{n}()`, which the app already has ({w}{app_function(ws, w, n)}): a second declaration "
+           "replaces the app's own and breaks what uses it (blind5: the sign-in page). The code must CALL it and never "
+           "declare one of that name; to add to it, write a function with a NEW name that calls it"
            for n, w in clashes(ws, task)]
     ghosts = ghost_names(ws, task, earlier)
     if ghosts:
-        out.append(f"the brief's code looks up {', '.join('`' + g + '`' for g in ghosts)}, which the app does not have and no "
+        hints = ghost_hints(ws, ghosts)
+        out.append(f"the brief's code looks up {', '.join('`' + g + '`' + hints.get(g, '') for g in ghosts)}, which the app does not have and no "
                    "task makes (blind6: `.channel-logo` where the app's logos are `.logo-tile`; the logo checks failed). Use "
                    "only ids and classes from the source shown above, or have the brief create the element first")
     out += [f"the brief's Enter (OK) branch calls .click() without e.preventDefault(): a focused button already clicks "
@@ -692,7 +752,8 @@ def check(ws):
         bad.append("two tasks share an id")
     try:
         fst = json.loads((ws / ".foreman" / "state.json").read_text(encoding="utf-8"))
-        done_ids = {k for k, v in (fst.get("tasks") or {}).items() if v.get("status") == "passed"}
+        # passed, or worked on (a salvage may have made its test pass: blind6 T03, 2026-11-18)
+        done_ids = {k for k, v in (fst.get("tasks") or {}).items() if v.get("status") == "passed" or v.get("attempts")}
     except (OSError, ValueError):
         done_ids = set()
     names = [own(t) for t in pl.get("tasks") or []]
