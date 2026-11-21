@@ -118,15 +118,44 @@ def _env(tmp=None):
     return env
 
 
+def packages():
+    """PACKAGES for this computer. On a Mac, onnxruntime may be older than the pin: its newest
+    builds need macOS 14, and Intel Macs stopped getting builds after 1.23.2, so pip picks the
+    newest one this Mac can run (1.16.3 on macOS 10.15 up to 1.31.1 on macOS 14+). The note
+    finder's model is the same and gives the same notes on each of those versions."""
+    if IS_WIN:
+        return list(PACKAGES)
+    return ["onnxruntime>=1.16,<=1.31.1" if p.startswith("onnxruntime==") else p for p in PACKAGES]
+
+
+def mac_too_old():
+    """An Apple Silicon Mac on macOS 11 has no scipy build to install: say so plainly."""
+    if IS_WIN:
+        return ""
+    import platform
+    ver = platform.mac_ver()[0]
+    try:
+        major = int(ver.split(".")[0])
+    except ValueError:
+        return ""
+    if plat() == "mac-arm64" and major < 12:
+        return ("TabCrafter needs macOS 12 (Monterey) or newer on this Mac (it has macOS " + ver +
+                "). Update macOS in System Settings > Software Update, then set TabCrafter up again.")
+    return ""
+
+
 def install(root, say=lambda line, frac=-1: print(line, flush=True)):
     """The packages, into this add-on's own folder (never the app's); safe to run again."""
+    old = mac_too_old()
+    if old:
+        raise RuntimeError(old)
     site = site_dir(root)
     site.mkdir(parents=True, exist_ok=True)
     tmp = site.parent / "_tmp"
     tmp.mkdir(exist_ok=True)
     pip = [sys.executable, "-s", "-m", "pip", "install", "--no-cache-dir", "--no-warn-script-location",
            "--progress-bar", "off", "--upgrade", "--target", str(site)]
-    steps = [(PACKAGES, "Getting the note finder's building blocks", 0.05, 0.8), (["--no-deps"] + NO_DEPS, "Getting the note finder", 0.85, 0.1)]
+    steps = [(packages(), "Getting the note finder's building blocks", 0.05, 0.8), (["--no-deps"] + NO_DEPS, "Getting the note finder", 0.85, 0.1)]
     for pkgs, label, base, span in steps:
         say(label, base)
         p = subprocess.Popen(pip + pkgs, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=_env(tmp),
@@ -146,7 +175,7 @@ def install(root, say=lambda line, frac=-1: print(line, flush=True)):
     r = _engine(root, "check", {}, timeout=300)
     if not r.get("ok"):
         raise RuntimeError("The note finder installed but does not start: " + r.get("msg", ""))
-    (site / ".philibert-ready").write_text(json.dumps({"packages": PACKAGES + NO_DEPS, "when": time.strftime("%Y-%m-%d %H:%M")}),
+    (site / ".philibert-ready").write_text(json.dumps({"packages": packages() + NO_DEPS, "when": time.strftime("%Y-%m-%d %H:%M")}),
                                            encoding="utf-8")
     say("TabCrafter is ready.", 1.0)
 
