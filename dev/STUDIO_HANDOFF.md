@@ -503,3 +503,7 @@ nothing. Compare with blind4: T01 passed, T02 stuck at 29 of 31, T03 skipped; gr
   app's own function (file, line, first lines) and name the real element a ghost meant (by its visible words, else a
   shared word); `briefs` re-asks up to twice and keeps the least-faulty; `check` exempts tasks the foreman worked on
   (the T03 salvage made its test pass); studio_blind prints UTF-8 (a hint quoted an emoji and crashed cmd.exe).
+
+## 23. A salvage start must say what it broke (2026-11-20)
+blind6's two builds on 11-20 gave T03 twelve attempts of about 100 s each, all `no files were changed`. The salvage start (af3bd3d) passes T03's 10 checks but breaks 4 of T01's, and the foreman's prompt lists test_remote_basics under 'these still pass (they pass now)'. The builder saw them fail before touching anything and called them pre-existing. studio_salvage now writes a START HERE section at the top of the task's brief (marked, so it is replaced or removed on the next run) listing the broken checks as this task's job; --apply does it itself, and `--mend` does it for a start already kept. Applied to blind6 (50447b2); check READY.
+

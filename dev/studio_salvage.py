@@ -11,6 +11,8 @@ point. A `foreman retry` then starts the next attempt from it (the foreman takes
 Nothing here edits the foreman (G:\\!Ai\\ND3 is the owner's copy) and nothing calls a model.
 
     python dev/studio_salvage.py <workspace> <task id> [--apply]      without --apply: only says what it would keep
+    python dev/studio_salvage.py <workspace> <task id> --mend         write the older checks the start breaks into the brief
+                                                                      (--apply does this itself when it keeps such an attempt)
 """
 import json
 import re
@@ -160,13 +162,15 @@ def judge(ws, files, own, keep, links, log):
             (app / rel).parent.mkdir(parents=True, exist_ok=True)
             (app / rel).write_text(text, encoding="utf-8", newline="")
         p, f, ok, tail = P.run_test(py, app, own, 900)
-        broke, lost = [], 0
+        broke, lost, fails = [], 0, []
         for t in keep:
             kp, kf, kok, ktail = P.run_test(py, app, t, 900)
             if not kok:
                 broke.append(f"{t}: {kp} passed, {kf} failed")
                 lost += kf if kf > 0 else 99                     # a crash counts as breaking everything
-        return p, f, lost, broke
+                labels = [ln for ln in ktail.splitlines() if ln.startswith("FAIL")] or [f"FAIL  (it crashed: {ktail[-160:]})"]
+                fails += [(t, re.split(r" - got\b", ln, 1)[0][:160]) for ln in labels]
+        return p, f, lost, broke, fails
     finally:
         unlink(app, links)
         shutil.rmtree(tmp, ignore_errors=True)
@@ -206,7 +210,7 @@ def salvage(ws, tid, apply=False, log=print):
         if not files:
             log(f"  {tr.name}: nothing to rebuild (no edits in the allowed files, or the edits do not replay)")
             continue
-        p, f, lost, broke = judge(ws, files, own, keep, links, log)
+        p, f, lost, broke, _ = judge(ws, files, own, keep, links, log)
         log(f"  {tr.name}: {p} passed, {f} failed" + (f"; breaks {lost} older check(s): {'; '.join(broke)[:200]}" if lost else ""))
         # Worth keeping: it breaks nothing older, or at most MAX_LOST older checks while gaining at least MIN_GAIN of its
         # own. The foreman's "broke" gate then makes the next attempt mend what it broke, and says which checks.
@@ -245,7 +249,65 @@ def salvage(ws, tid, apply=False, log=print):
     P.journal(ws, "studio_salvage", msg)
     res["kept"] = True
     log(msg)
+    if best["older_broken"]:
+        mend(ws, tid, log)
     return res
+
+
+MEND_START, MEND_END = "<!-- salvage: mend -->", "<!-- /salvage: mend -->"
+
+
+def mend_text(task, own, fails):
+    """The brief's first section when the starting code already holds this task's work but breaks older checks."""
+    files = ", ".join(f"`{f}`" for f in task.get("files") or [])
+    tests = list(dict.fromkeys(t for t, _ in fails))
+    return "\n".join([
+        MEND_START,
+        "## START HERE: this task's code is already in place - mend what it broke",
+        f"An earlier attempt at this task was kept as the starting point. {files} already passes this task's own checks "
+        f"(`{own}` prints 0 failed). But that code BROKE these checks of earlier tasks, which passed before it was added:",
+        *[f"  - `{t}`: {label}" for t, label in fails[:12]],
+        "These failures are NOT pre-existing and NOT another task's problem: they fail because of the code already added "
+        "for THIS task, and this task is not done until " + " and ".join(f"`{t}`" for t in tests) + (" prints" if len(tests) == 1 else " print") + " 0 failed too. "
+        "Run them first and read what each failing check expects. Then find the code in the files you may change that "
+        "stops it (for example a key handler that returns, or jumps somewhere fixed, where the older behaviour went on), "
+        f"and change it so those checks AND `{own}` all pass. An attempt that changes nothing fails.",
+        MEND_END, ""])
+
+
+def mend(ws, tid, log=print):
+    """Write the mending job into the task's brief in plan.json, from what fails on the workspace NOW, and commit it.
+    The foreman's prompt lists every earlier test under "these still pass (they pass now)"; when a salvage start already
+    fails some, the builder sees them fail before it changes anything, calls them pre-existing and stops. blind6 T03
+    (2026-11-20): twelve attempts over two builds, each about 100 s, each 'no files were changed'."""
+    ws = Path(ws)
+    plan_p = ws / "plan.json"
+    raw = plan_p.read_text(encoding="utf-8")
+    plan = json.loads(raw)
+    ind = re.match(r"\{\r?\n( +)", raw)
+    ind = len(ind.group(1)) if ind else 2                    # keep the file's own indent, so the diff is the brief only
+    state = json.loads((ws / ".foreman" / "state.json").read_text(encoding="utf-8"))
+    m = json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8")) if (ws / ".studio" / "pack.json").is_file() else {}
+    task = next(t for t in plan["tasks"] if t["id"] == tid)
+    own, keep = must_pass(ws, plan, state, tid)
+    p, f, lost, broke, fails = judge(ws, {}, own, keep, list(m.get("base_links") or []), log)
+    brief = re.sub(re.escape(MEND_START) + r".*?" + re.escape(MEND_END) + r"\n*", "", task["brief"], flags=re.S)
+    if not fails:
+        if brief != task["brief"]:
+            task["brief"] = brief
+            plan_p.write_text(json.dumps(plan, indent=ind, ensure_ascii=False) + "\n", encoding="utf-8")
+            log(f"mend {tid}: nothing older fails now - the mend section is taken out of the brief")
+        else:
+            log(f"mend {tid}: nothing older fails now - nothing to mend")
+        return []
+    task["brief"] = mend_text(task, own, fails) + brief.lstrip()
+    plan_p.write_text(json.dumps(plan, indent=ind, ensure_ascii=False) + "\n", encoding="utf-8")
+    msg = f"salvage: {tid}'s brief now starts with the {len(fails)} older check(s) its starting code breaks, to mend"
+    subprocess.run(["git", "-C", str(ws), "add", "plan.json"], capture_output=True)
+    subprocess.run(["git", "-C", str(ws), "commit", "-q", "-m", msg], capture_output=True)
+    P.journal(ws, "studio_salvage", msg)
+    log(msg + ": " + "; ".join(label for _, label in fails)[:300])
+    return fails
 
 
 if __name__ == "__main__":
@@ -256,4 +318,7 @@ if __name__ == "__main__":
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
-    salvage(a[0], a[1], apply="--apply" in a)
+    if "--mend" in a:
+        mend(a[0], a[1])
+    else:
+        salvage(a[0], a[1], apply="--apply" in a)

@@ -213,11 +213,17 @@ try:
                                                   " x = document.querySelector('#guide-rows > .guide-row .logo-tile');"
                                                   " if (document.body.classList.contains('tv-new-thing')) {}"},
                                      [{"brief": "document.body.classList.add('tv-new-thing')"}])
+        import re
         import studio_salvage as _SV
         _txt = "a\nfunction f(el){\n  if(!el) return;\n  el.focus();\n  extra = 1;\n}\nz"
         check("salvage replays an edit the way OpenCode matches a block by its first and last lines (blind6 T02_a2)",
               _SV.anchored_span(_txt, "function f(el){\n  if(!el) return;\n  el.focus();\n}") == (1, 6)
               and _SV.anchored_span(_txt, "a\nz") is None)
+        _mt = _SV.mend_text({"files": ["public/tvnav.js"]}, "tests/own.py", [("tests/old.py", "FAIL  arrows reach Browse")])
+        _again = re.sub(re.escape(_SV.MEND_START) + r".*?" + re.escape(_SV.MEND_END) + r"\n*", "", _mt + "brief", flags=re.S)
+        check("a salvage start that breaks older checks says so first in the brief, as THIS task's job (blind6 T03)",
+              _mt.startswith(_SV.MEND_START) and "FAIL  arrows reach Browse" in _mt and "NOT pre-existing" in _mt
+              and "`tests/old.py` prints 0 failed" in _mt and _again == "brief", _mt[:200])
         check("check catches a brief that looks up ids/classes the app lacks (blind6's .channel-logo), not real or made ones",
               g == ["#chat-panel", ".channel-logo"], g)
         h = studio_blind.ghost_hints(b, ["#media-view", ".channel-logo"])
