@@ -17,6 +17,9 @@ local model the planner's job too, and grades the result with tests it has never
     python dev/studio_blind.py tests <workspace> [--model q36c-nd64k] [T02]            (model calls: YOU run it)
     python dev/studio_blind.py check <workspace>
     python dev/studio_blind.py grade <workspace>
+    python dev/studio_blind.py split <workspace> T05 [--model q36c-nd64k]          (model calls: YOU run it)
+               a task that runs out of time in every attempt becomes T05a (some of its failing checks, judged by a
+               small test of ours over the pack's file) and T05b (the whole file); both briefs are then rewritten.
 --dry on plan/tests writes the prompt to .studio/ and calls no model.
 
 THE PLAN-ONLY TRIAL (stage A of the handover, added 2026-11-14 after two full trials died on the local tests):
@@ -530,6 +533,180 @@ def briefs(ws, model, think, dry, only=None):
         P.journal(ws, "studio_blind", f"{wrote} brief(s) rewritten in detail by {model}")
 
 
+SPLIT = """You are the planner of Philibert Code. One task of the plan is too big: the programmer (a local AI model) \
+gets about 40 minutes an attempt, and on this task it ran out of time again and again. Split it into TWO tasks.
+
+THE SPEC:
+{spec}
+
+THE PLAN (every task, short):
+{summary}
+
+THE TASK TO SPLIT:
+{task}
+
+WHAT JUDGES IT: `{test}`. These of its checks ALREADY pass on the code as it is now (they must keep passing):
+{passing}
+
+These FAIL now. They are the work left, in numbered groups (a group's later lines depend on its first):
+{failing}
+
+Split the failing groups into two parts, in the order they will be built:
+- Part 1 is judged by the checks that pass now plus the groups you give it. Part 2 comes after it and is judged by \
+the whole of `{test}`, so it gets every group part 1 does not.
+- Each part about half the work. Put together what shares code (the same key handler, the same dialog, the same \
+layout rule); part 1 must not need anything part 2 builds.
+- Each part's brief (600 to 1,500 characters, plain words): what it adds, which existing functions and elements it \
+works with (only names from THE TASK's brief or the spec), and what it leaves for the other part. A later step \
+rewrites each brief in full detail.
+
+Answer with JSON only:
+{{"part1": {{"title": "...", "brief": "...", "groups": [1, 3]}}, "part2": {{"title": "...", "brief": "..."}}}}
+"""
+
+
+def run_labels(py, ws, test, timeout=900):
+    """-> [(label, ok, got)] in the order the test printed them, from its own PASS/FAIL lines (tests/_t.py)."""
+    import os
+    r = subprocess.run([py, test], cwd=str(ws), capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       timeout=timeout, env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+    out, seen = [], set()
+    for ln in ((r.stdout or "") + (r.stderr or "")).splitlines():
+        mt = re.match(r"\s*(PASS|FAIL)  (.*)$", ln)
+        if mt:
+            lab, _, got = mt.group(2).partition(" - got ")
+            lab = lab.strip()
+            if lab not in seen:
+                seen.add(lab)
+                out.append((lab, mt.group(1) == "PASS", got))
+    return out
+
+
+def label_groups(labels):
+    """A check whose label starts with '...' goes on from the one before it ('... and the highlight returns to the
+    Play Now button' only means something after 'Back closes Play Now'): they are split as one."""
+    groups = []
+    for lab in labels:
+        if lab.startswith("...") and groups:
+            groups[-1].append(lab)
+        else:
+            groups.append([lab])
+    return groups
+
+
+PART_TEST = '''"""Part 1 of a split task ({tid}): runs {base} and judges ONLY the checks listed below.
+Written by studio_blind.py split, not by a model. The task after this one is judged by the whole of {base}."""
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+BASE = {base!r}
+r = subprocess.run([sys.executable, BASE], cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8",
+                   errors="replace", env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+OUT = (r.stdout or "") + (r.stderr or "")
+SEEN = {{}}
+for ln in OUT.splitlines():
+    m = re.match(r"\\s*(PASS|FAIL)  (.*)$", ln)
+    if m:
+        lab, _, got = m.group(2).partition(" - got ")
+        SEEN.setdefault(lab.strip(), (m.group(1) == "PASS", got))
+N = [0, 0]
+
+
+def check(label):
+    ok, got = SEEN.get(label, (False, "this check never ran: " + BASE + " stopped before it. Its last lines: " + OUT.strip()[-300:]))
+    print(("  PASS  " if ok else "  FAIL  ") + label + ("" if ok else " - got " + got[:400]), flush=True)
+    N[0 if ok else 1] += 1
+
+
+{checks}
+print(f"{{N[0]}} passed, {{N[1]}} failed", flush=True)
+sys.exit(1 if N[1] else 0)
+'''
+
+
+def split(ws, tid, model, think, dry):
+    """A task that runs out of time in every attempt becomes two (blind6 T05, 2026-11-21: six attempts over two rounds,
+    five of them out of time, stuck at 41 of 54 player checks). The planner chooses which failing checks go first;
+    part 1 is judged by a small test of ours that runs the pack's file and counts only those checks (with every check
+    that passes already), part 2 by the whole file. Then both briefs are rewritten in detail, as `briefs` does."""
+    ws = Path(ws)
+    pl = json.loads((ws / "plan.json").read_text(encoding="utf-8"))
+    task = next((t for t in pl["tasks"] if t["id"] == tid), None)
+    if not task:
+        sys.exit(f"{tid} is not in the plan")
+    base = own(task)
+    py = str(ws / ".venv" / "Scripts" / "python.exe")
+    print(f"  running {base} on the code as it is now ...", flush=True)
+    res = run_labels(py, ws, base)
+    if not res:
+        sys.exit(f"{base} printed no PASS/FAIL lines: nothing to split by")
+    ok = {lab: o for lab, o, _ in res}
+    groups = label_groups([lab for lab, _, _ in res])
+    failing = [g for g in groups if not all(ok[x] for x in g)]
+    passing = [x for g in groups if all(ok[x] for x in g) for x in g]
+    if len(failing) < 2:
+        sys.exit(f"{base}: {len(failing)} failing group(s): too little left to split")
+    summary = "\n".join(f"  {t['id']} {t['title']} (files: {', '.join(t.get('files') or [])}; test: {own(t)})" for t in pl["tasks"])
+    prompt = SPLIT.format(
+        spec=(ws / "SPEC.md").read_text(encoding="utf-8"), summary=summary, test=base,
+        task=f"{tid} {task['title']}\nFiles it may change: {', '.join(task.get('files') or [])}\n\n{(task.get('brief') or '')[:9000]}",
+        passing="\n".join("  - " + x for x in passing) or "  (none)",
+        failing="\n".join(f"  {n}. " + "\n     ".join(g) for n, g in enumerate(failing, 1)))
+    text = call(ws, f"blind_split_{tid}", prompt, model, think, dry)
+    if not text:
+        return 1
+    import nd_studio as S
+    try:
+        ans = S.extract_json(text)
+        p1, p2 = ans["part1"], ans["part2"]
+        pick = sorted({int(n) for n in p1["groups"]})
+    except (ValueError, KeyError, TypeError) as e:
+        print(f"  NO SPLIT: the reply is not the JSON asked for ({e}); it is in {ws / '.studio' / f'blind_split_{tid}.reply.txt'}")
+        return 1
+    if not pick or any(n < 1 or n > len(failing) for n in pick) or len(pick) == len(failing):
+        print(f"  NO SPLIT: part 1's groups {pick} must be some, not all, of 1..{len(failing)}")
+        return 1
+    a_id, b_id = f"{tid}a", f"{tid}b"
+    part = f"tests/part_{a_id}_{Path(base).stem}.py"
+    mine = passing + [x for n in pick for x in failing[n - 1]]
+    (ws / part).write_text(PART_TEST.format(tid=a_id, base=base, checks="\n".join(
+        f"check({json.dumps(x, ensure_ascii=False)})" for x in mine)), encoding="utf-8")
+    rest = [x for n, g in enumerate(failing, 1) if n not in pick for x in g]
+    common = {k: v for k, v in task.items() if k not in ("id", "title", "brief", "brief_short", "tests", "context", "done_when", "depends_on")}
+    ta = {**common, "id": a_id, "title": str(p1.get("title") or f"{task['title']} (part 1)"), "brief": str(p1.get("brief") or ""),
+          "tests": part, "context": [part, base], "done_when": [f"{part} prints 0 failed"], "depends_on": task.get("depends_on") or [],
+          "split_of": base}
+    tb = {**common, "id": b_id, "title": str(p2.get("title") or f"{task['title']} (part 2)"), "brief": str(p2.get("brief") or ""),
+          "tests": base, "context": [base], "done_when": [f"{base} prints 0 failed"], "depends_on": [a_id]}
+    i = pl["tasks"].index(task)
+    pl["tasks"][i:i + 1] = [ta, tb]
+    for t in pl["tasks"]:
+        t["depends_on"] = [b_id if d == tid else d for d in t.get("depends_on") or []]
+    pl.setdefault("split_tasks", []).append({"task": tid, "into": [a_id, b_id], "by": model, "part1_checks": len(mine),
+                                             "part2_new_checks": len(rest), "at": time.strftime("%Y-%m-%d %H:%M")})
+    (ws / "plan.json").write_text(json.dumps(pl, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    sf = ws / ".foreman" / "state.json"                       # the old task's record would count as stuck and be retried
+    if sf.is_file():
+        st = json.loads(sf.read_text(encoding="utf-8"))
+        old = (st.get("tasks") or {}).pop(tid, None)
+        if old is not None:
+            st.setdefault("split_tasks", {})[tid] = old
+            sf.write_text(json.dumps(st, indent=1, ensure_ascii=False), encoding="utf-8")
+    P.git(ws, "add", "-A")
+    P.git(ws, "commit", "-q", "-m", f"blind trial: {tid} split into {a_id} and {b_id}, by {model}")
+    msg = (f"{tid} split into {a_id} ({ta['title']}: {len(mine) - len(passing)} failing check(s) of {base}, judged by {part}) "
+           f"and {b_id} ({tb['title']}: the other {len(rest)}, judged by the whole file), by {model}")
+    P.journal(ws, "studio_blind", msg)
+    print("  " + msg, flush=True)
+    for x in (a_id, b_id):
+        briefs(ws, model, think, dry, only=x)
+    return 0
+
+
 def tests(ws, model, think, dry, only=None):
     ws = Path(ws)
     if json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8")).get("plan_only"):
@@ -739,6 +916,12 @@ def brief_faults(ws, task, earlier=()):
     return out
 
 
+def collapse_split(pl):
+    """The test files in task order, a split task's part 1 standing for its whole file (`split`)."""
+    order = [t.get("split_of") or own(t) for t in pl.get("tasks") or []]
+    return [x for k, x in enumerate(order) if k == 0 or order[k - 1] != x]
+
+
 def check(ws):
     """Mechanical, no model: is the local plan buildable and do its tests fail on the app as it is?"""
     ws = Path(ws)
@@ -785,7 +968,7 @@ def check(ws):
         want, _, _ = acceptance(ws, m)
         if pl.get("plan_only_problem"):
             bad.append(pl["plan_only_problem"])
-        elif [own(t) for t in pl.get("tasks") or []] != want:
+        elif collapse_split(pl) != want:
             bad.append(f"plan-only trial: the tasks' tests must be {want}, in that order")
     spec = (ws / "SPEC.md").read_text(encoding="utf-8")
     briefs = " ".join(str(t.get("brief")) for t in pl.get("tasks") or [])
@@ -933,6 +1116,8 @@ def main(a):
         briefs(a[1], model, think, dry, a[2] if len(a) > 2 else None)
     elif cmd == "tests":
         tests(a[1], model, think, dry, a[2] if len(a) > 2 else None)
+    elif cmd == "split" and len(a) == 3:
+        sys.exit(split(a[1], a[2], model, think, dry))
     elif cmd == "check":
         sys.exit(check(a[1]))
     elif cmd == "grade":

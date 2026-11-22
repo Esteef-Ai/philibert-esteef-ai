@@ -224,6 +224,23 @@ try:
         check("a salvage start that breaks older checks says so first in the brief, as THIS task's job (blind6 T03)",
               _mt.startswith(_SV.MEND_START) and "FAIL  arrows reach Browse" in _mt and "NOT pre-existing" in _mt
               and "`tests/old.py` prints 0 failed" in _mt and _again == "brief", _mt[:200])
+        _sp = Path(tempfile.mkdtemp(prefix="split_"))
+        (_sp / "tests").mkdir()
+        (_sp / "tests" / "test_x.py").write_text(
+            'print("  PASS  opens")\nprint("  FAIL  Back closes it - got \'\'")\nprint("  FAIL  ... and the highlight returns - got 1")\n'
+            'print("  FAIL  wraps - got 3")\nprint("1 passed, 3 failed")\n', encoding="utf-8")
+        _g = studio_blind.label_groups(["opens", "Back closes it", "... and the highlight returns", "wraps"])
+        (_sp / "tests" / "part.py").write_text(studio_blind.PART_TEST.format(tid="T05a", base="tests/test_x.py", checks="\n".join(
+            f"check({json.dumps(x)})" for x in ["opens", "wraps"])), encoding="utf-8")
+        _r = subprocess.run([sys.executable, "tests/part.py"], cwd=str(_sp), capture_output=True, text=True)
+        _pl = {"tasks": [{"tests": "a.py"}, {"tests": "tests/part.py", "split_of": "b.py"}, {"tests": "b.py"}, {"tests": "c.py"}]}
+        check("split: part 1's test counts only its checks of the pack's file, '...' checks stay with the one before, "
+              "and part 1 stands for its file in the plan's order (blind6 T05)",
+              _g == [["opens"], ["Back closes it", "... and the highlight returns"], ["wraps"]]
+              and "1 passed, 1 failed" in _r.stdout and "FAIL  wraps - got 3" in _r.stdout and "Back" not in _r.stdout
+              and _r.returncode == 1 and studio_blind.check_labels((_sp / "tests" / "part.py").read_text()) == ["opens", "wraps"]
+              and studio_blind.collapse_split(_pl) == ["a.py", "b.py", "c.py"], (_g, _r.stdout + _r.stderr))
+        shutil.rmtree(_sp, ignore_errors=True)
         check("check catches a brief that looks up ids/classes the app lacks (blind6's .channel-logo), not real or made ones",
               g == ["#chat-panel", ".channel-logo"], g)
         h = studio_blind.ghost_hints(b, ["#media-view", ".channel-logo"])
