@@ -472,6 +472,11 @@ def briefs(ws, model, think, dry, only=None):
     _, source = source_view(ws, budget=30_000, whole=3_000)
     summary = "\n".join(f"  {t['id']} {t['title']} (files: {', '.join(t.get('files') or [])}; test: {own(t)})" for t in pl["tasks"])
     done, wrote = [], 0
+    try:                                                      # tasks the foreman tried and did not pass
+        fst = json.loads((ws / ".foreman" / "state.json").read_text(encoding="utf-8"))
+        tried = {k for k, v in (fst.get("tasks") or {}).items() if v.get("attempts") and v.get("status") != "passed"}
+    except (OSError, ValueError):
+        tried = set()
     for t in pl["tasks"]:
         if only and t["id"] != only:
             done.append(t)
@@ -482,6 +487,21 @@ def briefs(ws, model, think, dry, only=None):
             continue
         src = (ws / str(own(t))).read_text(encoding="utf-8", errors="replace") if m.get("plan_only") and (ws / str(own(t))).is_file() else ""
         labels = check_labels(src)
+        judged = "\n".join("  - " + x for x in labels) or "  (the spec is the only judge)"
+        if src and t["id"] in tried:
+            # blind6 T05b (2026-11-22): a salvage start passed 52 of 54, but the brief still described all its work from
+            # nothing; five of six attempts rewrote the file in one reply too long to save. A stuck task's brief is
+            # about what is LEFT.
+            print(f"  {t['id']}: running {own(t)} on the code as it is now, to brief only what is left ...", flush=True)
+            res = run_labels(str(ws / ".venv" / "Scripts" / "python.exe"), ws, own(t))
+            if res and any(o for _, o, _ in res) and not all(o for _, o, _ in res):
+                judged = ("ALREADY TRUE (the code as it is passes these: the code for them EXISTS and must keep working):\n"
+                          + "\n".join("  - " + x for x, o, _ in res if o)
+                          + "\n\nSTILL TO DO (these fail now; the brief is about THESE only, as small edits to the existing "
+                          "code - never a rewrite of a file, never a function written out again that already exists):\n"
+                          + "\n".join(f"  - {x}   (now: {g[:160]})" for x, o, g in res if not o)
+                          + "\n\nWith this little left, 1,500 to 4,000 characters is the right length: in part B name the "
+                          "function to change and the exact lines to add or replace; in part D only the STILL TO DO checks.")
         kept = []
         for x in done:                                         # blind6 T02 broke T01's checks in every attempt
             f = ws / str(own(x))
@@ -491,7 +511,7 @@ def briefs(ws, model, think, dry, only=None):
                 f"{', '.join(t.get('depends_on') or []) or 'nothing'}\nThe short brief:\n{t.get('brief_short') or t.get('brief')}")
         earlier = "\n\n".join(f"--- {x['id']} {x['title']} ---\n{x.get('brief')}" for x in done) or "(none: this is the first task)"
         prompt = BRIEF.format(spec=(ws / "SPEC.md").read_text(encoding="utf-8"), summary=summary, task=task, source=source,
-                              labels="\n".join("  - " + x for x in labels) or "  (the spec is the only judge)", earlier=earlier[-24_000:],
+                              labels=judged, earlier=earlier[-24_000:],
                               kept="\n".join(kept)[-6_000:] or "  (none: this is the first task)")
         text = call(ws, f"blind_brief_{t['id']}", prompt, model, think, dry)
         if text:
