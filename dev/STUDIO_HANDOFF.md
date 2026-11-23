@@ -524,3 +524,8 @@ blind6 T05b started two rounds from a salvage at 52 of 54, but its brief still d
 - The same build ran its attempts at 12-32 tokens a second against a workspace median of 73 (from ~14:00 on); two
   attempts changed nothing in 40 minutes. `studio_pack status` now writes a "Builder speed" section and flags attempts
   under half the median. Free the machine before reading anything into such attempts.
+- Third stuck brief (blind6 16fc554, 3,355 chars) passed `check` but was not built: it read "got ('0', '0')" (two
+  opacities) as a position at (0,0), and rewrote the three fade functions to toggle classes on `#player-diag` only,
+  while the test reads `#player-modal > div:last-child` and `.player-info` and the fade checks that pass now go through
+  `updateTvControlsVisibility()`. It would most likely break the passing fade check and not fix the two failing ones. The local
+  planner cannot diagnose this failure from the test output; `check` cannot see a wrong diagnosis. blind6 ends 129/131.
