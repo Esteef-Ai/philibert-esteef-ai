@@ -248,6 +248,9 @@ try:
                                        + " ".join(_pass), _pass, ["Right reaches Close"])
         _ok = studio_blind.left_faults(_sp, _task, "In `function showControls(){` add a call to x(). Find `function init(){`.",
                                        _pass, ["Right reaches Close"])
+        _gut = studio_blind.left_faults(_sp, _task, "Find `function init(){` and replace its entire body with C1.", _pass, ["x"])
+        check("... and when it rewrites the whole body of a function that exists (blind6 T05b's changeChannelPlayer)",
+              len(_gut) == 1 and "init()" in _gut[0], _gut)
         check("a stuck task's brief is refused when it is long, writes a function that exists, or lists what already "
               "passes; pointing at a function is fine (blind6 T05b)",
               len(_lf) == 3 and "5" in _lf[0] and "showControls" in _lf[1] and "init" not in _lf[1] and _ok == [], (_lf, _ok))

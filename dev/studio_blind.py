@@ -577,6 +577,13 @@ def left_faults(ws, task, brief, passing, failing):
                 and re.search(r"function\s+" + re.escape(mt.group(1)) + r"\s*\(", code)):
             have.add(mt.group(1))
     have = sorted(have)
+    # blind6 T05b's next brief: "Find `function changeChannelPlayer(key){` and replace its entire body" - the wrap checks
+    # it was rewriting already passed
+    gut = sorted({n for n in re.findall(r"function\s+([A-Za-z_$][\w$]*)\s*\([^.\n]{0,80}?\b(?:replace|rewrite)\s+(?:its|the)\s+(?:entire|whole)\b", brief, re.I)
+                  if re.search(r"function\s+" + re.escape(n) + r"\s*\(", code)})
+    if gut:
+        out.append("it rewrites the whole of " + ", ".join(f"{n}()" for n in gut) + ", which exists and passes checks: "
+                   "say which lines in it to change")
     if have:
         out.append("it says to write " + ", ".join(f"function {n}()" for n in have) + ", which already exist(s) in "
                    + ", ".join(task.get("files") or []) + ": name the existing function and the lines to change in it instead")
