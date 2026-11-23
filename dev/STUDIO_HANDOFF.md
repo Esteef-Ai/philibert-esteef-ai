@@ -513,3 +513,14 @@ blind6 T05 stuck at 41 of 54 player checks: six attempts over two rounds, five o
 
 ## 25. A stuck task is briefed on what is left (2026-11-22)
 blind6 T05b started two rounds from a salvage at 52 of 54, but its brief still described all its work; five of six attempts were cut off writing the file in one reply too long to save, or ran out of time. `briefs <ws> <tid>` for a task the foreman tried and did not pass now runs its test first: the prompt lists the checks ALREADY TRUE and the ones STILL TO DO (with what each gets now), asks for small edits only, and 1,500 to 4,000 characters.
+
+## 26. A stuck brief that ignores what is left is refused; a slow machine shows in the handoff (2026-11-22, d77cc9f)
+- blind6 T05b, build after the stuck-aware brief (section 25): the planner was told 52 of 54 checks pass and to brief the
+  2 left in 1,500-4,000 characters. It wrote 5,814, told the builder to "add" `applyTvStyles()`,
+  `startTvControlsTimer()` and `handleMediaKey()` (all already in tvnav.js) and listed every check in part D.
+- `left_faults()` in studio_blind: over 4,500 characters, an "add/write/append/define" sentence naming a
+  `function x(` that already exists in the task's files ("Find `function x(`" is fine), or more than 2 passing check
+  labels in the brief. `briefs` re-asks with these (up to 2 more asks); `check` says NOT READY on them.
+- The same build ran its attempts at 12-32 tokens a second against a workspace median of 73 (from ~14:00 on); two
+  attempts changed nothing in 40 minutes. `studio_pack status` now writes a "Builder speed" section and flags attempts
+  under half the median. Free the machine before reading anything into such attempts.
