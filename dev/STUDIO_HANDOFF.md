@@ -529,3 +529,15 @@ blind6 T05b started two rounds from a salvage at 52 of 54, but its brief still d
   while the test reads `#player-modal > div:last-child` and `.player-info` and the fade checks that pass now go through
   `updateTvControlsVisibility()`. It would most likely break the passing fade check and not fix the two failing ones. The local
   planner cannot diagnose this failure from the test output; `check` cannot see a wrong diagnosis. blind6 ends 129/131.
+
+## 27. Salvage reads OpenCode's own snapshot (2026-11-23)
+- blind7 T02 stuck after 6 attempts. Attempt 2 (last round) had reached 19 of 19 with nothing older broken; it failed
+  only the scope gate for leaving `tests/debug_guide.py`. Salvage said "1 passed, 1 failed" for it: the builder had
+  changed tvnav.js OUTSIDE its edit tool (a PowerShell find-and-replace, git stash/checkout/apply), so replaying the
+  edit tool calls rebuilt broken JavaScript.
+- OpenCode keeps a git store per project at `~/.local/share/opencode/snapshot/<repo's first commit>/<id>/` and puts a
+  tree hash (`part.snapshot`) on every step. `snapshot_files()` reads the allowed files from the attempt's last
+  snapshot; the edit replay is now the fallback only. With it T02_a2 judged 19/19, nothing broken, and was kept
+  (blind7 070a3cc). Several other attempts that "did not replay" now do.
+- The ND3 foreman is read-only to us, so it still fails a finished attempt for a scratch file in tests/; salvage is
+  what recovers it.

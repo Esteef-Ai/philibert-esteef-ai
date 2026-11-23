@@ -46,6 +46,43 @@ def at_commit(ws, sha, rel):
     return r.stdout if r.returncode == 0 else ""
 
 
+def snapshot_files(ws, transcript, allowed):
+    """-> {rel: content} of the allowed files as OpenCode's own snapshot of the attempt's last step holds them, or None.
+    OpenCode keeps a git store per project (keyed by the repo's first commit) and puts a tree hash on every step. Unlike
+    the replay this sees what the builder did OUTSIDE its edit tool: blind7 T02_a2 (2026-11-23) ran a PowerShell
+    find-and-replace, git stash and git apply on tvnav.js; the replay rebuilt broken JavaScript (1 check of 19) where
+    the snapshot holds the real file: 19 of 19, nothing older broken."""
+    import os
+    snap = None
+    for ln in Path(transcript).read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            e = json.loads(ln)
+        except ValueError:
+            continue
+        s = (e.get("part") or {}).get("snapshot")
+        if s:
+            snap = s
+    if not snap:
+        return None
+    root = subprocess.run(["git", "-C", str(ws), "rev-list", "--max-parents=0", "HEAD"], capture_output=True,
+                          text=True).stdout.split()
+    home = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "opencode" / "snapshot"
+    for r in root:
+        for gd in [home / r] + sorted((home / r).glob("*")) if (home / r).is_dir() else []:
+            if not (gd / "HEAD").is_file():
+                continue
+            if subprocess.run(["git", "--git-dir", str(gd), "cat-file", "-e", snap], capture_output=True).returncode:
+                continue
+            files = {}
+            for rel in sorted(allowed):
+                out = subprocess.run(["git", "--git-dir", str(gd), "show", f"{snap}:{rel}"], capture_output=True)
+                if out.returncode:
+                    return None                                # the file is not in the snapshot: do not guess
+                files[rel] = out.stdout.decode("utf-8", errors="replace").replace("\r\n", "\n")
+            return files
+    return None
+
+
 def replay(ws, transcript, allowed, start_sha):
     """-> {rel: content} of the allowed files as the attempt left them, or None when the replay does not hold
     (an edit whose old text is not in the file: then the reconstruction would be a guess)."""
@@ -206,7 +243,11 @@ def salvage(ws, tid, apply=False, log=print):
     best = None
     # every round's attempts: <tid>_a<n> (the last round) and <tid>_r<k>_a<n> (earlier rounds, set aside by keep_rounds)
     for tr in sorted((ws / ".foreman" / "opencode").glob(f"{tid}_*.jsonl")):
-        files = replay(ws, tr, allowed, head)
+        files = snapshot_files(ws, tr, allowed)
+        if files is not None and all(at_commit(ws, head, r).replace("\r\n", "\n") == c for r, c in files.items()):
+            files = {}                                         # the snapshot holds nothing new
+        elif files is None:
+            files = replay(ws, tr, allowed, head)
         if not files:
             log(f"  {tr.name}: nothing to rebuild (no edits in the allowed files, or the edits do not replay)")
             continue

@@ -219,6 +219,37 @@ try:
         check("salvage replays an edit the way OpenCode matches a block by its first and last lines (blind6 T02_a2)",
               _SV.anchored_span(_txt, "function f(el){\n  if(!el) return;\n  el.focus();\n}") == (1, 6)
               and _SV.anchored_span(_txt, "a\nz") is None)
+        # OpenCode's snapshot store, faked: a repo whose first commit names the store, a bare-ish git dir under it
+        import os as _os
+        _sw = Path(tempfile.mkdtemp(prefix="snap_"))
+        (_sw / "public").mkdir()
+        (_sw / "public" / "nav.js").write_text("old\n", encoding="utf-8")
+        git(_sw, "init", "-q"); git(_sw, "add", "-A"); git(_sw, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "r")
+        _root = subprocess.run(["git", "-C", str(_sw), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+        _home = Path(tempfile.mkdtemp(prefix="xdg_"))
+        _gd = _home / "opencode" / "snapshot" / _root / "abc"
+        _gd.mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", "--bare", str(_gd)], check=True)
+        (_sw / "public" / "nav.js").write_text("done by bash\n", encoding="utf-8")
+        _env = dict(_os.environ, GIT_DIR=str(_gd), GIT_WORK_TREE=str(_sw), GIT_INDEX_FILE=str(_gd / "index"))
+        subprocess.run(["git", "add", "-A"], env=_env, check=True)
+        _tree = subprocess.run(["git", "write-tree"], env=_env, capture_output=True, text=True).stdout.strip()
+        (_sw / "public" / "nav.js").write_text("old\n", encoding="utf-8")
+        _tr = _sw / "t.jsonl"
+        _tr.write_text(json.dumps({"type": "step_finish", "part": {"snapshot": _tree}}) + "\n", encoding="utf-8")
+        _old_xdg = _os.environ.get("XDG_DATA_HOME")
+        _os.environ["XDG_DATA_HOME"] = str(_home)
+        try:
+            _sf = _SV.snapshot_files(_sw, _tr, {"public/nav.js"})
+        finally:
+            if _old_xdg is None:
+                _os.environ.pop("XDG_DATA_HOME", None)
+            else:
+                _os.environ["XDG_DATA_HOME"] = _old_xdg
+        check("salvage reads an attempt's files from OpenCode's own snapshot, so changes made outside the edit tool "
+              "count (blind7 T02_a2)", _sf == {"public/nav.js": "done by bash\n"}, _sf)
+        shutil.rmtree(_sw, ignore_errors=True)
+        shutil.rmtree(_home, ignore_errors=True)
         _mt = _SV.mend_text({"files": ["public/tvnav.js"]}, "tests/own.py", [("tests/old.py", "FAIL  arrows reach Browse")])
         _again = re.sub(re.escape(_SV.MEND_START) + r".*?" + re.escape(_SV.MEND_END) + r"\n*", "", _mt + "brief", flags=re.S)
         check("a salvage start that breaks older checks says so first in the brief, as THIS task's job (blind6 T03)",
