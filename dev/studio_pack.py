@@ -724,6 +724,36 @@ def probe_problems(score):
     return out
 
 
+def builder_speed(ws):
+    """-> [(attempt file stem, output tokens a second)] oldest first, from OpenCode's own logs: only steps that wrote
+    over 2,000 tokens, so reading and tool time do not count."""
+    out = []
+    files = sorted((Path(ws) / ".foreman" / "opencode").glob("*.jsonl"), key=lambda f: f.stat().st_mtime)
+    for f in files:
+        start, toks, secs = None, 0, 0.0
+        try:
+            lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for ln in lines:
+            try:
+                e = json.loads(ln)
+            except ValueError:
+                continue
+            ts = e.get("timestamp")
+            if not isinstance(ts, (int, float)):
+                continue
+            if e.get("type") == "step_start":
+                start = ts
+            elif e.get("type") == "step_finish" and start:
+                o = ((e.get("part") or {}).get("tokens") or {}).get("output") or 0
+                if o > 2000 and ts > start:
+                    toks, secs = toks + o, secs + (ts - start) / 1000
+        if secs:
+            out.append((f.stem, toks / secs))
+    return out
+
+
 def status(ws):
     """Rewrite .studio/HANDOFF.md: everything the next agent (or person) needs to carry on, from the disk alone."""
     ws = Path(ws)
@@ -762,6 +792,19 @@ def status(ws):
                                 "test line that fails next to the brief." if same else
                                 "the attempts failed in different ways: the task may be too big for one go; consider splitting it "
                                 "in the pack, or a longer time limit."), ""]
+    sp = builder_speed(ws)
+    if sp:
+        med = sorted(r for _, r in sp)[len(sp) // 2]
+        slow = [(n, r) for n, r in sp[-6:] if r < med / 2]
+        L += ["", "## Builder speed", "",
+              f"Writing speed in its long replies, median over this workspace: {med:.0f} tokens a second. Newest attempts: "
+              + ", ".join(f"{n} {r:.0f}" for n, r in sp[-6:]) + "."]
+        if slow:
+            # blind6 (2026-11-22): the last six T05b attempts ran at 12-32 tokens a second against a median of ~75; two
+            # changed nothing in 40 minutes. Something else held the GPU; the task was not the fault.
+            L += ["", f"**{len(slow)} of the newest attempts ran at under half that speed.** Something else was using the "
+                  "GPU or the machine (`ollama ps` shows the model's CPU share while it runs). Those attempts say little about "
+                  "the task or the brief: free the machine and build again before changing either."]
     sc = sd / "score.json"
     if sc.exists():
         s = json.loads(sc.read_text(encoding="utf-8"))

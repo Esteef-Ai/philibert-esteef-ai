@@ -240,6 +240,17 @@ try:
               and "1 passed, 1 failed" in _r.stdout and "FAIL  wraps - got 3" in _r.stdout and "Back" not in _r.stdout
               and _r.returncode == 1 and studio_blind.check_labels((_sp / "tests" / "part.py").read_text()) == ["opens", "wraps"]
               and studio_blind.collapse_split(_pl) == ["a.py", "b.py", "c.py"], (_g, _r.stdout + _r.stderr))
+        (_sp / "public").mkdir()
+        (_sp / "public" / "nav.js").write_text("function showControls(){}\nfunction init(){}\n", encoding="utf-8")
+        _task = {"files": ["public/nav.js"]}
+        _pass = ["the video fills the whole screen", "Back closes the player", "Play/Pause toggles it"]
+        _lf = studio_blind.left_faults(_sp, _task, "x" * 5000 + ". Add `function showControls()`. Find `function init(){`. "
+                                       + " ".join(_pass), _pass, ["Right reaches Close"])
+        _ok = studio_blind.left_faults(_sp, _task, "In `function showControls(){` add a call to x(). Find `function init(){`.",
+                                       _pass, ["Right reaches Close"])
+        check("a stuck task's brief is refused when it is long, writes a function that exists, or lists what already "
+              "passes; pointing at a function is fine (blind6 T05b)",
+              len(_lf) == 3 and "5" in _lf[0] and "showControls" in _lf[1] and "init" not in _lf[1] and _ok == [], (_lf, _ok))
         shutil.rmtree(_sp, ignore_errors=True)
         check("check catches a brief that looks up ids/classes the app lacks (blind6's .channel-logo), not real or made ones",
               g == ["#chat-panel", ".channel-logo"], g)

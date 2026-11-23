@@ -488,6 +488,7 @@ def briefs(ws, model, think, dry, only=None):
         src = (ws / str(own(t))).read_text(encoding="utf-8", errors="replace") if m.get("plan_only") and (ws / str(own(t))).is_file() else ""
         labels = check_labels(src)
         judged = "\n".join("  - " + x for x in labels) or "  (the spec is the only judge)"
+        left = None                                            # (passing labels, failing labels) for a stuck task
         if src and t["id"] in tried:
             # blind6 T05b (2026-11-22): a salvage start passed 52 of 54, but the brief still described all its work from
             # nothing; five of six attempts rewrote the file in one reply too long to save. A stuck task's brief is
@@ -495,6 +496,7 @@ def briefs(ws, model, think, dry, only=None):
             print(f"  {t['id']}: running {own(t)} on the code as it is now, to brief only what is left ...", flush=True)
             res = run_labels(str(ws / ".venv" / "Scripts" / "python.exe"), ws, own(t))
             if res and any(o for _, o, _ in res) and not all(o for _, o, _ in res):
+                left = ([x for x, o, _ in res if o], [x for x, o, _ in res if not o])
                 judged = ("ALREADY TRUE (the code as it is passes these: the code for them EXISTS and must keep working):\n"
                           + "\n".join("  - " + x for x, o, _ in res if o)
                           + "\n\nSTILL TO DO (these fail now; the brief is about THESE only, as small edits to the existing "
@@ -517,7 +519,9 @@ def briefs(ws, model, think, dry, only=None):
         if text:
             import nd_studio as S
             new = S.strip_think(text).strip()
-            faults = brief_faults(ws, {"brief": new}, done)
+            def faults_of(b):
+                return brief_faults(ws, {"brief": b}, done) + (left_faults(ws, t, b, *left) if left else [])
+            faults = faults_of(new)
             # blind5: redefined isTvBrowser(); blind6: OK fired twice, names the app lacks. Up to two more asks, each told
             # every fault seen so far (blind6 T04, 2026-11-18: three runs of one re-ask each all kept closePlayer()).
             seen = list(faults)
@@ -532,7 +536,7 @@ def briefs(ws, model, think, dry, only=None):
                 if not again:
                     break
                 cand = S.strip_think(again).strip()
-                cf = brief_faults(ws, {"brief": cand}, done)
+                cf = faults_of(cand)
                 if len(cf) < len(faults):
                     new, faults = cand, cf
                 seen += cf
@@ -551,6 +555,36 @@ def briefs(ws, model, think, dry, only=None):
         done.append(t)
     if wrote:
         P.journal(ws, "studio_blind", f"{wrote} brief(s) rewritten in detail by {model}")
+
+
+def left_faults(ws, task, brief, passing, failing):
+    """Faults of a stuck task's brief that ignores how little is left. blind6 T05b (2026-11-22): told 52 of 54 checks
+    pass and to brief the 2 left in 1,500-4,000 characters, the planner wrote 5,814 telling the builder to "add"
+    applyTvStyles(), startTvControlsTimer() and handleMediaKey(), all already in tvnav.js, and listed every check."""
+    out = []
+    if len(brief) > 4500:
+        out.append(f"it is {len(brief)} characters: only {len(failing)} check(s) are left, so 1,500 to 4,000 is the length")
+    code = ""
+    for f in task.get("files") or []:
+        fp = Path(ws) / f
+        if fp.is_file():
+            code += fp.read_text(encoding="utf-8", errors="replace")
+    have = set()
+    for mt in re.finditer(r"function\s+([A-Za-z_$][\w$]*)\s*\(", brief):
+        start = max(brief.rfind(". ", 0, mt.start()), brief.rfind("\n", 0, mt.start())) + 1
+        said = brief[start:mt.start()]                         # the sentence so far: "Add `function x()`" writes it,
+        if (re.search(r"\b(add|write|append|define|create|implement)\b", said, re.I)   # "Find `function x(`" points at it
+                and re.search(r"function\s+" + re.escape(mt.group(1)) + r"\s*\(", code)):
+            have.add(mt.group(1))
+    have = sorted(have)
+    if have:
+        out.append("it says to write " + ", ".join(f"function {n}()" for n in have) + ", which already exist(s) in "
+                   + ", ".join(task.get("files") or []) + ": name the existing function and the lines to change in it instead")
+    named = [x for x in passing if len(x) > 12 and x in brief]
+    if len(named) > 2:
+        out.append(f"it lists {len(named)} checks that already pass (e.g. \"{named[0][:60]}\"): part D is for the "
+                   f"{len(failing)} check(s) still to do only")
+    return out
 
 
 SPLIT = """You are the planner of Philibert Code. One task of the plan is too big: the programmer (a local AI model) \
@@ -957,8 +991,9 @@ def check(ws):
         fst = json.loads((ws / ".foreman" / "state.json").read_text(encoding="utf-8"))
         # passed, or worked on (a salvage may have made its test pass: blind6 T03, 2026-11-18)
         done_ids = {k for k, v in (fst.get("tasks") or {}).items() if v.get("status") == "passed" or v.get("attempts")}
+        stuck = {k for k, v in (fst.get("tasks") or {}).items() if v.get("attempts") and v.get("status") != "passed"}
     except (OSError, ValueError):
-        done_ids = set()
+        done_ids, stuck = set(), set()
     names = [own(t) for t in pl.get("tasks") or []]
     if len(set(names)) != len(names):
         bad.append("two tasks share a test file")
@@ -981,7 +1016,11 @@ def check(ws):
             bad.append(f"{tn} passes before anything is built: it checks nothing new")
         elif fl < 0:
             bad.append(f"{tn} crashes or prints no summary instead of failing cleanly: {tail[-200:]}")
-        for fault in brief_faults(ws, t, (pl.get("tasks") or [])[:i]):
+        faults = brief_faults(ws, t, (pl.get("tasks") or [])[:i])
+        if t["id"] in stuck and 0 < p and fl > 0:             # a stuck task's brief must be about what is left
+            res = run_labels(py, ws, tn)
+            faults += left_faults(ws, t, t.get("brief") or "", [x for x, o, _ in res if o], [x for x, o, _ in res if not o])
+        for fault in faults:
             bad.append(f"{t['id']}: {fault}. Run `briefs` again for this task, or mend the brief")
     m = json.loads((ws / ".studio" / "pack.json").read_text(encoding="utf-8"))
     if m.get("plan_only"):
