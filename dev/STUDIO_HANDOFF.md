@@ -541,3 +541,10 @@ blind6 T05b started two rounds from a salvage at 52 of 54, but its brief still d
   (blind7 070a3cc). Several other attempts that "did not replay" now do.
 - The ND3 foreman is read-only to us, so it still fails a finished attempt for a scratch file in tests/; salvage is
   what recovers it.
+
+## 28. blind7: 131/131 (2026-11-24)
+blind7 (`C:\PCodeTest\blind7`) graded 208/208 (131/131 new, 77/77 guard checks) after two builds. Salvage with
+snapshots (section 27) recovered T02; the mend note (section 25) recovered T05 from 53/54. No split was needed and
+the builder ran at full speed. Plan-only record: blind5 131, blind6 129, blind7 131. The open fault: the foreman
+rejects a finished attempt for a scratch file in `tests/`. That is in ND3's `nd_foreman.py` (read-only here), so
+salvage is what recovers those attempts.

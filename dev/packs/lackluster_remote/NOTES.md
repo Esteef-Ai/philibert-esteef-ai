@@ -75,3 +75,18 @@ them to fail on the base.
 - Proven: verify says SOUND (all fail on the base, 208 pass on the reference). The reference cut back to T02's
   work alone passes moves (19/19) and fails screen and place; cut back to T02+T03, it passes screen as well and
   fails place. Each task passes on its own work, and only on it.
+
+## 2026-11-24: blind7 graded 131/131 (208/208)
+- Plan-only blind trial. The local q36c-nd64k wrote the plan and briefs from the spec alone, and q36c-nd128k built it.
+  The pack's hidden tests: 131 of 131 new checks and 77 of 77 guard checks. Two builds (6.1 h and 4.5 h), the
+  builder ran at 78 to 84 tok/s, and no split was needed.
+- What carried it:
+  - T02 was rescued by salvage reading OpenCode's own snapshot. Its attempt 2 was a full 19/19 pass, rejected
+    only for a scratch file. The old edit replay rebuilt it as broken JS (1/19), because the builder had also
+    changed files from the shell.
+  - T05 was rescued by a mend note: salvage kept a 53/54 start that broke 1 older check, and the next attempt
+    passed first time.
+- Score so far: blind5 131/131, blind6 129/131, blind7 131/131 (n=3 plan-only trials since the tools settled).
+- The look step flags guide cells under the sticky time ruler on "browse column". That is the look script's
+  scroll position (channel 3 half under the header), not a layout fault. blind6's look shot that screen with the
+  player open, because the look step is still not deterministic.
