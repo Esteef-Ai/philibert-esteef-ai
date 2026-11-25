@@ -8069,6 +8069,22 @@ def tubeloader_assistant():
     return (lambda msgs: ollama_chat(m, msgs, timeout=300)), m
 
 
+def yeschef_helpers():
+    """(chat, vision) for Yes Chef!: each (callable(messages) -> text, model name), or None when the
+    drive has no such model. Chat = the same model TubeLoader uses; vision = the roster's picture model."""
+    llm, m = tubeloader_assistant()
+    chat = (llm, m) if llm else None
+    try:
+        installed = _get_models() or []
+    except Exception:
+        installed = []
+    vm = model_roster().get("vision", {}).get("model") or ""
+    if vm not in installed:
+        vm = next((x for x in installed if re.search(r"llava|vision|-vl|vl:|minicpm-v", x, re.I)), "")
+    vision = ((lambda msgs: ollama_chat(vm, msgs, timeout=600)), vm) if vm else None
+    return chat, vision
+
+
 def tool_delegate(specialist, task, context="", req_id=None):
     """Hand a job to a specialist model and bring back its answer."""
     roster = model_roster()
@@ -18493,6 +18509,8 @@ class Handler(BaseHTTPRequestHandler):
             bare_path = "/live/guitartab.html"
         elif bare_path == "/tubeloader":
             bare_path = "/live/tubeloader.html"
+        elif bare_path == "/yeschef":
+            bare_path = "/live/yeschef.html"
         elif bare_path == "/images":
             bare_path = "/live/images.html"
         elif bare_path == "/files":
@@ -18659,6 +18677,21 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
+        if bare_path.startswith("/yeschef/photo/"):
+            # Yes Chef!'s bake photos (nd_yeschef.py): only names it made, only from data/yeschef/photos
+            import nd_yeschef
+            f = nd_yeschef.photo_file(_CONFIG_DIR, bare_path.rsplit("/", 1)[-1]) if self.authed() else None
+            if not f:
+                self.send_json({"error": "not found"}, 404)
+                return
+            data = f.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", {".png": "image/png", ".webp": "image/webp"}.get(f.suffix, "image/jpeg"))
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "private, max-age=86400")
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if bare_path == "/live" or bare_path.startswith("/live/"):
             if not self.authed():
                 page = PAIR_PAGE.encode("utf-8")
@@ -18791,7 +18824,7 @@ class Handler(BaseHTTPRequestHandler):
             import nd_chatref
             self.send_json(nd_chatref.handle(body, "philibert" if PORTABLE else "code", _drive_root()))
             return
-        if path in ("/api/notes", "/api/chats", "/api/desktop", "/api/band", "/api/images", "/api/files", "/api/feedback", "/api/board", "/api/yoteach", "/api/modelshare", "/api/guitartab", "/api/tubeloader"):
+        if path in ("/api/notes", "/api/chats", "/api/desktop", "/api/band", "/api/images", "/api/files", "/api/feedback", "/api/board", "/api/yoteach", "/api/modelshare", "/api/guitartab", "/api/tubeloader", "/api/yeschef"):
             # The Notes app (nd_notes.py) and saved chats (nd_chats.py). They
             # write files, so a page from another site in the user's own browser
             # must not be able to drive them.
@@ -18841,6 +18874,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/modelshare":
                 self.send_json(modelshare_handle(body))
+                return
+            if path == "/api/yeschef":
+                import nd_yeschef
+                self.send_json(nd_yeschef.handle(body, _CONFIG_DIR, internet_on(), *yeschef_helpers()))
                 return
             if path == "/api/tubeloader":
                 import nd_tubeloader

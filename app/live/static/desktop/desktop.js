@@ -66,6 +66,7 @@
     if (has("yoteach")) list.push({ id: "yoteach", name: "Yo Teach", icon: "yoteach", url: "/yoteach?embed=1", w: 1240, h: 800, title: "Philibert Yo Teach" });
     if (has("guitartab")) list.push({ id: "guitartab", name: "TabCrafter", icon: "guitartab", url: "/guitartab", w: 1240, h: 800, title: "Philibert TabCrafter" });
     if (has("tubeloader")) list.push({ id: "tubeloader", name: "TubeLoader", icon: "tubeloader", url: "/tubeloader", w: 1180, h: 780, title: "Philibert TubeLoader" });
+    if (has("yeschef")) list.push({ id: "yeschef", name: "Yes Chef!", icon: "yeschef", url: "/yeschef", w: 1240, h: 820, title: "Yes Chef!" });
     if (has("board")) list.push({ id: "board", name: "Group Board", icon: "board", url: "/board", w: 1100, h: 760, title: "Group Board" });
     if (has("boof")) list.push({ id: "boof", name: "Boof Launcher", icon: "app", img: "/live/desktop/boof-launcher.svg",
                                  action: function () { api("/api/desktop", { op: "open_boof" }); } });

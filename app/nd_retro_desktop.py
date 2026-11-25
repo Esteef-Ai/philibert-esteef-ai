@@ -55,6 +55,7 @@ STORE = [
     {"id": "tubeloader", "name": "TubeLoader", "about": "Put apps on your TV: finds the Fire TV, Google TV, Android TV "
      "and Roku on your home network and installs an app from this computer (an APK, or a Roku channel) - with "
      "Philibert helping when the TV says no. Gets Google's ADB tool the first time (about 13 MB)."},
+    {"id": "yeschef", "name": "Yes Chef!", "about": "For home cooks and bakers: recipes kept by weight that scale themselves, test versions to compare, several batches at once with their own timers, and a cook mode that keeps the screen on. Add recipes from a link, a PDF, a Word file or a photo - it reads them ahead and flags the overnight rests and early preheats as MUST READ."},
     {"id": "vault", "name": "Retro Vault", "about": "Play your own classic games from the drive (NES, SNES, Genesis, GBA, N64 and "
      "more), with saves kept on the drive."},
     {"id": "board", "name": "Group Board", "about": "A message board for your band or any group: posts, replies, polls and "

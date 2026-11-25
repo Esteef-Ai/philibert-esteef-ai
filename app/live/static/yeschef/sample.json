@@ -1,0 +1,248 @@
+[
+ {
+  "id": "sample-ny-italian",
+  "name": "NY-Style Italian Loaf (sample)",
+  "parentId": null,
+  "hypothesis": "",
+  "yieldNote": "2 long loaves or 1 Dutch-oven round",
+  "loafWeight": 500,
+  "notes": "A sample recipe to try Yes Chef! with. Crisp thin crust, soft open crumb. If the crust comes out paler than before, add 1 tsp non-diastatic malt or go to 15 g sugar.",
+  "tags": [
+   "sample",
+   "bread"
+  ],
+  "ingredients": [
+   {
+    "id": "flour",
+    "name": "Bread flour",
+    "grams": 450,
+    "kind": "flour",
+    "flour": true
+   },
+   {
+    "id": "apflour",
+    "name": "All-purpose flour",
+    "grams": 150,
+    "kind": "flour",
+    "flour": true
+   },
+   {
+    "id": "water",
+    "name": "Water",
+    "grams": 400,
+    "kind": "water",
+    "flour": false
+   },
+   {
+    "id": "yeast",
+    "name": "Instant yeast",
+    "grams": 7,
+    "kind": "yeast",
+    "flour": false
+   },
+   {
+    "id": "salt",
+    "name": "Salt",
+    "grams": 11,
+    "kind": "salt",
+    "flour": false
+   },
+   {
+    "id": "sugar",
+    "name": "Sugar",
+    "grams": 12,
+    "kind": "sugar",
+    "flour": false
+   },
+   {
+    "id": "oil",
+    "name": "Olive oil",
+    "grams": 20,
+    "kind": "oil",
+    "flour": false
+   },
+   {
+    "id": "sesame",
+    "name": "White sesame seeds",
+    "grams": 0,
+    "kind": "seeds",
+    "flour": false,
+    "optional": true,
+    "note": "As desired"
+   }
+  ],
+  "steps": [
+   {
+    "id": "mix",
+    "title": "Mix (no salt, no oil)",
+    "detail": "Combine both flours, yeast, sugar and water until no dry flour remains. Hold back salt and oil.",
+    "type": "active",
+    "minutes": null,
+    "maxMinutes": null,
+    "est": 4,
+    "check": ""
+   },
+   {
+    "id": "rest",
+    "title": "Rest",
+    "detail": "Cover and rest.",
+    "type": "wait",
+    "minutes": 25,
+    "maxMinutes": 30,
+    "est": 5,
+    "check": ""
+   },
+   {
+    "id": "salt",
+    "title": "Add salt, develop gluten",
+    "detail": "Add salt. Stand mixer on speed 2 until the dough clears the sides of the bowl. By hand: knead 12–15 minutes.",
+    "type": "active",
+    "minutes": 7,
+    "maxMinutes": 8,
+    "est": 5,
+    "check": ""
+   },
+   {
+    "id": "oil",
+    "title": "Add oil, mix to windowpane",
+    "detail": "Drizzle in the oil a little at a time and keep mixing until smooth and silky.",
+    "type": "active",
+    "minutes": 3,
+    "maxMinutes": 4,
+    "est": 5,
+    "check": "Windowpane: a thin stretch lets light through without tearing. Dough 76–78°F."
+   },
+   {
+    "id": "fold1wait",
+    "title": "Bulk rise, part 1",
+    "detail": "Cover.",
+    "type": "wait",
+    "minutes": 30,
+    "maxMinutes": null,
+    "est": 5,
+    "check": ""
+   },
+   {
+    "id": "fold1",
+    "title": "Stretch and fold",
+    "detail": "One set of folds on all four sides. A fully mixed dough needs only one.",
+    "type": "active",
+    "minutes": null,
+    "maxMinutes": null,
+    "est": 2,
+    "check": ""
+   },
+   {
+    "id": "bulk",
+    "title": "Bulk rise, part 2",
+    "detail": "Continue until fully doubled.",
+    "type": "wait",
+    "minutes": 40,
+    "maxMinutes": 60,
+    "est": 5,
+    "check": "Fully doubled"
+   },
+   {
+    "id": "divide",
+    "title": "Divide and preshape",
+    "detail": "Turn out gently, divide, preshape into loose logs.",
+    "type": "active",
+    "minutes": null,
+    "maxMinutes": null,
+    "est": 5,
+    "check": ""
+   },
+   {
+    "id": "bench",
+    "title": "Bench rest",
+    "detail": "Rest covered. The longer rest lets you shape without forcing out gas.",
+    "type": "wait",
+    "minutes": 20,
+    "maxMinutes": null,
+    "est": 5,
+    "check": ""
+   },
+   {
+    "id": "shape",
+    "title": "Shape gently",
+    "detail": "Same folds as before, but press lightly and seal without flattening. Roll to length with light hands: smooth, not tight. Mist and seed now if using sesame.",
+    "type": "active",
+    "minutes": null,
+    "maxMinutes": null,
+    "est": 8,
+    "check": ""
+   },
+   {
+    "id": "proof",
+    "title": "Final proof (start preheat now)",
+    "detail": "Proof until almost doubled. Start preheating the oven at the beginning of this step.",
+    "type": "wait",
+    "minutes": 60,
+    "maxMinutes": 70,
+    "est": 5,
+    "check": "Floured finger poke ½ inch: fills back slowly, leaves a slight dent"
+   },
+   {
+    "id": "score",
+    "title": "Transfer and score",
+    "detail": "Move proofed loaves to the perforated tray. One confident slash with a fresh razor at 30–45°, about ¼–½ inch deep. Clear a line of seeds first if using sesame.",
+    "type": "active",
+    "minutes": null,
+    "maxMinutes": null,
+    "est": 3,
+    "check": ""
+   },
+   {
+    "id": "steam",
+    "title": "Load and steam",
+    "detail": "Load the bread. Pour about 1 cup boiling water into the preheated steam pan, keep hands and face clear, close the door promptly.",
+    "type": "active",
+    "minutes": null,
+    "maxMinutes": null,
+    "est": 1,
+    "check": ""
+   },
+   {
+    "id": "bake1",
+    "title": "Bake at 475°F",
+    "detail": "Bake with steam.",
+    "type": "bake",
+    "minutes": 10,
+    "maxMinutes": null,
+    "est": 5,
+    "check": ""
+   },
+   {
+    "id": "bake2",
+    "title": "Remove steam, bake at 450°F",
+    "detail": "Remove the steam pan if safe. Reduce to 450°F and bake until well browned.",
+    "type": "bake",
+    "minutes": 13,
+    "maxMinutes": 16,
+    "est": 5,
+    "check": "Center reads 208–210°F"
+   },
+   {
+    "id": "bottoms",
+    "title": "Dry the bottoms (optional)",
+    "detail": "If bottoms are pale or soft, bake directly on the rack at 400–425°F.",
+    "type": "bake",
+    "minutes": 4,
+    "maxMinutes": 5,
+    "est": 5,
+    "check": "",
+    "optional": true
+   },
+   {
+    "id": "cool",
+    "title": "Cool",
+    "detail": "Cool on a wire rack before slicing. Judge the crumb only after it is fully cool.",
+    "type": "wait",
+    "minutes": 60,
+    "maxMinutes": null,
+    "est": 5,
+    "check": ""
+   }
+  ]
+ }
+]

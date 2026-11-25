@@ -132,6 +132,13 @@
       r(3.5, 6.5, 25, 17, DG, K) + r(4, 7, 24, 1, LG) + r(4, 7, 1, 16, LG) + r(5.5, 8.5, 18, 13, NV, K) +
       r(15, 10, 2, 6, CY) + p("M11.5 15.5h9L16 20z", CY) + r(25, 10, 2, 2, RD) + r(25, 14, 2, 1, K) + r(25, 16, 2, 1, K) +
       r(12.5, 23.5, 7, 3, DG, K) + r(8.5, 26.5, 15, 2, LG, K),
+    // Yes Chef!: a chef's hat
+    yeschef:
+      '<circle cx="10.5" cy="13" r="5" fill="' + W + '" stroke="' + K + '"/>' +
+      '<circle cx="21.5" cy="13" r="5" fill="' + W + '" stroke="' + K + '"/>' +
+      '<circle cx="16" cy="9.5" r="6" fill="' + W + '" stroke="' + K + '"/>' +
+      r(9, 12, 14, 10, W) + p("M8.5 14.5v8h15v-8", "none", K) +
+      r(8.5, 22.5, 15, 5, LG, K) + r(11, 23, 1, 4, DG) + r(15.5, 23, 1, 4, DG) + r(20, 23, 1, 4, DG),
     settings:
       r(5.5, 5.5, 21, 21, LG, K) + r(9, 9, 14, 3, NV) + r(9, 15, 14, 1, K) + r(9, 20, 14, 1, K) + r(12, 13, 3, 5, W, K) + r(18, 18, 3, 5, W, K),
   };
@@ -174,6 +181,7 @@
     feedback: "M3 11l18-7-6 17-3-7zM12 14l9-10",
     board: "M4 4h16v16H4zM7 8h5v4H7zM14 10h4v5h-4zM8 16h3",
     tubeloader: "M3 6h18v12H3zM8 21h8M12 9v6M9 12l3 3 3-3M9 3l3 3 3-3",
+    yeschef: "M7 14a4 4 0 1 1 2.2-7.3 4 4 0 0 1 5.6 0A4 4 0 1 1 17 14v6H7zM7 17h10M10.5 17v3M13.5 17v3",
     files: "M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM7 16l3-3 2 2 2-2 3 3",
     models: "M12 3l8 4-8 4-8-4zM4 12l8 4 8-4M4 17l8 4 8-4",
     trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13",
@@ -194,7 +202,7 @@
     files: ["#fcd34d", "#ca8a04"], models: ["#67e8f9", "#0e7490"], trash: ["#d1d5db", "#4b5563"],
     trash_full: ["#d1d5db", "#4b5563"], app: ["#60a5fa", "#1d4ed8"], programs: ["#60a5fa", "#1d4ed8"], folder: ["#fcd34d", "#ca8a04"],
     help: ["#34d399", "#047857"], find: ["#60a5fa", "#1e40af"], docs: ["#93c5fd", "#1d4ed8"], gpu: ["#4ade80", "#15803d"],
-    shutdown: ["#f87171", "#b91c1c"], settings: ["#9ca3af", "#1f2937"], tubeloader: ["#38bdf8", "#1e3a8a"],
+    shutdown: ["#f87171", "#b91c1c"], settings: ["#9ca3af", "#1f2937"], tubeloader: ["#38bdf8", "#1e3a8a"], yeschef: ["#fdba74", "#9a3412"],
   };
   var gid = 0;
   function modern(name, size, shape) {
