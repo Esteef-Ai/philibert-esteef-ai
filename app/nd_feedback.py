@@ -146,7 +146,8 @@ def send(data_dir, online, only=None):
             else:                                        # no account: through the relay
                 d = _post_relay(relay, item)
                 item.update(status="sent", sent_at=time.time(), number=d.get("number"), url=d.get("url"),
-                            by="", via="relay", error="")
+                            by="", via="relay", error="",
+                            reply_key=d.get("key", ""))     # lets the person answer through the relay (nd_feedback_replies)
             sent += 1
         except urllib.error.HTTPError as e:
             if gh.get("token"):
@@ -190,6 +191,9 @@ def refresh(data_dir, online):
 def handle(body, data_dir, online):
     body = body or {}
     op = body.get("op", "")
+    if op in ("check_replies", "seen", "answer"):           # Philibert: replies (shared/nd_feedback_replies.py)
+        import nd_feedback_replies
+        return nd_feedback_replies.handle(op, body, data_dir, online)
     try:
         if op == "status":
             nd_philibert, gh = _gh()

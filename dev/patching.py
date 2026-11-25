@@ -18,6 +18,8 @@ SHARED = {
     "shared/chatref.js": "live/static/chatref.js",
     "shared/nd_codelaunch.py": "nd_codelaunch.py",
     "shared/philibert-code.svg": "live/static/desktop/philibert-code.svg",
+    "shared/nd_feedback_replies.py": "nd_feedback_replies.py",       # used only where FEEDBACK_REPLIES hooks it in
+    "shared/feedback_replies.js": "live/static/feedback_replies.js",
 }
 
 # Phase 3 (dev/PHILIBERT_CODE.md): reference a chat from the other app. Both apps.
@@ -162,8 +164,69 @@ def _shared_lf(name):
 DESKTOP_REMOVE = [
     ("live/static/desktop/desktop.js", L(_shared_lf("desktop_remove.was.js")), _shared_lf("desktop_remove.js"), 1),
 ]
+# Feedback Shooter replies: the maker's answers on a sent message come back into the app (shared/nd_feedback_replies.py,
+# shared/feedback_replies.js), with a badge and a pop-up on the desktop, and the person can answer. Philibert's app only.
+# Each file has its own marker word, so each is edited once.
+_FB_DESKTOP = (
+    "  /* Feedback Shooter: the maker's replies (shared/nd_feedback_replies.py). The drive asks GitHub at most every\n"
+    "     20 minutes; a badge on the icon counts unread replies, and each new one pops up once. */\n"
+    "  function feedbackNews() {\n"
+    '    if (!has("feedback")) return;\n'
+    '    api("/api/feedback", { op: "check_replies" }).then(function (d) {\n'
+    "      if (!d || !d.ok) return;\n"
+    "      var ic = iconsEl.querySelector('[data-id=\"feedback\"] .img');\n"
+    "      if (ic) {\n"
+    '        var b = ic.querySelector(".badge");\n'
+    "        if (!d.unread) { if (b) b.remove(); }\n"
+    '        else { if (!b) { b = document.createElement("span"); b.className = "badge"; ic.appendChild(b); } b.textContent = d.unread > 9 ? "9+" : d.unread; }\n'
+    "      }\n"
+    "      var fresh = d.new || [];\n"
+    "      if (!fresh.length) return;\n"
+    "      var last = fresh[fresh.length - 1];\n"
+    '      notify("Feedback Shooter", fresh.length === 1 ? (last.by || "The maker") + " replied to \\u201c" + last.title + "\\u201d"\n'
+    '                                                   : fresh.length + " new replies to your feedback", function () { open("feedback"); });\n'
+    "    }).catch(function () {});\n"
+    "  }\n"
+    "  setInterval(feedbackNews, 60000);\n"
+    "  setTimeout(feedbackNews, 12000);\n"
+    '  window.addEventListener("message", function (ev) {       // the Feedback Shooter page: "I\'ve shown the replies"\n'
+    '    if (ev.origin === location.origin && ev.data === "feedback-seen") feedbackNews();\n'
+    "  });\n"
+)
+FEEDBACK_REPLIES_PY = [
+    ("nd_feedback.py", L('    body = body or {}\n    op = body.get("op", "")\n    try:\n        if op == "status":'),
+     '    body = body or {}\n    op = body.get("op", "")\n'
+     '    if op in ("check_replies", "seen", "answer"):           # Philibert: replies (shared/nd_feedback_replies.py)\n'
+     "        import nd_feedback_replies\n"
+     "        return nd_feedback_replies.handle(op, body, data_dir, online)\n"
+     '    try:\n        if op == "status":', 1),
+    ("nd_feedback.py", L('number=d.get("number"), url=d.get("url"),\n                            by="", via="relay", error="")'),
+     'number=d.get("number"), url=d.get("url"),\n                            by="", via="relay", error="",\n'
+     '                            reply_key=d.get("key", ""))     # lets the person answer through the relay (nd_feedback_replies)', 1),
+]
+FEEDBACK_REPLIES_JS = [
+    ("live/static/feedback.js", L("      }).join(\"\") || '<p class=\"empty\">Nothing sent yet.</p>';"),
+     "      }).map(function (h, n) { return window.PhilFeedbackThread ? h + window.PhilFeedbackThread(items[n]) : h; })\n"
+     "        .join(\"\") || '<p class=\"empty\">Nothing sent yet.</p>';", 1),
+    ("live/static/feedback.js", L('    if (st.online) api("refresh").then(list);'),
+     '    if (st.online) api("refresh").then(function () { return api("check_replies", { force: true }); }).then(list);', 1),
+    ("live/static/feedback.js", L('  status().then(function () {\n    api("system")'),
+     '  window.PhilFeedbackList = list;\n  status().then(function () {\n    api("system")', 1),
+]
+FEEDBACK_REPLIES_HTML = [
+    ("live/static/feedback.html", L('<script src="/live/feedback.js"></script>'),
+     '<script src="/live/feedback.js"></script>\n<script src="/live/feedback_replies.js"></script>', 1),
+    ("live/static/feedback.html", L("where you can follow the answer."),
+     "and the maker's answers come back here, with a pop-up on the desktop.", 1),
+]
+FEEDBACK_REPLIES_DESKTOP = [
+    ("live/static/desktop/desktop.js", L("  setInterval(boardNews, 60000);\n  setTimeout(boardNews, 8000);\n"),
+     "  setInterval(boardNews, 60000);\n  setTimeout(boardNews, 8000);\n" + _FB_DESKTOP, 1),
+]
 # sync_app.addons(): each rule set and the word that marks a file it has already edited
-APP_ADDONS = [(CHATREF_BOTH, "chatref"), (CODEICON_APP, "nd_codelaunch|openCode"), (DESKTOP_REMOVE, "removeIcons")]
+APP_ADDONS = [(CHATREF_BOTH, "chatref"), (CODEICON_APP, "nd_codelaunch|openCode"), (DESKTOP_REMOVE, "removeIcons"),
+              (FEEDBACK_REPLIES_PY, "nd_feedback_replies"), (FEEDBACK_REPLIES_JS, "PhilFeedback"),
+              (FEEDBACK_REPLIES_HTML, "feedback_replies"), (FEEDBACK_REPLIES_DESKTOP, "feedbackNews")]
 
 
 def apply(texts, rules):

@@ -50,7 +50,8 @@
           (i.error ? '<span style="color:#ff2e88">' + esc(i.error) + "</span>" : "") + "</div></div><div>" +
           (i.url ? '<a class="btn" href="' + esc(i.url) + '" target="_blank" rel="noopener">OPEN</a>'
                  : '<button class="btn" data-del="' + esc(i.id) + '">DELETE</button>') + "</div></div>";
-      }).join("") || '<p class="empty">Nothing sent yet.</p>';
+      }).map(function (h, n) { return window.PhilFeedbackThread ? h + window.PhilFeedbackThread(items[n]) : h; })
+        .join("") || '<p class="empty">Nothing sent yet.</p>';
     });
   }
 
@@ -127,12 +128,13 @@
     api("delete", { id: d.dataset.del }).then(function () { status().then(list); });
   });
 
+  window.PhilFeedbackList = list;
   status().then(function () {
     api("system").then(function (d) {
       sys = d.system || {};
       $("sysinfo").innerHTML = Object.keys(sys).map(function (k) { return esc(k) + ": " + esc(sys[k]); }).join(" · ");
     });
     list();
-    if (st.online) api("refresh").then(list);
+    if (st.online) api("refresh").then(function () { return api("check_replies", { force: true }); }).then(list);
   });
 })();

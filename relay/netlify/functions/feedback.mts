@@ -2,12 +2,14 @@
 // account becomes an issue on the Philibert repo, opened with the maker's token.
 //
 //   POST /send  {kind, part, title, message, system?, version?, website?}
-//     -> 201 {number, url}  |  4xx/5xx {error}
+//     -> 201 {number, url, key}  |  4xx/5xx {error}
+//   key: lets that message's sender answer on its issue through /reply (reply.mts), and nobody else
 //
 // Secrets (Netlify env, Functions scope): GITHUB_TOKEN - a fine-grained token with
 // Issues: read and write on the Philibert repo only. GITHUB_REPO is optional
 // (default below). Nothing is stored here; the issue is the only record.
 import type { Config, Context } from "@netlify/functions"
+import { replyKey } from "../lib/replykey.mts"
 
 const DEFAULT_REPO = "Esteef-Ai/philibert-esteef-ai"
 const KINDS: Record<string, string> = { idea: "Idea", bug: "Something's wrong", change: "Change request", praise: "Praise" }
@@ -85,7 +87,7 @@ export default async (req: Request, context: Context) => {
     })
     if (!lab.ok) console.log("label not added:", lab.status, (await lab.text()).slice(0, 200))
   }
-  return json(201, { number: issue.number, url: issue.html_url })
+  return json(201, { number: issue.number, url: issue.html_url, key: replyKey(Netlify.env.get("REPLY_SECRET") || token, repo, issue.number) })
 }
 
 export const config: Config = {

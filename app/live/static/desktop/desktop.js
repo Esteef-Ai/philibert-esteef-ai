@@ -1242,6 +1242,30 @@
   }
   setInterval(boardNews, 60000);
   setTimeout(boardNews, 8000);
+  /* Feedback Shooter: the maker's replies (shared/nd_feedback_replies.py). The drive asks GitHub at most every
+     20 minutes; a badge on the icon counts unread replies, and each new one pops up once. */
+  function feedbackNews() {
+    if (!has("feedback")) return;
+    api("/api/feedback", { op: "check_replies" }).then(function (d) {
+      if (!d || !d.ok) return;
+      var ic = iconsEl.querySelector('[data-id="feedback"] .img');
+      if (ic) {
+        var b = ic.querySelector(".badge");
+        if (!d.unread) { if (b) b.remove(); }
+        else { if (!b) { b = document.createElement("span"); b.className = "badge"; ic.appendChild(b); } b.textContent = d.unread > 9 ? "9+" : d.unread; }
+      }
+      var fresh = d.new || [];
+      if (!fresh.length) return;
+      var last = fresh[fresh.length - 1];
+      notify("Feedback Shooter", fresh.length === 1 ? (last.by || "The maker") + " replied to \u201c" + last.title + "\u201d"
+                                                   : fresh.length + " new replies to your feedback", function () { open("feedback"); });
+    }).catch(function () {});
+  }
+  setInterval(feedbackNews, 60000);
+  setTimeout(feedbackNews, 12000);
+  window.addEventListener("message", function (ev) {       // the Feedback Shooter page: "I've shown the replies"
+    if (ev.origin === location.origin && ev.data === "feedback-seen") feedbackNews();
+  });
   window.addEventListener("message", function (ev) {        // the board page: "I've shown everything"
     if (ev.origin === location.origin && ev.data === "board-seen") boardNews();
   });
