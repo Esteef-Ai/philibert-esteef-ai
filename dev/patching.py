@@ -150,8 +150,20 @@ CODEICON_APP = [
      "  }).catch(function () {});\n"
      "  window.PhilDesktop = { open: open, close: close, msgbox: msgbox, startSaver: startSaver };", 1),
 ]
+
+
+def _shared_lf(name):
+    return (REPO / "shared" / name).read_text(encoding="utf-8").replace("\r\n", "\n")
+
+
+# Philibert's desktop: remove icons (right-click, Delete, drag onto the Trash) and select several with a box.
+# The new handlers (shared/desktop_remove.js) replace ND3's exact icon handlers (shared/desktop_remove.was.js);
+# any change to those lines in ND3 stops the build so the two can be merged by hand. Philibert's app only.
+DESKTOP_REMOVE = [
+    ("live/static/desktop/desktop.js", L(_shared_lf("desktop_remove.was.js")), _shared_lf("desktop_remove.js"), 1),
+]
 # sync_app.addons(): each rule set and the word that marks a file it has already edited
-APP_ADDONS = [(CHATREF_BOTH, "chatref"), (CODEICON_APP, "nd_codelaunch|openCode")]
+APP_ADDONS = [(CHATREF_BOTH, "chatref"), (CODEICON_APP, "nd_codelaunch|openCode"), (DESKTOP_REMOVE, "removeIcons")]
 
 
 def apply(texts, rules):
