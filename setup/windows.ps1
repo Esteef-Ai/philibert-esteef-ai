@@ -162,6 +162,9 @@ $work = {
                 return
             } catch {
                 if ("$_" -eq "__cancel__") { throw }
+                # 416 when resuming: the part-file is already whole (an earlier start finished the
+                # download but stopped before unpacking). Unpack checks it, and deletes it if bad.
+                if ($have -gt 0 -and "$_" -match "\(416\)") { Log "already downloaded: $url"; return }
                 Log "download attempt $try of $url failed: $_"
                 $sync.Detail = "$label - connection trouble, trying again ($try of 8)"
                 Start-Sleep -Seconds ([Math]::Min(20, 3 * $try))
@@ -175,7 +178,10 @@ $work = {
         New-Item -ItemType Directory -Force $into | Out-Null
         # -m: exFAT rejects some of the times stored in the archive.
         $p = Start-Process -FilePath $cfg.Tar -ArgumentList @("-xmf", "`"$file`"", "-C", "`"$into`"") -NoNewWindow -PassThru -Wait
-        if ($p.ExitCode -ne 0 -or -not (Test-Path $expect)) { Halt "Could not unpack $label." }
+        if ($p.ExitCode -ne 0 -or -not (Test-Path $expect)) {
+            Remove-Item $file -ErrorAction SilentlyContinue      # a bad download: the next start gets it fresh
+            Halt "Could not unpack $label. Start Philibert again to download it fresh."
+        }
         Remove-Item $file -ErrorAction SilentlyContinue
     }
 

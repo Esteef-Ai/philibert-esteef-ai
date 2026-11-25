@@ -150,6 +150,11 @@ class Installer:
             except Cancelled:
                 raise
             except urllib.error.HTTPError as e:
+                if e.code == 416 and out.exists() and out.stat().st_size:
+                    # resuming a part-file that is already whole (an earlier run stopped
+                    # before unpacking): unpack checks it, and deletes it if it is bad
+                    self.log(f"already downloaded {url}")
+                    return out
                 self.log(f"download attempt {attempt} of {url} failed: {e}")
                 if e.code in (401, 403, 404) and "github" in url:
                     raise RuntimeError("GitHub refused the download (" + str(e.code) + "). This copy of Philibert is "
@@ -171,6 +176,20 @@ class Installer:
         into = Path(into)
         into.mkdir(parents=True, exist_ok=True)
         archive = Path(archive)
+        try:
+            self._unpack(archive, into, label)
+        except Cancelled:
+            raise
+        except Exception as e:
+            self.log(f"unpacking {archive} failed: {e}")
+            archive.unlink(missing_ok=True)          # a bad download: the next run gets it fresh
+            raise RuntimeError(f"Could not unpack {label}. Run Setup again to download it fresh.")
+        if not Path(expect).exists():
+            archive.unlink(missing_ok=True)
+            raise RuntimeError(f"Could not unpack {label}. Run Setup again to download it fresh.")
+        archive.unlink(missing_ok=True)
+
+    def _unpack(self, archive, into, label):
         if archive.suffix == ".zip":
             with zipfile.ZipFile(archive) as z:
                 names = z.namelist()
@@ -187,9 +206,6 @@ class Installer:
                     t.extract(m, into, set_attrs=False)
                     if i % 200 == 0:
                         self.emit(i / max(1, len(members)), f"{label} - unpacking")
-        if not Path(expect).exists():
-            raise RuntimeError(f"Could not unpack {label}.")
-        archive.unlink(missing_ok=True)
 
     def run_lines(self, args, on_line, env=None):
         p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
