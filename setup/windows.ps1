@@ -91,6 +91,11 @@ $cfg = @{
              "faster-whisper==1.2.1", "ctranslate2==4.8.1", "av==17.1.0", "tokenizers==0.22.2",
              "huggingface_hub==1.20.1", "piper-tts==1.6.0", "onnxruntime==1.28.0", "numpy==2.4.4")
 }
+# Smart App Control (Windows 11): 0 off, 1 on, 2 evaluation. When it is on it can block Python's
+# unsigned files ("An Application Control policy has blocked this file"); so can an organization's
+# own App Control policy. Either way setup says so plainly instead of showing a traceback.
+$cfg.Sac = -1
+try { $cfg.Sac = [int](Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy" -Name VerifiedAndReputablePolicyState -ErrorAction Stop).VerifiedAndReputablePolicyState } catch {}
 function Stamp-Is($file, $value) { (Test-Path $file) -and ((Get-Content $file -Raw).Trim() -eq $value) }
 # "Retro Vault only" (Setup's no-AI choice): no Ollama and no models, just the desktop and the games
 $cfg.NoAI = $false
@@ -110,7 +115,7 @@ $firstStart = $steps.Count -gt 2
 
 $sync = [hashtable]::Synchronized(@{
     Step = 0; StepPct = 0.0; Detail = ""; Error = ""; Ready = $false; Done = $false
-    Cancel = $false; ChildPid = 0; OllamaPid = 0; OllamaPort = 0; Title = ""
+    Cancel = $false; ChildPid = 0; OllamaPid = 0; OllamaPort = 0; Title = ""; Blocked = ""
 })
 
 # -- the work, on its own runspace ---------------------------------------------
@@ -129,6 +134,18 @@ $work = {
         } catch {}
     }
     function Halt($m) { throw $m }
+
+    # Windows refusing to load one of Python's files: stop with what to do about it.
+    function Check-Blocked($text) {
+        if ("$text" -notmatch "Application Control policy has blocked|Smart App Control") { return }
+        $f = $(if ("$text" -match "importing (\S+?):") { " (it blocked $($Matches[1]))" } else { "" })
+        $sync.Blocked = $(if ($cfg.Sac -eq 1 -or $cfg.Sac -eq 2) { "sac" } else { "policy" })
+        Log "blocked by Windows App Control$f; Smart App Control state $($cfg.Sac)"
+        if ($sync.Blocked -eq "sac") {
+            Halt "Windows' Smart App Control is blocking part of Philibert$f, so it cannot start. Click 'How to fix' for the steps."
+        }
+        Halt "This computer's App Control policy is blocking part of Philibert$f. It is usually set by an employer or school - their IT can allow Philibert. Click 'How to fix' for more."
+    }
     function Check-Cancel { if ($sync.Cancel) { throw "__cancel__" } }
 
     # Download with progress; resumes a part-file left by an earlier start.
@@ -257,7 +274,8 @@ $work = {
                         }
                     }
                     if ($r.Code -ne 0) {
-                        $why = $(if ($r.Err -match "WinError 32|being used by another process") { " Another program was using the drive's files - close it and start Philibert again." }
+                        Check-Blocked $r.Err
+                        $why =$(if ($r.Err -match "WinError 32|being used by another process") { " Another program was using the drive's files - close it and start Philibert again." }
                                  elseif ($r.Err -match "Could not find a version|No matching distribution|Network|connection") { " Check the Internet connection and start Philibert again." }
                                  else { " The details are in data\logs\setup.log." })
                         Halt ("Could not install the app's building blocks." + $why)
@@ -330,6 +348,7 @@ $work = {
                         if ($t) { $sync.Detail = $(if ($t.Length -gt 90) { $t.Substring(0, 90) + "..." } else { $t }) }
                     }
                     if ($r.Code -ne 0) {
+                        $script:firstRunErr = $r.Err      # if Windows blocked something, said below should Philibert not start
                         Log "first-run reported problems; Philibert starts anyway"
                         $sync.Detail = "Some downloads did not finish - pick a model in the list later to finish it."
                         Start-Sleep -Seconds 2
@@ -352,7 +371,11 @@ $work = {
                         -RedirectStandardOutput $cfg.AppLog -RedirectStandardError ($cfg.AppLog + ".err")
                     $sync.ChildPid = $app.Id
                     foreach ($k in 1..240) {
-                        if ($app.HasExited) { Halt "Philibert stopped while starting. The details are in data\logs\philibert.log." }
+                        if ($app.HasExited) {
+                            Check-Blocked ((Get-Content ($cfg.AppLog + ".err") -Raw -ErrorAction SilentlyContinue) +
+                                           (Get-Content $cfg.AppLog -Raw -ErrorAction SilentlyContinue) + $script:firstRunErr)
+                            Halt "Philibert stopped while starting. The details are in data\logs\philibert.log."
+                        }
                         # the port was free when we picked it, so whoever answers now is ours
                         try { Invoke-WebRequest "http://127.0.0.1:$ndPort/api/status" -UseBasicParsing -TimeoutSec 2 | Out-Null; break }
                         catch { Start-Sleep -Milliseconds 500 }
@@ -422,7 +445,30 @@ $logBtn = New-Object Windows.Forms.Button
 $logBtn.SetBounds(320, 254, 104, 30); $logBtn.Text = "Open the log"; $logBtn.FlatStyle = "Flat"; $logBtn.Visible = $false
 $logBtn.ForeColor = $txt; $logBtn.BackColor = $navy; $logBtn.FlatAppearance.BorderColor = $line
 $form.Controls.Add($logBtn)
-$logBtn.Add_Click({ Start-Process notepad.exe $cfg.Log })
+$logBtn.Add_Click({
+    if ($sync.Blocked) { Show-BlockedHelp } else { Start-Process notepad.exe $cfg.Log }
+})
+function Show-BlockedHelp {
+    if ($sync.Blocked -eq "sac") {
+        $msg = "Windows 11's Smart App Control blocks programs it doesn't recognise. Parts of Philibert " +
+               "(its own copy of Python) aren't signed, so it blocks them.`n`n" +
+               "To let Philibert run:`n" +
+               "  1. Open the Start menu, type  Smart App Control  and open  Smart App Control settings.`n" +
+               "  2. Choose  Off.`n" +
+               "  3. Start Philibert again.`n`n" +
+               "Good to know: your antivirus keeps working. But Windows can't turn Smart App Control " +
+               "back on later without resetting Windows - if you'd rather keep it, leave it on and " +
+               "Philibert can't run on this PC.`n`nOpen Windows Security now? (Smart App Control is under App & browser control.)"
+        if ([Windows.Forms.MessageBox]::Show($msg, "Philibert - blocked by Windows", "YesNo", "Warning") -eq "Yes") {
+            try { Start-Process "windowsdefender://appbrowser" } catch {}     # App & browser control, where Smart App Control lives
+        }
+    } else {
+        Say-Box ("Windows' App Control is blocking part of Philibert (its own copy of Python), and Smart App " +
+                 "Control is not what's doing it - so the rule most likely comes from whoever manages this " +
+                 "PC (an employer or school).`n`nAsk their IT to allow Philibert, or use it on another PC. " +
+                 "The exact file is in data\logs\setup.log.") "Philibert - blocked by Windows" "Warning"
+    }
+}
 
 $script:closing = $false
 $btn.Add_Click({ $form.Close() })
@@ -447,6 +493,7 @@ $timer.Add_Tick({
         $foot.SetBounds(28, 184, 504, 64); $foot.ForeColor = $txt; $foot.Text = $sync.Error
         $bar1.Track.Visible = $false; $bar2.Track.Visible = $false
         $btn.Text = "Close"; $logBtn.Visible = $true
+        if ($sync.Blocked) { $logBtn.Text = "How to fix"; Show-BlockedHelp }
         return
     }
     $i = [Math]::Min($sync.Step, $steps.Count - 1)
