@@ -152,7 +152,8 @@
      - drag a box on an empty part of the desktop (left or right button) to select several icons;
        Ctrl+click adds or drops one; a right-button box opens the menu for what it selected
      An App Store app comes back from the App Store; an app Philibert published moves to Apps/.trash on
-     the drive. Chat, the App Store, Control Panel and the Trash itself stay. */
+     the drive and shows in the Trash (DESKTOP_TRASH). Chat, the App Store, Control Panel and the Trash
+     itself stay. */
   var KEEP_ICONS = ["chat", "store", "control", "trash", "code", "power"];
   function removable(id) {
     var a = appById(id);
@@ -201,9 +202,10 @@
         S.play("close");
         notify("Desktop", (n === 1 ? "1 icon" : n + " icons") + " removed. " +
           (published < n ? "Add App Store apps back from the App Store. " : "") +
-          (published ? "Apps you published are kept in Apps\\.trash on the drive." : "") +
+          (published ? "Apps you published are in the Trash: Put back brings them back." : "") +
           (keep.length ? " " + nameList(keep) + (keep.length === 1 ? " stays." : " stay.") : ""));
       }
+      if (published) updateTrashIcon();
     });
   }
   function nameList(ids) {
@@ -840,20 +842,24 @@
     $("trash-empty").addEventListener("click", emptyTrash);
     loadTrash();
   }
+  /* Philibert: apps taken off the desktop are in the Trash too (dev/patching.py DESKTOP_TRASH,
+     shared/nd_desktop_trash.py): Put back returns the icon, Delete forever removes the app's files. */
   // Permanent: each source deletes for good what its trash holds (one item, or all)
   function purge(x) {
     return x.kind === "note" ? api("/api/notes", { op: "purge", name: x.key })
       : x.kind === "band" ? api("/api/band", Object.assign({ op: "purge" }, bandKey(x.key)))
       : x.kind === "file" ? api("/api/files", { op: "purge", id: x.key })
+      : x.kind === "app" ? api("/api/desktop", { op: "app_purge", id: x.key })
       : api("/api/chats", { op: "purge", id: x.key });
   }
   function emptyTrash() {
     trashSources().then(function (r) {
-      var n = (r[0].items || []).length + (r[1].chats || []).length + bandRows(r[2]).length + (r[3].items || []).length;
+      var n = (r[0].items || []).length + (r[1].chats || []).length + bandRows(r[2]).length + (r[3].items || []).length + (r[4].items || []).length;
       if (!n) { msgbox("Empty Trash", "The Trash is already empty.", "info"); return; }
       if (!confirm("Delete the " + n + " item" + (n === 1 ? "" : "s") + " in the Trash for good?\n\nThis can't be undone.")) return;
       Promise.all([api("/api/notes", { op: "purge" }), api("/api/chats", { op: "purge" }),
-                   api("/api/band", { op: "purge", all_bands: true }), api("/api/files", { op: "purge" })].map(function (p) { return p.catch(function () { return {}; }); }))
+                   api("/api/band", { op: "purge", all_bands: true }), api("/api/files", { op: "purge" }),
+                   api("/api/desktop", { op: "app_purge" })].map(function (p) { return p.catch(function () { return {}; }); }))
         .then(function () { S.play("ding"); loadTrash(); updateTrashIcon(); });
     });
   }
@@ -879,7 +885,8 @@
     return Promise.all([api("/api/notes", { op: "trash_list" }).catch(function () { return {}; }),
                         api("/api/chats", { op: "trash_list" }).catch(function () { return {}; }),
                         api("/api/band", { op: "trash", all_bands: true }).catch(function () { return {}; }),
-                        api("/api/files", { op: "trash_list" }).catch(function () { return {}; })]);
+                        api("/api/files", { op: "trash_list" }).catch(function () { return {}; }),
+                        api("/api/desktop", { op: "app_trash_list" }).catch(function () { return {}; })]);
   }
   function loadTrash() {
     trashSources().then(function (r) {
@@ -889,12 +896,14 @@
         return { kind: "chat", key: c.id, name: c.title, from: c.folder || "Chats", at: c.updated };
       })).concat(bandRows(r[2])).concat((r[3].items || []).map(function (f) {
         return { kind: "file", key: f.id, name: f.name, from: "Files \u203a " + (f.from || "Philibert"), at: f.at };
+      })).concat((r[4].items || []).map(function (a) {
+        return { kind: "app", key: a.id, name: a.name, from: "Desktop apps", at: a.at };
       })).sort(function (a, b) { return b.at - a.at; });
       var el = $("trash-rows");
       if (!el) return;
       el.innerHTML = rows.map(function (x, i) {
         return '<div class="row" data-i="' + i + '" title="Double-click to put it back"><span class="n">' +
-               I.svg(x.kind === "note" ? "notes" : x.kind === "band" ? "band" : x.kind === "file" ? "files" : "chat", 16) + esc(x.name) + "</span><span>" + esc(x.from) +
+               I.svg(x.kind === "note" ? "notes" : x.kind === "band" ? "band" : x.kind === "file" ? "files" : x.kind === "app" ? "app" : "chat", 16) + esc(x.name) + "</span><span>" + esc(x.from) +
                "</span><span>" + esc(new Date(x.at * 1000).toLocaleDateString()) + "</span></div>";
       }).join("");
       $("trash-status").textContent = rows.length + " object(s). Double-click one to put it back; right-click to delete it for good.";
@@ -918,8 +927,15 @@
         (x.kind === "note" ? api("/api/notes", { op: "restore", name: x.key })
          : x.kind === "band" ? api("/api/band", Object.assign({ op: "restore" }, bandKey(x.key)))
          : x.kind === "file" ? api("/api/files", { op: "restore", id: x.key })
+         : x.kind === "app" ? api("/api/desktop", { op: "app_restore", id: x.key })
          : api("/api/chats", { op: "restore", id: x.key }))
-          .then(function () { S.play("ding"); loadTrash(); updateTrashIcon(); });
+          .then(function (res) {
+            if (x.kind === "app") {
+              if (!res || !res.ok) { msgbox("Put back", (res && res.msg) || "That did not work.", "error"); return; }
+              refreshApps();
+            }
+            S.play("ding"); loadTrash(); updateTrashIcon();
+          });
       };
       setTrashIcon(rows.length > 0);
     });
@@ -930,7 +946,7 @@
   }
   function updateTrashIcon() {
     trashSources().then(function (r) {
-      setTrashIcon(((r[0].items || []).length + (r[1].chats || []).length + bandRows(r[2]).length + (r[3].items || []).length) > 0);
+      setTrashIcon(((r[0].items || []).length + (r[1].chats || []).length + bandRows(r[2]).length + (r[3].items || []).length + (r[4].items || []).length) > 0);
     });
   }
 

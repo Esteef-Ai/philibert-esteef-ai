@@ -37,6 +37,11 @@ data, apps_dir = drive / "data", drive / "Apps"
 (apps_dir / "mytool").mkdir(parents=True)
 (apps_dir / "mytool" / "index.html").write_text("<!doctype html><title>My Tool</title><p>My Tool</p>", encoding="utf-8")
 (apps_dir / "mytool" / "app.json").write_text(json.dumps({"name": "My Tool", "entry": "index.html", "source": "nd"}), encoding="utf-8")
+# an app still on the desktop whose previous version waits in .trash (publishing keeps it): never in the Trash window
+for d in (apps_dir / "other", apps_dir / ".trash" / "other-20261101-120000"):
+    d.mkdir(parents=True)
+    (d / "index.html").write_text("<p>Other</p>", encoding="utf-8")
+    (d / "app.json").write_text(json.dumps({"name": "Other", "entry": "index.html", "source": "nd"}), encoding="utf-8")
 # known places for the icons the test boxes in; everything else keeps its default place down the left
 PLACES = {"models": [600, 100], "band": [600, 176], "app:mytool": [840, 100], "control": [840, 176], "board": [400, 400]}
 rd.save_settings(data, {"theme": "win95", "boot": False, "sounds": False, "screensaver": False, "icons": {"taskbar": PLACES}})
@@ -155,6 +160,31 @@ try:
     check("My Tool (published) is off the desktop, Control Panel stays", "app:mytool" not in left and "control" in left, left)
     trash = list((apps_dir / ".trash").glob("mytool-*"))
     check("My Tool's files are kept in Apps/.trash, not deleted", len(trash) == 1 and (trash[0] / "index.html").is_file(), trash)
+
+    # 4b. the Trash shows it: Put back, then Delete forever
+    ROWS = "[].map.call(document.querySelectorAll('#trash-rows .row'), function(e){return e.innerText;})"
+    br.js("document.querySelectorAll('.notify').forEach(function(n){n.remove();})")
+    x, y = icon(br, "trash")
+    br.click(x, y)
+    br.key("Enter", 13)
+    rows = br.wait(f"{ROWS}.length && {ROWS}", 8) or []
+    check("the Trash lists My Tool, from Desktop apps", any("My Tool" in r and "Desktop apps" in r for r in rows), rows)
+    check("... and not the old version of an app that is still on the desktop", not any("Other" in r for r in rows), rows)
+    br.js("[].find.call(document.querySelectorAll('#trash-rows .row'), function(e){return /My Tool/.test(e.innerText);})"
+          ".dispatchEvent(new MouseEvent('dblclick', {bubbles: true}))")
+    back = br.wait(f"{ICONS}.indexOf('app:mytool') >= 0", 20)
+    check("Put back: My Tool is on the desktop again", back and (apps_dir / "mytool" / "index.html").is_file(), br.js(ICONS))
+    check("... and gone from the Trash list", not any("My Tool" in r for r in (br.wait(f"!{ROWS}.some(function(r){{return /My Tool/.test(r);}}) && {ROWS}", 5) or [])))
+    rd.handle({"op": "app_remove", "id": "mytool"}, data, apps_dir)
+    br.js("window.confirm = function () { return true; }")
+    br.js("document.getElementById('trash-empty').click()")
+    br.wait("false", 1.5)
+    check("Empty Trash deletes the removed app for good", not list((apps_dir / ".trash").glob("mytool-*")),
+          list((apps_dir / ".trash").iterdir()))
+    check("... and leaves the old version of the app still on the desktop alone",
+          (apps_dir / ".trash" / "other-20261101-120000" / "index.html").is_file() and (apps_dir / "other").is_dir())
+    br.js("document.querySelectorAll('.win').forEach(function(w){ if(w.dataset.id === 'trash') w.querySelector('[data-act=close]').click(); })")
+    br.wait("false", 0.6)
 
     # 5. drag onto the Trash
     a, t = icon(br, "files"), icon(br, "trash")

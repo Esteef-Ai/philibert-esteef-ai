@@ -20,6 +20,7 @@ SHARED = {
     "shared/philibert-code.svg": "live/static/desktop/philibert-code.svg",
     "shared/nd_feedback_replies.py": "nd_feedback_replies.py",       # used only where FEEDBACK_REPLIES hooks it in
     "shared/feedback_replies.js": "live/static/feedback_replies.js",
+    "shared/nd_desktop_trash.py": "nd_desktop_trash.py",             # used only where DESKTOP_TRASH hooks it in
 }
 
 # Phase 3 (dev/PHILIBERT_CODE.md): reference a chat from the other app. Both apps.
@@ -223,10 +224,23 @@ FEEDBACK_REPLIES_DESKTOP = [
     ("live/static/desktop/desktop.js", L("  setInterval(boardNews, 60000);\n  setTimeout(boardNews, 8000);\n"),
      "  setInterval(boardNews, 60000);\n  setTimeout(boardNews, 8000);\n" + _FB_DESKTOP, 1),
 ]
+# Apps taken off the desktop show in the Trash, with Put back and Delete forever (shared/nd_desktop_trash.py). The
+# new Trash code (shared/desktop_trash.js) replaces ND3's exact Trash code (shared/desktop_trash.was.js). Philibert only.
+DESKTOP_TRASH_PY = [
+    ("nd_retro_desktop.py", L('    if op == "shutdown":\n        if shutdown is None:'),
+     '    if op in ("app_trash_list", "app_restore", "app_purge"):   # Philibert: removed apps in the Trash (shared/nd_desktop_trash.py)\n'
+     "        import nd_desktop_trash\n"
+     "        return nd_desktop_trash.handle(op, body, apps_dir)\n"
+     '    if op == "shutdown":\n        if shutdown is None:', 1),
+]
+DESKTOP_TRASH_JS = [
+    ("live/static/desktop/desktop.js", L(_shared_lf("desktop_trash.was.js")), _shared_lf("desktop_trash.js"), 1),
+]
 # sync_app.addons(): each rule set and the word that marks a file it has already edited
 APP_ADDONS = [(CHATREF_BOTH, "chatref"), (CODEICON_APP, "nd_codelaunch|openCode"), (DESKTOP_REMOVE, "removeIcons"),
               (FEEDBACK_REPLIES_PY, "nd_feedback_replies"), (FEEDBACK_REPLIES_JS, "PhilFeedback"),
-              (FEEDBACK_REPLIES_HTML, "feedback_replies"), (FEEDBACK_REPLIES_DESKTOP, "feedbackNews")]
+              (FEEDBACK_REPLIES_HTML, "feedback_replies"), (FEEDBACK_REPLIES_DESKTOP, "feedbackNews"),
+              (DESKTOP_TRASH_PY, "nd_desktop_trash"), (DESKTOP_TRASH_JS, "app_trash_list")]
 
 
 def apply(texts, rules):

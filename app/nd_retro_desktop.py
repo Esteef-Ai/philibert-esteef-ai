@@ -331,6 +331,9 @@ def handle(body, data_dir, apps_dir, shutdown=None):
         return store_set(data_dir, str(body.get("id") or ""), False)
     if op == "app_remove":
         return remove(apps_dir, body.get("id"))
+    if op in ("app_trash_list", "app_restore", "app_purge"):   # Philibert: removed apps in the Trash (shared/nd_desktop_trash.py)
+        import nd_desktop_trash
+        return nd_desktop_trash.handle(op, body, apps_dir)
     if op == "shutdown":
         if shutdown is None:
             return {"ok": False, "msg": "Close the window to shut down."}

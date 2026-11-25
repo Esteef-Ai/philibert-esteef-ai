@@ -4,7 +4,8 @@
      - drag a box on an empty part of the desktop (left or right button) to select several icons;
        Ctrl+click adds or drops one; a right-button box opens the menu for what it selected
      An App Store app comes back from the App Store; an app Philibert published moves to Apps/.trash on
-     the drive. Chat, the App Store, Control Panel and the Trash itself stay. */
+     the drive and shows in the Trash (DESKTOP_TRASH). Chat, the App Store, Control Panel and the Trash
+     itself stay. */
   var KEEP_ICONS = ["chat", "store", "control", "trash", "code", "power"];
   function removable(id) {
     var a = appById(id);
@@ -53,9 +54,10 @@
         S.play("close");
         notify("Desktop", (n === 1 ? "1 icon" : n + " icons") + " removed. " +
           (published < n ? "Add App Store apps back from the App Store. " : "") +
-          (published ? "Apps you published are kept in Apps\\.trash on the drive." : "") +
+          (published ? "Apps you published are in the Trash: Put back brings them back." : "") +
           (keep.length ? " " + nameList(keep) + (keep.length === 1 ? " stays." : " stay.") : ""));
       }
+      if (published) updateTrashIcon();
     });
   }
   function nameList(ids) {
