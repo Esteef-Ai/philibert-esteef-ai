@@ -367,6 +367,11 @@ $work = {
                     # The drive's Chromium, with its profile on the drive: nothing lands in the PC's browser.
                     $env:ND_BROWSER_EXE     = $cfg.Cr
                     $env:ND_BROWSER_PROFILE = Join-Path $cfg.Data "browser\windows"
+                    # keep the last start's log: a start that went wrong is usually followed by another
+                    foreach ($x in @("", ".err")) {
+                        $cur = $cfg.AppLog + $x
+                        if (Test-Path $cur) { Copy-Item $cur ($cfg.AppLog -replace "\.log$", ".previous.log$x") -Force -ErrorAction SilentlyContinue }
+                    }
                     $app = Start-Process -FilePath $cfg.Py -ArgumentList "`"$($cfg.App)`"" -WindowStyle Hidden -PassThru `
                         -RedirectStandardOutput $cfg.AppLog -RedirectStandardError ($cfg.AppLog + ".err")
                     $sync.ChildPid = $app.Id

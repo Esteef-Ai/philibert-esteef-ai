@@ -109,7 +109,7 @@ class CodeApi(philibert_setup.Api):
     def open_code(self, root):
         bat = Path(root) / "code" / "Start-Philibert-Code.bat"
         if core.IS_WIN and bat.is_file():
-            os.startfile(str(bat))
+            core.launch_detached(bat)
             return True
         return False
 

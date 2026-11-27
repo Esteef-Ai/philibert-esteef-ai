@@ -249,9 +249,9 @@ class Api:
     def open_philibert(self, dest):
         d = Path(dest)
         if core.IS_WIN:
-            os.startfile(str(d / "Start-Windows.bat"))
+            core.launch_detached(d / "Start-Windows.bat")
         elif core.IS_MAC:
-            subprocess.Popen(["open", str(d / "Start-Mac.command")])
+            core.launch_detached(d / "Start-Mac.command")
         return True
 
     def close(self):

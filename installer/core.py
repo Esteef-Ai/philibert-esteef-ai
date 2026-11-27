@@ -302,3 +302,29 @@ def load_minutes(size_gb, read_mbs):
     if not read_mbs:
         return None
     return round(size_gb * 1024 / read_mbs / 60, 1)
+
+
+def launch_detached(target):
+    """Start Philibert (or another of its programs) from Setup the way its desktop icon would.
+
+    Setup is a PyInstaller one-file program: what it starts inherits its DLL directory (its
+    temporary _MEI folder, put first in the DLL search) and its _PYI_* variables, and Setup
+    closes straight after "Open Philibert", which deletes that folder under the new process.
+    The first window after an install then stayed black, while the desktop icon was fine.
+    So: clear the DLL directory and start from Setup's environment without its own parts."""
+    target = str(target)
+    mei = getattr(sys, "_MEIPASS", "") or ""
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith(("_PYI_", "_MEI")) and k != "PYTHONDONTWRITEBYTECODE"
+           and not (mei and mei.lower() in v.lower())}
+    if IS_WIN:
+        try:
+            import ctypes
+            ctypes.windll.kernel32.SetDllDirectoryW(None)       # back to Windows' normal search
+        except Exception:
+            pass
+        # cmd's "start" opens it as Explorer would; the new console of a .bat stays its own
+        subprocess.Popen(["cmd", "/c", "start", "", target], env=env, cwd=str(Path(target).parent),
+                         creationflags=0x08000000 | 0x00000200)   # no window, own process group
+    else:
+        subprocess.Popen(["open", target], env=env)
