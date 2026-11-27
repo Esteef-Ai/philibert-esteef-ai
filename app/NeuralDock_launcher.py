@@ -20308,6 +20308,57 @@ def close_everything():
             log(f"Closing: {e}", "warn")
 
 
+SHUTDOWN_DEADLINE_S = 15     # closing waits this long for a clean stop, then ends what is left
+
+
+def shut_down_portable():
+    """Philibert's window is closed: stop everything it runs and end, within SHUTDOWN_DEADLINE_S
+    whatever hangs (a model server that won't stop, a stuck thread), so a closed Philibert is
+    never still running unseen. Does not return."""
+    def steps():
+        if _share.get("using"):
+            release_other_computer()
+        clear_run_file()
+        close_everything()
+    t = threading.Thread(target=steps, daemon=True)
+    t.start()
+    t.join(SHUTDOWN_DEADLINE_S)
+    if t.is_alive():
+        log(f"Closing took over {SHUTDOWN_DEADLINE_S}s - stopping what is left", "warn")
+        try:
+            __import__("nd_philibert").stop_drive_processes(_CONFIG_DIR.parent / "runtime")
+        except Exception as e:
+            log(f"Closing: {e}", "warn")
+    log(f"{PRODUCT} closed", "info")
+    for s in (sys.stdout, sys.stderr):
+        try:
+            s.flush()
+        except Exception:
+            pass
+    os._exit(0)          # threads still running (a stuck request, a download) can't keep it open
+
+
+def wait_in_tray(reopen, say):
+    """Show the tray icon (Open Philibert / Shut down) and wait until Shut down is chosen."""
+    import nd_tray
+    done = threading.Event()
+    icon = _CONFIG_DIR.parent / "setup" / "assets" / "philibert.ico"
+    tray = nd_tray.Tray(reopen, done.set, icon=icon if icon.is_file() else "", say=say,
+                        log=lambda m: log(m, "warn"))
+    if not tray.shown:
+        log("The tray icon could not be shown; Philibert keeps running until the PC restarts", "warn")
+        while True:
+            time.sleep(3600)
+    log("Philibert is in the tray (it opened in the browser)", "info")
+    while not done.wait(2):
+        if not tray.shown and not done.wait(1):    # the icon's PowerShell died (not Shut down): show it again
+            tray = nd_tray.Tray(reopen, done.set, icon=icon if icon.is_file() else "", say=say,
+                                log=lambda m: log(m, "warn"))
+            if not tray.shown:
+                done.wait()
+    tray.close()
+
+
 def clear_old_processes():
     """A new start: what an earlier copy left behind (a crash, a forced close) still holds the graphics card.
     The model server setup has just started stays; without its number no model server is touched."""
@@ -21101,12 +21152,19 @@ def main():
         owned = False if "--headless" in sys.argv else open_ui(url)
         if owned:
             log(f"Window closed - shutting down {PRODUCT}", "info")
+            if PORTABLE:
+                shut_down_portable()        # does not return
             if _share.get("using"):
                 release_other_computer()
-            if PORTABLE:
-                clear_run_file()
-                close_everything()
             return
+        if PORTABLE and sys.platform == "win32" and "--headless" not in sys.argv:
+            # It opened in the person's own browser: closing that tab tells Philibert nothing, and it
+            # would keep running unseen until the PC restarts. A tray icon shows it is still running.
+            wait_in_tray(lambda: webbrowser.open(url),
+                         "Philibert opened in your web browser. Closing the browser tab doesn't close "
+                         "Philibert - right-click this icon to shut it down.")
+            log(f"Shut down from the tray - shutting down {PRODUCT}", "info")
+            shut_down_portable()
         while True:
             time.sleep(3600)
     except KeyboardInterrupt:
