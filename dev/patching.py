@@ -21,6 +21,9 @@ SHARED = {
     "shared/nd_feedback_replies.py": "nd_feedback_replies.py",       # used only where FEEDBACK_REPLIES hooks it in
     "shared/feedback_replies.js": "live/static/feedback_replies.js",
     "shared/nd_desktop_trash.py": "nd_desktop_trash.py",             # used only where DESKTOP_TRASH hooks it in
+    "shared/nd_imagegen_engine.py": "nd_imagegen_engine.py",         # used only where IMAGEGEN_ENGINE hooks it in
+    "shared/images_engine.js": "live/static/images_engine.js",
+    "shared/nd_phone_help.py": "nd_phone_help.py",                   # used only where PHONE_HELP hooks it in
 }
 
 # Phase 3 (dev/PHILIBERT_CODE.md): reference a chat from the other app. Both apps.
@@ -236,11 +239,89 @@ DESKTOP_TRASH_PY = [
 DESKTOP_TRASH_JS = [
     ("live/static/desktop/desktop.js", L(_shared_lf("desktop_trash.was.js")), _shared_lf("desktop_trash.js"), 1),
 ]
+# The picture engine (shared/nd_imagegen_engine.py, shared/images_engine.js): ComfyUI's own reason when it turns a
+# picture down (was "HTTP Error 400: Bad Request"), one picture at a time, STOP / UNLOAD / TURN OFF and the engine's
+# state in the Image Generation header; a fixed seed is no longer remembered between sessions and a second window no
+# longer writes its old settings over the new ones. Philibert's app only.
+_ENGINE_HOOK = "    import nd_imagegen_engine                   # Philibert: dev/patching.py IMAGEGEN_ENGINE\n"
+IMAGEGEN_ENGINE_PY = [
+    ("nd_imagegen.py", L("def _call(path, payload=None):\n"),
+     "def _call(path, payload=None):\n" + _ENGINE_HOOK + "    return nd_imagegen_engine.call(path, payload)\n\n\n"
+     "def _call_nd(path, payload=None):\n", 1),
+    ("nd_imagegen.py", L("def _run_prompt(wf, timeout):\n"),
+     "def _run_prompt(wf, timeout):\n" + _ENGINE_HOOK + "    return nd_imagegen_engine.run_prompt(wf, timeout)\n\n\n"
+     "def _run_prompt_nd(wf, timeout):\n", 1),
+    ("nd_imagegen.py", L("def start(root, free_gpu=None, timeout=600):\n"),
+     "def start(root, free_gpu=None, timeout=600):\n" + _ENGINE_HOOK + "    nd_imagegen_engine.seen_root(root)\n", 1),
+    ("nd_imagegen.py", L('        if op == "status":\n            return status(root)\n'),
+     '        if op in ("engine", "halt", "unload", "engine_stop"):\n'
+     "            import nd_imagegen_engine           # Philibert: watch and stop the engine (dev/patching.py IMAGEGEN_ENGINE)\n"
+     "            return nd_imagegen_engine.handle(op, body, root)\n"
+     '        if op == "status":\n            return status(root)\n', 1),
+]
+IMAGEGEN_ENGINE_HTML = [
+    ("live/static/images.html", L('<script src="/live/images.js"></script>'),
+     '<script src="/live/images.js"></script>\n<script src="/live/images_engine.js"></script>', 1),
+]
+IMAGEGEN_ENGINE_JS = [
+    ("live/static/images.js",
+     L('  try { Object.assign(form, JSON.parse(localStorage.getItem("img.form") || "{}")); } catch (e) { /* private */ }\n'
+       '  function keep() { try { localStorage.setItem("img.form", JSON.stringify(form)); } catch (e) { /* private */ } }\n'),
+     '  try { Object.assign(form, JSON.parse(localStorage.getItem("img.form") || "{}")); } catch (e) { /* private */ }\n'
+     "  /* Philibert (dev/patching.py IMAGEGEN_ENGINE, PhilSeed): a fixed seed (USE THIS PROMPT AGAIN sets one) lasts for\n"
+     "     this window only - remembered, every later picture with new words came out like the old one, as if its style\n"
+     "     stuck. And a second Image Generation window takes up the settings chosen in this one instead of writing its\n"
+     "     own old ones over them at its next keystroke. */\n"
+     '  form.seed = "";\n'
+     '  function keep() { try { localStorage.setItem("img.form", JSON.stringify(Object.assign({}, form, { seed: "" }))); } catch (e) { /* private */ } }\n'
+     '  addEventListener("storage", function (ev) {\n'
+     '    if (ev.key !== "img.form" || !ev.newValue) return;\n'
+     "    try { var o = JSON.parse(ev.newValue); delete o.seed; Object.assign(form, o); } catch (e) { return; }\n"
+     '    if (tab === "create" && !busy && st && st.installed && document.getElementById("f-model")) createView();\n'
+     "  });\n", 1),
+    ("live/static/images.js", L("'<button class=\"btn primary go\" id=\"make\"'"),
+     "(form.seed ? '<p class=\"tip\" id=\"seed-note\" style=\"color:var(--amber)\">Seed ' + esc(form.seed) + ' is fixed, so new pictures ' +\n"
+     "        'come out like the one it came from. <a href=\"#\" id=\"seed-clear\" style=\"color:var(--cyan)\">Random again</a></p>' : \"\") +\n"
+     "      '<button class=\"btn primary go\" id=\"make\"'", 1),
+    ("live/static/images.js", L('    $("make").addEventListener("click", function () { make(); });\n'),
+     '    $("make").addEventListener("click", function () { make(); });\n'
+     '    if ($("seed-clear")) $("seed-clear").addEventListener("click", function (ev) { ev.preventDefault(); form.seed = ""; createView(); });\n', 1),
+]
+# The phone chat when it does not open: the relay's refusals were empty pages (a phone shows a blank screen), so a
+# browser now gets a page saying why (shared/nd_phone_help.py), and the Models panel lists what to check. Philibert only.
+PHONE_HELP_PY = [
+    ("nd_modelshare.py", L("    def _refuse(self, code=404):\n"),
+     "    def _refuse(self, code=404):\n"
+     "        import nd_phone_help                    # Philibert: a browser gets a page saying why (dev/patching.py PHONE_HELP)\n"
+     "        if nd_phone_help.send(self, code):\n"
+     "            return\n", 1),
+]
+_PHONE_TIPS = (
+    "        // Philibert (dev/patching.py PHONE_HELP, phone-help): what to check when the phone shows nothing\n"
+    "        (s.phone ? '<details class=\"phone-help\" style=\"margin-top:8px\"><summary style=\"cursor:pointer\">THE PHONE DOES NOT OPEN IT?</summary>' +\n"
+    "          '<ol style=\"margin:8px 0 0;padding-left:20px;line-height:1.5\">' +\n"
+    "          '<li><b>Try it on this computer first:</b> <a href=\"' + esc(s.phone_address) + '\" target=\"_blank\" rel=\"noreferrer\">open the phone address here</a>. ' +\n"
+    "          'If the chat opens, this computer is fine and the phone is the place to look.</li>' +\n"
+    "          '<li><b>Tailscale on the phone:</b> in the Tailscale app the switch at the top is on and it says Connected, signed in to the ' +\n"
+    "          'same account as this computer. Someone on their own account: share this computer with them in the Tailscale admin page ' +\n"
+    "          '(Machines &gt; this computer &gt; Share).</li>' +\n"
+    "          '<li><b>Open it in Safari or Chrome</b>, not in a chat or mail app\\'s own browser: press and hold the link, then Open in Safari.</li>' +\n"
+    "          '<li><b>Send the whole address</b>: it ends in <code>/phone/</code>, and some apps cut long links. A page saying the address ' +\n"
+    "          'does not work any more means it is old or cut short: COPY it again. NEW ADDRESS makes every older address stop working.</li>' +\n"
+    "          '<li><b>Another VPN or an ad blocker</b> on the phone can keep Tailscale off: turn it off and try again.</li>' +\n"
+    "          '<li><b>Safari says it cannot connect:</b> the phone did not reach this computer. Philibert must be running here, and the ' +\n"
+    "          'Windows firewall must let it in (HOW TO SET IT UP has the command).</li></ol></details>' : \"\");\n")
+PHONE_HELP_JS = [
+    ("live/static/modelmgr.js", L(''': '<button class="btn" id="ph-on">OPEN A PHONE CHAT</button>') + "</div>";''') + r"\n",
+     ''': '<button class="btn" id="ph-on">OPEN A PHONE CHAT</button>') + "</div>" +\n''' + _PHONE_TIPS, 1),
+]
 # sync_app.addons(): each rule set and the word that marks a file it has already edited
 APP_ADDONS = [(CHATREF_BOTH, "chatref"), (CODEICON_APP, "nd_codelaunch|openCode"), (DESKTOP_REMOVE, "removeIcons"),
               (FEEDBACK_REPLIES_PY, "nd_feedback_replies"), (FEEDBACK_REPLIES_JS, "PhilFeedback"),
               (FEEDBACK_REPLIES_HTML, "feedback_replies"), (FEEDBACK_REPLIES_DESKTOP, "feedbackNews"),
-              (DESKTOP_TRASH_PY, "nd_desktop_trash"), (DESKTOP_TRASH_JS, "app_trash_list")]
+              (DESKTOP_TRASH_PY, "nd_desktop_trash"), (DESKTOP_TRASH_JS, "app_trash_list"),
+              (IMAGEGEN_ENGINE_PY, "nd_imagegen_engine"), (IMAGEGEN_ENGINE_HTML, "images_engine"),
+              (IMAGEGEN_ENGINE_JS, "PhilSeed"), (PHONE_HELP_PY, "nd_phone_help"), (PHONE_HELP_JS, "phone-help")]
 
 
 def apply(texts, rules):

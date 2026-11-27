@@ -12,7 +12,17 @@
   var SIZE_NAMES = { square: ["Square", "album cover, socials"], poster: ["Poster", "gig flyer, portrait"],
                      banner: ["Banner", "header, landscape"], story: ["Story", "phone, tall"] };
   try { Object.assign(form, JSON.parse(localStorage.getItem("img.form") || "{}")); } catch (e) { /* private */ }
-  function keep() { try { localStorage.setItem("img.form", JSON.stringify(form)); } catch (e) { /* private */ } }
+  /* Philibert (dev/patching.py IMAGEGEN_ENGINE, PhilSeed): a fixed seed (USE THIS PROMPT AGAIN sets one) lasts for
+     this window only - remembered, every later picture with new words came out like the old one, as if its style
+     stuck. And a second Image Generation window takes up the settings chosen in this one instead of writing its
+     own old ones over them at its next keystroke. */
+  form.seed = "";
+  function keep() { try { localStorage.setItem("img.form", JSON.stringify(Object.assign({}, form, { seed: "" }))); } catch (e) { /* private */ } }
+  addEventListener("storage", function (ev) {
+    if (ev.key !== "img.form" || !ev.newValue) return;
+    try { var o = JSON.parse(ev.newValue); delete o.seed; Object.assign(form, o); } catch (e) { return; }
+    if (tab === "create" && !busy && st && st.installed && document.getElementById("f-model")) createView();
+  });
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -139,6 +149,8 @@
       '<div><label>STEPS</label><input id="f-steps" type="number" min="1" max="60" placeholder="' + (st.defaults[m.kind] || {}).steps + '" value="' + esc(form.steps) + '"></div>' +
       '<div><label>GUIDANCE</label><input id="f-cfg" type="number" step="0.5" min="1" max="15" ' + (z ? "disabled placeholder=\"1\"" : 'placeholder="' + ((st.defaults.sdxl || {}).cfg) + '" value="' + esc(form.cfg) + '"') + "></div>" +
       '</div><p class="tip">The same seed and prompt make the same picture. ' + (z ? "Z-Image Turbo always uses guidance 1." : "Guidance: how closely it follows the words (5-7 is usual).") + "</p></details>" +
+      (form.seed ? '<p class="tip" id="seed-note" style="color:var(--amber)">Seed ' + esc(form.seed) + ' is fixed, so new pictures ' +
+        'come out like the one it came from. <a href="#" id="seed-clear" style="color:var(--cyan)">Random again</a></p>' : "") +
       '<button class="btn primary go" id="make"' + (ms.length ? "" : " disabled") + ">MAKE IT</button>" +
       '<p class="status" id="status"></p></aside>' +
       '<section class="pane"><h1 id="fresh-h"' + (fresh.length ? "" : " hidden") + ">Just made</h1><div class=\"gal fresh\" id=\"fresh\"></div>" +
@@ -162,6 +174,7 @@
     });
     $("f-prompt").addEventListener("keydown", function (ev) { if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) make(); });
     $("make").addEventListener("click", function () { make(); });
+    if ($("seed-clear")) $("seed-clear").addEventListener("click", function (ev) { ev.preventDefault(); form.seed = ""; createView(); });
   }
   function figs(items) {
     return items.map(function (im, i) {

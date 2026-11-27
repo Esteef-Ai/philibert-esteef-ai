@@ -107,7 +107,21 @@
           : "chat with Philibert on this computer from your phone's browser, over Tailscale.") + "</p>" +
         '<div class="row2">' + (s.phone
           ? '<span class="addr">' + esc(s.phone_address) + '</span><button class="btn" id="ph-copy">COPY</button><button class="btn danger" id="ph-off">TURN OFF</button>'
-          : '<button class="btn" id="ph-on">OPEN A PHONE CHAT</button>') + "</div>";
+          : '<button class="btn" id="ph-on">OPEN A PHONE CHAT</button>') + "</div>" +
+        // Philibert (dev/patching.py PHONE_HELP, phone-help): what to check when the phone shows nothing
+        (s.phone ? '<details class="phone-help" style="margin-top:8px"><summary style="cursor:pointer">THE PHONE DOES NOT OPEN IT?</summary>' +
+          '<ol style="margin:8px 0 0;padding-left:20px;line-height:1.5">' +
+          '<li><b>Try it on this computer first:</b> <a href="' + esc(s.phone_address) + '" target="_blank" rel="noreferrer">open the phone address here</a>. ' +
+          'If the chat opens, this computer is fine and the phone is the place to look.</li>' +
+          '<li><b>Tailscale on the phone:</b> in the Tailscale app the switch at the top is on and it says Connected, signed in to the ' +
+          'same account as this computer. Someone on their own account: share this computer with them in the Tailscale admin page ' +
+          '(Machines &gt; this computer &gt; Share).</li>' +
+          '<li><b>Open it in Safari or Chrome</b>, not in a chat or mail app\'s own browser: press and hold the link, then Open in Safari.</li>' +
+          '<li><b>Send the whole address</b>: it ends in <code>/phone/</code>, and some apps cut long links. A page saying the address ' +
+          'does not work any more means it is old or cut short: COPY it again. NEW ADDRESS makes every older address stop working.</li>' +
+          '<li><b>Another VPN or an ad blocker</b> on the phone can keep Tailscale off: turn it off and try again.</li>' +
+          '<li><b>Safari says it cannot connect:</b> the phone did not reach this computer. Philibert must be running here, and the ' +
+          'Windows firewall must let it in (HOW TO SET IT UP has the command).</li></ol></details>' : "");
     } else {
       html += "<p>A small laptop can use the models of a bigger computer you own, over Tailscale (a free private link between your own devices). " +
         (s.tailscale_ip ? "" : "Tailscale is not running on this computer yet. ") + "On the big computer, share; on the small one, paste the address it shows.</p>" +

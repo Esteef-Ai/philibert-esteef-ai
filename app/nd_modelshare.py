@@ -72,6 +72,9 @@ class _Relay(BaseHTTPRequestHandler):
         pass
 
     def _refuse(self, code=404):
+        import nd_phone_help                    # Philibert: a browser gets a page saying why (dev/patching.py PHONE_HELP)
+        if nd_phone_help.send(self, code):
+            return
         # the request body was not read: close, so its bytes are not taken for the next request
         self.close_connection = True
         self.send_response(code)

@@ -266,6 +266,8 @@ def running():
 
 
 def start(root, free_gpu=None, timeout=600):
+    import nd_imagegen_engine                   # Philibert: dev/patching.py IMAGEGEN_ENGINE
+    nd_imagegen_engine.seen_root(root)
     # 10 minutes: from a USB or spinning hard drive, with other programs reading it, torch alone
     # took over 4 minutes to load and the picture failed with "did not start in time" (2026-11-01)
     global _proc
@@ -319,6 +321,11 @@ def stop():
 
 
 def _call(path, payload=None):
+    import nd_imagegen_engine                   # Philibert: dev/patching.py IMAGEGEN_ENGINE
+    return nd_imagegen_engine.call(path, payload)
+
+
+def _call_nd(path, payload=None):
     req = urllib.request.Request(URL + path, data=json.dumps(payload).encode() if payload is not None else None,
                                  headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=30) as r:
@@ -601,6 +608,11 @@ def wf_upscale(image_name, model_file):
 
 
 def _run_prompt(wf, timeout):
+    import nd_imagegen_engine                   # Philibert: dev/patching.py IMAGEGEN_ENGINE
+    return nd_imagegen_engine.run_prompt(wf, timeout)
+
+
+def _run_prompt_nd(wf, timeout):
     pid = _call("/prompt", {"prompt": wf, "client_id": "philibert-" + uuid.uuid4().hex[:8]})["prompt_id"]
     t0 = time.time()
     while time.time() - t0 < timeout:
@@ -809,6 +821,9 @@ def handle(body, root, internet=True, free_gpu=None):
                 return {"ok": True, "editor": ""}
             return {"ok": False, "msg": f"Pictures are drawn on {REMOTE['name'] or 'your other computer'} right now: "
                                         "set up and add picture models there."}
+        if op in ("engine", "halt", "unload", "engine_stop"):
+            import nd_imagegen_engine           # Philibert: watch and stop the engine (dev/patching.py IMAGEGEN_ENGINE)
+            return nd_imagegen_engine.handle(op, body, root)
         if op == "status":
             return status(root)
         if op == "install":
