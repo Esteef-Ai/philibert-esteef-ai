@@ -1,5 +1,10 @@
-"""TubeLoader (a Philibert app): find the TVs and streaming sticks on the home network and put an app
-on one.
+"""Android Bully - APK Pusher (a Philibert app; it began as TubeLoader, and its module, route and app id
+keep that name so desktops that have it keep it): find the phones, TVs and streaming sticks on the
+home network and put an app on one.
+
+  Android phones / tablets                    an .apk through ADB - Wireless debugging (paired once with
+                                              a code) or a USB cable - or with NO setup at all: a QR code
+                                              the phone scans, and it downloads the APK from this computer
 
   Android TV / Google TV / Fire TV / SHIELD   an .apk (or a split .apks / .xapk) through ADB over Wi-Fi
   Roku (developer mode)                       a .zip channel through the Roku's own developer installer
@@ -19,9 +24,9 @@ model on the computer the assistant says so, suggests adding one, and the job en
 advice.
 
 What Philibert knows when it assists (so a small model troubleshoots like it has seen it before):
-  guides/tubeloader.md        the shipped guide - how TubeLoader works, every known problem and its fix,
+  guides/tubeloader.md        the shipped guide - how Android Bully works, every known problem and its fix,
                               by device family (only the parts for this device go to the model)
-  the household journal       <vault>/Philibert/Troubleshooting/TubeLoader.md - one line per problem that
+  the household journal       <vault>/Philibert/Troubleshooting/Android Bully.md - one line per problem that
                               was FIXED here (a fix the push then proved), so "last time on this TV, X
                               worked" - never the model's guesses
   the health check            ADB, the network, the model, and this device's own doors (ports), run
@@ -95,7 +100,7 @@ def adb_download(root):
         part = tools / "platform-tools.zip.part"
         try:
             tools.mkdir(parents=True, exist_ok=True)
-            req = urllib.request.Request(ADB_ZIP[_platform()], headers={"User-Agent": "Philibert-TubeLoader"})
+            req = urllib.request.Request(ADB_ZIP[_platform()], headers={"User-Agent": "Philibert-AndroidBully"})
             with urllib.request.urlopen(req, timeout=60) as r, open(part, "wb") as f:
                 total = int(r.headers.get("Content-Length") or 0) or ADB_MB * 2**20
                 got = 0
@@ -400,7 +405,7 @@ def _xml_tags(text, *tags):
 
 def _get(url, timeout=2.0):
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Philibert-TubeLoader"}),
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Philibert-AndroidBully"}),
                                     timeout=timeout) as r:
             return r.read(200000).decode("utf-8", "replace")
     except Exception:
@@ -410,7 +415,7 @@ def _get(url, timeout=2.0):
 def _get_code(url, timeout=3.0):
     """-> (HTTP status, body); status 0 = nothing answered."""
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Philibert-TubeLoader"}),
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Philibert-AndroidBully"}),
                                     timeout=timeout) as r:
             return r.status, r.read(200000).decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
@@ -429,7 +434,7 @@ def roku_info(ip):
 
 
 def roku_probe(ip):
-    """Everything TubeLoader needs from a Roku, each with what it means. -> {checks: [...], ...}"""
+    """Everything Android Bully needs from a Roku, each with what it means. -> {checks: [...], ...}"""
     code, x = _get_code(f"http://{ip}:{ROKU_ECP}/query/device-info", 3.0)
     info = _xml_tags(x, "user-device-name", "friendly-device-name", "model-name", "developer-enabled",
                      "software-version") if code == 200 else {}
@@ -478,9 +483,14 @@ def _hostname(ip):
 KINDS = {
     "firetv": "Fire TV", "googletv": "Google TV", "androidtv": "Android TV", "shield": "NVIDIA SHIELD",
     "roku": "Roku", "appletv": "Apple TV", "samsung": "Samsung TV", "lg": "LG TV", "chromecast": "Chromecast",
-    "other": "Other device",
+    "phone": "Android phone", "other": "Other device",
 }
-APK_KINDS = {"firetv", "googletv", "androidtv", "shield"}
+APK_KINDS = {"firetv", "googletv", "androidtv", "shield", "phone"}
+# what phones call themselves on the network (their DHCP names)
+PHONE_HOST = re.compile(r"pixel|galaxy|\bsm-[a-z]\d|oneplus|redmi|xiaomi|poco|motorola|\bmoto|android-[0-9a-f]|"
+                        r"\boppo|\bvivo|realme|nothing-phone|\bnokia|sony-?xperia|\bxperia|huawei|honor|\bphone|tablet|"
+                        r"\btab-|galaxy-tab", re.I)
+TV_WORDS = re.compile(r"android ?tv|google tv|bravia|\btv\b|shield|chromecast|fire ?tv|\baft", re.I)
 
 
 def classify(d):
@@ -514,6 +524,9 @@ def classify(d):
         kind = "shield"
     elif "google tv" in blob:
         kind = "googletv"
+    elif (("_adb-tls-connect._tcp" in svc or "_adb-tls-pairing._tcp" in svc or PHONE_HOST.search(host))
+          and "_androidtvremote2._tcp" not in svc and "_googlecast._tcp" not in svc and not TV_WORDS.search(blob)):
+        kind = "phone"                                    # Wireless debugging and nothing TV about it, or a phone's name
     elif "_androidtvremote2._tcp" in svc or "_adb-tls-connect._tcp" in svc or "_adb._tcp" in svc or 5555 in ports \
             or re.search(r"android ?tv|bravia|philips.*android|\btcl\b|hisense|xiaomi|\bmi ?box|\bonn\b", blob):
         kind = "androidtv"
@@ -528,13 +541,23 @@ def classify(d):
     accepts = "apk" if kind in APK_KINDS else "zip" if kind == "roku" else ""
     tls = (svc.get("_adb-tls-connect._tcp") or {}).get("port")
     pairing = (svc.get("_adb-tls-pairing._tcp") or {}).get("port")
-    if kind in APK_KINDS:
+    if kind == "phone":
+        name = name if name and not re.match(r"^_|adb-", name) else host
+        name = re.sub(r"[-_]+", " ", name).strip() or "Android phone"
+        if 5555 in ports:
+            status, note = "ready", "ADB answers - ready to push."
+        elif tls:
+            status, note = "pair", "Wireless debugging is on - pair once with the code on the phone (after that it just connects)."
+        else:
+            status, note = "setup", ("Looks like a phone (by its name). Turn on Wireless debugging to push to it - or use "
+                                     "Install by QR code, which needs no setup at all.")
+    elif kind in APK_KINDS:
         if 5555 in ports:
             status, note = "ready", "ADB debugging is on - ready to push."
         elif tls:
             status, note = "pair", "Wireless debugging is on - pair once with the code on the TV."
         else:
-            status, note = "setup", "Debugging is off on the TV - turn it on (TubeLoader shows how)."
+            status, note = "setup", "Debugging is off on the TV - turn it on (Android Bully shows how)."
     elif kind == "roku":
         dev = (d.get("roku") or {}).get("developer-enabled", "")
         if not d.get("roku"):
@@ -543,7 +566,7 @@ def classify(d):
         elif dev == "true":
             status, note = "ready", "Developer mode is on - ready for a .zip channel."
         else:
-            status, note = "setup", "Developer mode is off - turn it on with the remote (TubeLoader shows how)."
+            status, note = "setup", "Developer mode is off - turn it on with the remote (Android Bully shows how)."
     elif kind == "appletv":
         status, note = "no", "Apple TV can't take an APK - it needs a tvOS app, signed by an Apple developer account."
     elif kind == "chromecast":
@@ -555,6 +578,30 @@ def classify(d):
     d.update(kind=kind, kind_name=KINDS[kind], name=name or KINDS[kind], model=model, accepts=accepts,
              status=status, note=note, tls_port=tls, pairing_port=pairing)
     return d
+
+
+def usb_devices(root):
+    """Phones and sticks on a USB cable, from adb devices -l."""
+    if not adb_ready(root):
+        return []
+    rc, out = adb(root, "devices", "-l", timeout=15)
+    devs = []
+    for line in out.splitlines()[1:]:
+        m = re.match(r"^(\S+)\s+(device|unauthorized|offline|recovery|sideload|no permissions)\b(.*)$", line.strip())
+        if not m or ":" in m.group(1) or m.group(1).startswith(("emulator-", "adb-")):
+            continue                                          # (network ones are found on the network)
+        serial, state, rest = m.groups()
+        kv = dict(re.findall(r"(\w+):(\S+)", rest))
+        model = kv.get("model", "").replace("_", " ")
+        kind = "firetv" if model.upper().startswith("AFT") else "phone"
+        ready = state == "device"
+        devs.append({"ip": "usb:" + serial, "serial": serial, "usb": True, "kind": kind, "kind_name": KINDS[kind] + " (USB)",
+                     "name": model or serial, "model": model, "accepts": "apk", "ports": [], "media": True,
+                     "status": "ready" if ready else "setup",
+                     "note": "On a USB cable - ready to push." if ready else
+                     ("Look at the phone: allow USB debugging from this computer (tick Always allow)." if state == "unauthorized"
+                      else f"ADB sees it, but it's {state} - unplug it and plug it in again.")})
+    return devs
 
 
 def _is_media(d):
@@ -605,7 +652,7 @@ def scan(root):
                 for _ in ex.map(probe, list(ips)):
                     done += 1
                     _scan["progress"] = 50 + int(48 * done / max(1, len(ips)))
-            out = [classify(d) for d in devs.values()]
+            out = [classify(d) for d in devs.values()] + usb_devices(root)
             order = {"ready": 0, "pair": 1, "setup": 2, "no": 3, "unknown": 4}
             out.sort(key=lambda d: (0 if d["accepts"] else 1 if d["kind"] != "other" else 2,
                                     order.get(d["status"], 5), d["name"].lower()))
@@ -614,7 +661,8 @@ def scan(root):
                 for k in ("mdns", "ssdp"):
                     d.pop(k, None)
             _scan.update(state="done", progress=100, devices=out,
-                         msg=f"Found {sum(1 for d in out if d['kind'] != 'other')} TVs and streaming devices.")
+                         msg=f"Found {sum(1 for d in out if d['kind'] == 'phone')} phones and "
+                             f"{sum(1 for d in out if d['kind'] not in ('other', 'phone'))} TVs and streaming devices.")
         except Exception as e:
             _scan.update(state="error", msg=str(e)[:300])
 
@@ -794,7 +842,7 @@ _JUNK = re.compile(r"(^|/)(__MACOSX/|\.DS_Store$|Thumbs\.db$|desktop\.ini$)", re
 def roku_check(z):
     """A Roku channel zip -> title, version, and what's wrong with it before it is sent:
     problems (the Roku will refuse it), warnings (it may install but look or run wrong), and whether
-    TubeLoader can repack it (a zipped folder, junk files, a compression the Roku can't read)."""
+    Android Bully can repack it (a zipped folder, junk files, a compression the Roku can't read)."""
     names = [n for n in z.namelist() if not n.endswith("/")]
     root = ""
     if "manifest" not in names:
@@ -805,7 +853,7 @@ def roku_check(z):
     if root:
         repack = True
         warnings.append(f"The channel is inside a folder in the zip ({root.rstrip('/')}/) - the Roku needs the manifest "
-                        "at the top. TubeLoader sends a fixed copy (your file isn't changed).")
+                        "at the top. Android Bully sends a fixed copy (your file isn't changed).")
     if any(_JUNK.search(n) for n in names):
         repack = True
         warnings.append("The zip has Mac / Windows junk files (__MACOSX, .DS_Store, Thumbs.db) - left out of the copy sent.")
@@ -876,15 +924,16 @@ def pick_file():
 
 
 # ======================================================================================================
-# Known errors -> what they mean, what the person does, and the fix TubeLoader can run
+# Known errors -> what they mean, what the person does, and the fix Android Bully can run
 # ======================================================================================================
-SAFE = {   # the only fixes TubeLoader runs (each after the person taps it); danger = asked twice
+SAFE = {   # the only fixes Android Bully runs (each after the person taps it); danger = asked twice
     "reconnect": ("Reconnect to the TV", False),
     "restart_adb": ("Restart ADB on this computer and reconnect", False),
     "wake_tv": ("Wake the TV up", False),
     "open_developer_settings": ("Open Developer options on the TV", False),
     "retry": ("Try the install again", False),
     "retry_allow_downgrade": ("Install over the newer version (keeps its data)", False),
+    "retry_old_app": ("Install it anyway - Android 14+ blocks apps made for very old Android", False),
     "uninstall_then_install": ("Remove the old copy, then install (deletes that app's data on the TV)", True),
     "pair": ("Pair with the code on the TV", False),
     "roku_replace": ("Replace the channel on the Roku", False),
@@ -900,7 +949,7 @@ RULES = [
     (r"connection refused|cannot connect|failed to connect|actively refused|10061|no route|unable to connect",
      "The TV isn't accepting connections - debugging is off, or it's asleep.",
      ["Make sure the TV is on (not in standby).",
-      "Turn on debugging on the TV (TubeLoader's steps for this TV are below).",
+      "Turn on debugging on the TV (Android Bully's steps for this TV are below).",
       "Fire TV: Settings > My Fire TV > Developer options > ADB debugging ON."], "wake_tv"),
     (r"timed out|timeout|took longer",
      "The TV didn't answer in time.",
@@ -927,10 +976,23 @@ RULES = [
     (r"INSTALL_PARSE_FAILED_NO_CERTIFICATES|INSTALL_PARSE_FAILED|INSTALL_FAILED_INVALID_APK|not a valid",
      "The APK file is damaged or not signed.",
      ["Download the APK again, or rebuild it signed."], None),
+    (r"INSTALL_FAILED_DEPRECATED_SDK_VERSION|deprecated sdk|low target sdk",
+     "Android 14 and newer block apps made for very old Android (this app targets Android 5 or older).",
+     ["Best: get a newer version of the app.", "Or install it anyway - Android allows that from a computer."], "retry_old_app"),
+    (r"Auto Blocker|blocked by .*security|AUTO_BLOCKER",
+     "Samsung's Auto Blocker stops apps from outside the Play / Galaxy Store, and debugging commands.",
+     ["On the phone: Settings > Security and privacy > Auto Blocker - turn it off while you install.",
+      "Turn it back on afterwards if you like (installed apps stay)."], "retry"),
+    (r"INSTALL_FAILED_ABORTED|User rejected|install.*canceled|cancelled by user",
+     "The install was stopped on the phone - a question on its screen was declined or timed out.",
+     ["Watch the phone's screen while installing: allow the install when it asks.",
+      "Xiaomi / Redmi / POCO: Developer options > Install via USB ON (it asks for a Mi account) and USB debugging "
+      "(Security settings) ON."], "retry"),
     (r"INSTALL_FAILED_USER_RESTRICTED|blocked|INSTALL_FAILED_VERIFICATION_FAILURE|Play Protect",
      "The TV blocked the install (unknown sources or Play Protect).",
      ["On the TV allow installing unknown apps (Fire TV: Developer options > Install unknown apps / Apps from "
-      "Unknown Sources).", "If Google Play Protect asks, choose Install anyway."], "retry"),
+      "Unknown Sources).", "If Google Play Protect asks, choose Install anyway.",
+      "On a Xiaomi / Redmi / POCO phone: Developer options > Install via USB ON (it asks for a Mi account)."], "retry"),
     (r"INSTALL_FAILED_MISSING_SPLIT|split",
      "This app comes in several pieces and only one was given.",
      ["Pick the whole bundle (.apks / .xapk), not a single piece."], None),
@@ -974,7 +1036,7 @@ ROKU_RULES = [
     (r"No manifest|manifest",
      "The Roku couldn't find the channel's manifest.",
      ["The manifest must be at the top of the zip, not inside a folder - zip the folder's CONTENTS.",
-      "TubeLoader repacks a zipped folder by itself; if this still shows, the manifest is missing."], None),
+      "Android Bully repacks a zipped folder by itself; if this still shows, the manifest is missing."], None),
     (r"too (big|large)|size|space",
      "The channel is too big for the Roku's developer slot.",
      ["Make the images smaller (Roku channel images are small PNG/JPGs) and leave out anything unused."], None),
@@ -1001,7 +1063,7 @@ SETUP_STEPS = {
                  "\"You are now a developer\".",
                  "Back in Settings > System > Developer options: turn ON USB debugging.",
                  "Newer TVs (Android 11+) also have Wireless debugging: turn it ON, open it, and choose "
-                 "Pair device with pairing code - TubeLoader asks for that code.",
+                 "Pair device with pairing code - Android Bully asks for that code.",
                  "Then press Push - the TV asks to allow this computer: tick Always allow and choose Allow."],
     "roku": ["On the Roku remote, press: Home 3 times, Up 2 times, Right, Left, Right, Left, Right.",
              "The Developer Settings screen opens: choose Enable installer and restart, agree, and set a "
@@ -1009,6 +1071,18 @@ SETUP_STEPS = {
              "After the restart, press Push here and type that password (user name is rokudev)."],
 }
 SETUP_STEPS["androidtv"] = SETUP_STEPS["shield"] = SETUP_STEPS["googletv"]
+SETUP_STEPS["phone"] = [
+    "Easiest, no setup: use Install by QR code (top of the list) - the phone scans it and downloads the app.",
+    "To push over Wi-Fi instead: Settings > About phone > tap Build number 7 times (Samsung: About phone > Software "
+    "information > Build number; Xiaomi: tap MIUI / HyperOS version) - \"You are now a developer\".",
+    "Settings > System > Developer options (Samsung: Settings > Developer options) > Wireless debugging ON "
+    "(the phone must be on the same Wi-Fi). Then press Scan here.",
+    "Push: Android Bully asks for a pairing code - on the phone tap Wireless debugging > Pair device with pairing "
+    "code, and type the code and port it shows. That's once; after that it connects by itself.",
+    "Samsung: turn off Auto Blocker first (Settings > Security and privacy > Auto Blocker).",
+    "Or plug the phone into this computer with a USB cable: Developer options > USB debugging ON, allow this "
+    "computer on the phone, and press Scan.",
+    "Wireless debugging switches itself off when the phone restarts or changes Wi-Fi - turn it on again before a push."]
 
 
 # ======================================================================================================
@@ -1016,6 +1090,7 @@ SETUP_STEPS["androidtv"] = SETUP_STEPS["shield"] = SETUP_STEPS["googletv"]
 # ======================================================================================================
 GUIDE = Path(__file__).resolve().parent / "guides" / "tubeloader.md"
 FAMILY = {"firetv": "Android", "googletv": "Android", "androidtv": "Android", "shield": "Android", "roku": "Roku",
+          "phone": "Phone",
           "appletv": "Other", "samsung": "Other", "lg": "Other", "chromecast": "Other", "other": "Other"}
 
 
@@ -1026,14 +1101,15 @@ def guide_for(kind):
     except OSError:
         return ""
     parts = re.split(r"(?m)^## ", text)
-    want = ("General", FAMILY.get(kind, "Other"), "Safe")      # (headings matched on their first word)
+    fam = FAMILY.get(kind, "Other")
+    want = ("General", fam, "Safe") + (("Android",) if fam == "Phone" else ())   # (headings: first word)
     keep = [p for p in parts[1:] if p.split("\n", 1)[0].strip().split(" ")[0].strip(":") in want]
-    return "\n".join("## " + p.strip() for p in keep)[:9000]
+    return "\n".join("## " + p.strip() for p in keep)[:14000]     # (a phone gets Android + Phone: ~8.5k)
 
 
 def journal_path(vault, data_dir):
     if vault:
-        return Path(vault) / "Philibert" / "Troubleshooting" / "TubeLoader.md"
+        return Path(vault) / "Philibert" / "Troubleshooting" / "Android Bully.md"   # (was TubeLoader.md)
     return Path(data_dir) / "tubeloader" / "journal.md"
 
 
@@ -1043,8 +1119,8 @@ def journal_note(path, line):
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
-            path.write_text("# TubeLoader - what fixed what, here\n\nPhilibert writes a line when a problem with "
-                            "TubeLoader was fixed and the app went on the TV. It reads them the next time something "
+            path.write_text("# Android Bully - what fixed what, here\n\nPhilibert writes a line when a problem with "
+                            "Android Bully was fixed and the app went on the TV. It reads them the next time something "
                             "goes wrong.\n\n", encoding="utf-8")
         with open(path, "a", encoding="utf-8") as f:
             f.write("- " + line.replace("\n", " ") + "\n")
@@ -1058,10 +1134,12 @@ _ERR_KEYS = re.compile(r"INSTALL_[A-Z_]+|unauthori[sz]ed|refused|timed out|offli
 
 def journal_recall(path, dev, text, n=5):
     """The journal lines about this device or this kind of error, newest last."""
-    try:
-        lines = [l[2:].strip() for l in Path(path).read_text(encoding="utf-8").splitlines() if l.startswith("- ")]
-    except OSError:
-        return []
+    lines = []
+    for f in (Path(path), Path(path).with_name("TubeLoader.md")):      # (its notes from before the new name)
+        try:
+            lines += [l[2:].strip() for l in f.read_text(encoding="utf-8").splitlines() if l.startswith("- ")]
+        except OSError:
+            pass
     keys = {k.lower() for k in _ERR_KEYS.findall(text or "")}
     who = {str(dev.get("name", "")).lower(), str(dev.get("ip", ""))} - {""}
     hits = [l for l in lines if any(w in l.lower() for w in who) or any(k in l.lower() for k in keys)]
@@ -1090,6 +1168,20 @@ def health(root, dev, model_name=""):
     out.append({"name": "Philibert's AI model", "ok": bool(model_name), "detail": model_name or "none",
                 "fix": "" if model_name else "Add a model in the Model Manager so Philibert can help with problems."})
     ip = dev.get("ip")
+    if dev.get("usb"):
+        rc, stt = adb(root, "-s", dev.get("serial", ""), "get-state", timeout=10) if adb_ready(root) else (1, "")
+        stt = (stt.strip().splitlines() or [""])[-1]
+        out.append({"name": "On the USB cable", "ok": stt == "device", "detail": stt or "not seen",
+                    "fix": "" if stt == "device" else "Unplug and plug in the cable; on the phone allow USB debugging "
+                                                      "from this computer (tick Always allow)."})
+        return out
+    if ip and dev.get("accepts") == "apk" and dev.get("kind") == "phone" and not _open(ip, 5555, 1.0):
+        tls = dev.get("tls_port")
+        live = tls and _open(ip, int(tls), 1.5)
+        out.append({"name": "Wireless debugging on the phone", "ok": bool(live),
+                    "detail": f"answers on port {tls}" if live else "off (or the port changed - press Scan again)",
+                    "fix": "" if live else " ".join(SETUP_STEPS["phone"][1:3])})
+        return out
     if ip and dev.get("accepts") == "zip":
         out += roku_probe(ip)["checks"]
     elif ip and dev.get("accepts") == "apk":
@@ -1200,14 +1292,18 @@ class Job:
             self.state = "failed"
             return
         ip = self.dev["ip"]
-        self.serial = f"{ip}:5555" if not self.dev.get("tls_port") or 5555 in self.dev.get("ports", []) else \
-            f"{ip}:{self.dev['tls_port']}"
+        if self.dev.get("usb"):
+            self.serial = self.dev["serial"]
+        else:
+            self.serial = f"{ip}:5555" if not self.dev.get("tls_port") or 5555 in self.dev.get("ports", []) else \
+                f"{ip}:{self.dev['tls_port']}"
         flags = []
-        if self.dev.get("status") == "pair" and 5555 not in self.dev.get("ports", []):
-            self.ev("info", "This TV uses Wireless debugging: it pairs once with a code it shows.")
-            if not self.pair():
-                self.state = "cancelled"
-                return
+        if not self.dev.get("usb") and self.dev.get("status") == "pair" and 5555 not in self.dev.get("ports", []):
+            if not self.connect(quiet=True):              # paired before: it just connects
+                self.ev("info", f"This {self.thing} uses Wireless debugging: it pairs once with a code it shows.")
+                if not self.pair():
+                    self.state = "cancelled"
+                    return
         while True:
             ok = self.connect() and self.authorise() and self.check(flags) and self.install(flags)
             if ok:
@@ -1224,13 +1320,38 @@ class Job:
                 self.state = "failed"
                 return
 
-    def connect(self):
+    @property
+    def thing(self):
+        return "phone" if self.dev.get("kind") == "phone" else "TV"
+
+    def _fresh_port(self):
+        """Wireless debugging moves to a new port each time it's turned on: ask ADB where it is now."""
+        rc, out = self.adb("mdns", "services", timeout=10)
+        m = re.search(r"_adb-tls-connect\S*\s+" + re.escape(self.dev.get("ip", "")) + r":(\d+)", out or "")
+        return m.group(1) if m else ""
+
+    def connect(self, quiet=False):
+        if self.dev.get("usb"):
+            self.ev("ok", f"{self.dev['name']} is on the USB cable.")
+            return True
         self.ev("step", f"Connecting to {self.dev['name']} at {self.serial}…")
         rc, out = self.adb("connect", self.serial, timeout=20)
         if re.search(r"connected to|already connected", out) and not re.search(r"failed|unable|cannot", out, re.I):
             self.ev("ok", "Connected.", out)
             return True
-        self.ev("fail", "The TV didn't accept the connection.", out)
+        if self.dev.get("tls_port") and not self.serial.endswith(":5555"):
+            port = self._fresh_port()
+            if port and not self.serial.endswith(":" + port):
+                self.serial = f"{self.dev['ip']}:{port}"
+                self.ev("info", f"Wireless debugging moved to port {port} - trying there.")
+                rc, out = self.adb("connect", self.serial, timeout=20)
+                if re.search(r"connected to|already connected", out) and not re.search(r"failed|unable|cannot", out, re.I):
+                    self.ev("ok", "Connected.", out)
+                    return True
+        if quiet:
+            self.ev("info", "Not paired with this computer yet.", out)
+            return False
+        self.ev("fail", f"The {self.thing} didn't accept the connection.", out)
         return False
 
     def state_of(self):
@@ -1242,7 +1363,7 @@ class Job:
         if st == "device":
             return True
         if "unauthorized" in st:
-            self.ev("info", "Look at the TV: allow debugging from this computer.",
+            self.ev("info", f"Look at the {self.thing}: allow debugging from this computer.",
                     "Tick \"Always allow from this computer\", then choose Allow. Waiting up to a minute…")
             for _ in range(30):
                 if self.cancelled:
@@ -1252,7 +1373,7 @@ class Job:
                 if st == "device":
                     self.ev("ok", "The TV allowed this computer.")
                     return True
-            self.ev("fail", "The TV didn't allow this computer (no answer on the TV).", f"state: {st}")
+            self.ev("fail", f"The {self.thing} didn't allow this computer (no answer on it).", f"state: {st}")
             return False
         self.ev("fail", "The TV is connected but not ready.", f"state: {st}")
         return False
@@ -1288,7 +1409,7 @@ class Job:
                         f"The TV has a newer version of this app ({vn.group(1) if vn else have}) than your file.")
         if not f.get("tv_launcher") and f.get("type") in ("apk", "bundle"):
             self.ev("info", "Note: this app has no TV home-screen entry (it's a phone app). It may install fine but not "
-                            "show on the TV's home row - find it in Settings > Apps, or open it from TubeLoader.")
+                            "show on the TV's home row - find it in Settings > Apps, or open it from Android Bully.")
         return True
 
     def install(self, flags):
@@ -1380,8 +1501,8 @@ class Job:
                  "fixed_here_before": past,
                  "how_to_set_up_this_kind_of_tv": SETUP_STEPS.get(self.dev.get("kind"), [])}
         system = (
-            "You are Philibert, helping someone put an app on their TV with TubeLoader (ADB over Wi-Fi for Android TV, "
-            "Google TV and Fire TV; the developer installer for Roku). The install just failed. Work out why from the "
+            "You are Philibert, helping someone put an app on their phone or TV with Android Bully - APK Pusher (ADB over "
+            "Wi-Fi or USB for Android phones, Android TV, Google TV and Fire TV; the developer installer for Roku). The install just failed. Work out why from the "
             "facts and the log, and tell them plainly what to do. Answer ONLY with JSON:\n"
             '{"say": "2-4 short, friendly sentences: what went wrong and what happens next",\n'
             ' "steps": ["what the person does on the TV or remote, one short step each - empty if none"],\n'
@@ -1455,6 +1576,9 @@ class Job:
             self.sh("am", "start", "-a", "android.settings.APPLICATION_DEVELOPMENT_SETTINGS", timeout=15)
             self.ev("info", "Developer options are open on the TV.")
             return self.wait_user([]) is not None
+        elif fix == "retry_old_app":
+            if "--bypass-low-target-sdk-block" not in flags:
+                flags.append("--bypass-low-target-sdk-block")
         elif fix == "retry_allow_downgrade":
             if "-d" not in flags:
                 flags.append("-d")
@@ -1469,8 +1593,8 @@ class Job:
 
     def pair(self):
         pp = self.dev.get("pairing_port") or ""
-        a = self.ask("pair", port=pp, text="On the TV: Developer options > Wireless debugging > Pair device with "
-                                           "pairing code. Type the code and the port it shows (the number after the colon).")
+        a = self.ask("pair", port=pp, text=f"On the {self.thing}: Developer options > Wireless debugging > Pair device "
+                                           "with pairing code. Type the code and the port it shows (the number after the colon).")
         if not a:
             return False
         code, port = re.sub(r"\D", "", str(a.get("code", ""))), re.sub(r"\D", "", str(a.get("port", "") or pp))
@@ -1481,9 +1605,7 @@ class Job:
         rc, out = self.adb("pair", f"{self.dev['ip']}:{port}", code, timeout=30)
         if "Successfully paired" in out:
             self.ev("ok", "Paired.", out)
-            m = re.search(r"_adb-tls-connect\S*\s+" + re.escape(self.dev["ip"]) + r":(\d+)",
-                          self.adb("mdns", "services", timeout=10)[1] or "")
-            cport = a.get("connect_port") or (m.group(1) if m else "")
+            cport = a.get("connect_port") or self._fresh_port()
             if cport:
                 self.serial = f"{self.dev['ip']}:{re.sub(r'[^0-9]', '', str(cport))}"
         else:
@@ -1641,7 +1763,7 @@ Job.roku_open = lambda self, ip: _roku_open(self, ip)
 
 def roku_install(ip, password, path, mode="Install"):
     """The Roku developer installer (digest auth, user rokudev). -> (ok, message)."""
-    boundary = "----TubeLoader" + uuid.uuid4().hex
+    boundary = "----AndroidBully" + uuid.uuid4().hex
     data = Path(path).read_bytes()
     body = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"mysubmit\"\r\n\r\n{mode}\r\n"
             f"--{boundary}\r\nContent-Disposition: form-data; name=\"archive\"; filename=\"{Path(path).name}\"\r\n"
@@ -1670,10 +1792,167 @@ def roku_install(ip, password, path, mode="Install"):
 
 
 # ======================================================================================================
+# Install by QR code: the phone downloads the APK from this computer - no developer mode, no ADB
+# ======================================================================================================
+QR_MINUTES = 30
+_share = {"s": None}
+
+
+class QrShare:
+    """One APK offered on the home network for QR_MINUTES: a page that explains the install, and the
+    file, both at a secret address (a random token) on this computer's home-network address only."""
+
+    def __init__(self, f, lan_ip, computer=""):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        self.f, self.computer = f, computer
+        self.token = uuid.uuid4().hex[:16]
+        self.until = time.time() + QR_MINUTES * 60
+        self.fname = re.sub(r"[^A-Za-z0-9._-]+", "_", Path(f["path"]).stem)[:60] + ".apk"
+        self.downloads = {}                       # their ip -> {got, total, done, at}
+        share = self
+
+        class H(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                share.serve(self)
+
+        self.srv = None
+        for port in (8770, 0):
+            try:
+                self.srv = ThreadingHTTPServer((lan_ip, port), H)
+                break
+            except OSError:
+                continue
+        self.srv.daemon_threads = True
+        self.url = f"http://{lan_ip}:{self.srv.server_address[1]}/a/{self.token}/"
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+
+    def live(self):
+        return self.srv is not None and time.time() < self.until
+
+    def stop(self):
+        s, self.srv = self.srv, None
+        if s:
+            threading.Thread(target=lambda: (s.shutdown(), s.server_close()), daemon=True).start()
+
+    def _send(self, h, code, body, ctype="text/html; charset=utf-8"):
+        h.send_response(code)
+        h.send_header("Content-Type", ctype)
+        h.send_header("Content-Length", str(len(body)))
+        h.send_header("Cache-Control", "no-store")
+        h.end_headers()
+        h.wfile.write(body)
+
+    def serve(self, h):
+        path = urllib.parse.urlparse(h.path).path
+        base = f"/a/{self.token}/"
+        if not path.startswith(base):
+            return self._send(h, 404, b"Not here.", "text/plain")
+        if not self.live():
+            return self._send(h, 410, "<h2>This link has ended</h2><p>Show the QR code again on the computer.</p>".encode())
+        if path == base:
+            return self._send(h, 200, self.page().encode("utf-8"))
+        if path == base + self.fname:
+            size = Path(self.f["path"]).stat().st_size
+            who = h.client_address[0]
+            rec = self.downloads.setdefault(who, {"got": 0, "total": size, "done": False, "at": time.time()})
+            rec.update(got=0, total=size, done=False, at=time.time())
+            h.send_response(200)
+            h.send_header("Content-Type", "application/vnd.android.package-archive")
+            h.send_header("Content-Length", str(size))
+            h.send_header("Content-Disposition", f'attachment; filename="{self.fname}"')
+            h.end_headers()
+            try:
+                with open(self.f["path"], "rb") as fh:
+                    while True:
+                        b = fh.read(256 * 1024)
+                        if not b:
+                            break
+                        h.wfile.write(b)
+                        rec["got"] += len(b)
+                rec["done"] = True
+            except OSError:
+                pass
+            return
+        self._send(h, 404, b"Not here.", "text/plain")
+
+    def page(self):
+        f = self.f
+        esc = lambda t: (str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))   # noqa: E731
+        ver = f.get("version_name") or ""
+        return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Install {esc(f.get('name'))}</title>
+<style>body{{margin:0;background:#0f172a;color:#d7e3f4;font:16px/1.5 system-ui,sans-serif}}
+main{{max-width:520px;margin:0 auto;padding:24px 20px 40px}}.b{{font:800 13px system-ui;letter-spacing:.16em;color:#00f2fe}}
+h1{{font-size:22px;margin:6px 0 2px;color:#fff}}.m{{color:#8ea3c4;font-size:14px}}
+a.go{{display:block;text-align:center;background:#00f2fe;color:#04131c;font-weight:800;text-decoration:none;padding:16px;
+border-radius:12px;margin:22px 0;font-size:18px}}ol{{padding-left:20px}}li{{margin:10px 0}}
+.n{{background:#13203a;border:1px solid #1e3054;border-radius:10px;padding:12px 14px;font-size:14px;color:#8ea3c4}}</style></head>
+<body><main><div class="b">ANDROID BULLY · APK PUSHER</div><h1>{esc(f.get('package') or f.get('name'))}</h1>
+<div class="m">{esc(f.get('name'))}{' · version ' + esc(ver) if ver else ''} · {f.get('size', 0) / 1048576:.1f} MB
+{' · from ' + esc(self.computer) if self.computer else ''}</div>
+<a class="go" href="{self.fname}">Download and install</a>
+<ol><li>Tap <b>Download and install</b>. If the browser asks, choose <b>Download anyway</b>.</li>
+<li>Open the downloaded file (from the notification, or the browser's Downloads).</li>
+<li>If the phone says it can't install unknown apps from this source: tap <b>Settings</b>, turn on
+<b>Allow from this source</b>, and go back.</li>
+<li>Tap <b>Install</b>. If Google Play Protect warns about an unknown app: <b>More details &gt; Install anyway</b>
+(only for apps you trust - this one came from your own computer).</li></ol>
+<p class="n">This link works for {QR_MINUTES} minutes and only on your home network.</p></main></body></html>"""
+
+    def view(self):
+        return {"active": self.live(), "url": self.url, "until": self.until, "left": max(0, int(self.until - time.time())),
+                "file": {k: self.f.get(k) for k in ("name", "package", "version_name", "size")},
+                "downloads": [{"ip": ip, "pct": int(100 * r["got"] / max(1, r["total"])), "done": r["done"]}
+                              for ip, r in self.downloads.items()]}
+
+
+def qr_start(path):
+    f = inspect(path)
+    if not f.get("ok"):
+        return f
+    if f.get("type") == "bundle":
+        return {"ok": False, "msg": "A split app (.apks / .xapk) can't be installed from a download - push it with "
+                                    "Wireless debugging or USB instead."}
+    if f.get("type") != "apk":
+        return {"ok": False, "msg": "Install by QR code is for Android apps (.apk)."}
+    nets = local_nets()
+    if not nets:
+        return {"ok": False, "msg": "This computer isn't on a home network the phone could reach."}
+    if _share["s"]:
+        _share["s"].stop()
+    try:
+        sh = QrShare(f, nets[0][0], socket.gethostname())
+    except Exception as e:
+        return {"ok": False, "msg": f"Couldn't offer the file on the network ({e})."}
+    _share["s"] = sh
+    import nd_qr
+    return {"ok": True, "svg": nd_qr.svg(sh.url, px=7), **sh.view()}
+
+
+# ======================================================================================================
 # The page's ops
 # ======================================================================================================
 def handle(body, root, data_dir, llm=None, model_name="", vault=None):
     op = str(body.get("op") or "")
+    if op == "qr_start":
+        return qr_start(body.get("path"))
+    if op == "qr_status":
+        sh = _share["s"]
+        return {"ok": True, **(sh.view() if sh else {"active": False})}
+    if op == "qr_stop":
+        if _share["s"]:
+            _share["s"].stop()
+            _share["s"] = None
+        return {"ok": True}
+    if op == "usb":
+        found = usb_devices(root)
+        _scan["devices"] = [x for x in _scan["devices"] if not x.get("usb")] + found
+        return {"ok": True, "devices": found}
     if op == "health":
         return {"ok": True, "checks": health(root, body.get("device") or {}, model_name)}
     if op == "journal":

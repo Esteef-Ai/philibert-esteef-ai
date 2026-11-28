@@ -52,9 +52,9 @@ STORE = [
     {"id": "guitartab", "name": "TabCrafter", "about": "For guitar players: give it a recording of a guitar on its own, "
      "the strings and tuning and the tempo (typed or tapped), and it writes the tab - with a player that follows "
      "along and a click-to-fix review. Sets itself up the first time (about 500 MB)."},
-    {"id": "tubeloader", "name": "TubeLoader", "about": "Put apps on your TV: finds the Fire TV, Google TV, Android TV "
-     "and Roku on your home network and installs an app from this computer (an APK, or a Roku channel) - with "
-     "Philibert helping when the TV says no. Gets Google's ADB tool the first time (about 13 MB)."},
+    {"id": "tubeloader", "name": "Android Bully", "about": "APK Pusher: put apps on Android phones, Fire TV, Google TV, "
+     "Android TV and Roku on your home network - over Wi-Fi, by USB cable, or with a QR code the phone scans (no setup) "
+     "- with Philibert helping when the device says no. Gets Google's ADB tool the first time (about 13 MB)."},
     {"id": "yeschef", "name": "Yes Chef!", "about": "For home cooks and bakers: recipes kept by weight that scale themselves, test versions to compare, several batches at once with their own timers, and a cook mode that keeps the screen on. Add recipes from a link, a PDF, a Word file or a photo - it reads them ahead and flags the overnight rests and early preheats as MUST READ."},
     {"id": "vault", "name": "Retro Vault", "about": "Play your own classic games from the drive (NES, SNES, Genesis, GBA, N64 and "
      "more), with saves kept on the drive."},

@@ -1,17 +1,17 @@
-# TubeLoader guide (for Philibert)
+# Android Bully - APK Pusher: guide (for Philibert)
 
-Philibert reads this when it assists with a TubeLoader push. It only gets the sections for the device in
-question: General, that device's family (Android or Roku), and Safe fixes. Keep each problem short and
+Philibert reads this when it assists with an Android Bully push (the app was called Android Bully before). It only gets the sections for the device in
+question: General, that device's family (Android, Phone - which also gets Android - or Roku), and Safe fixes. Keep each problem short and
 put the fix right after it. Write what is true; Philibert trusts this guide over its own guesses.
 
 ## General
-- TubeLoader runs on the computer. It reaches the TV over the home network, so the computer and the TV
-  must be on the same network. A VPN on the computer is fine (TubeLoader uses the real network card),
+- Android Bully runs on the computer. It reaches the TV over the home network, so the computer and the TV
+  must be on the same network. A VPN on the computer is fine (Android Bully uses the real network card),
   but "guest" Wi-Fi networks often block devices from seeing each other.
 - A TV that is asleep or in standby often doesn't answer. Wake it with its remote first.
 - Mesh Wi-Fi and some routers stop devices talking to each other ("AP isolation" / "client isolation").
   If nothing on the network answers, that setting is the likely cause; it's in the router's Wi-Fi settings.
-- The file is only read. TubeLoader never changes the person's APK or zip; a Roku zip that needs fixing
+- The file is only read. Android Bully never changes the person's APK or zip; a Roku zip that needs fixing
   is copied, and the copy is fixed.
 - Philibert never runs anything on its own. A fix is offered as a button; removing an app asks twice.
 
@@ -53,32 +53,72 @@ Problems and fixes:
   choose "Install anyway" if Play Protect asks.
 - INSTALL_FAILED_MISSING_SPLIT: only one piece of a split app was given. Use the .apks/.xapk bundle.
 - Installed but not on the Home screen: the app has no TV launcher entry (a phone app). It's still in
-  Settings > Applications; TubeLoader tries to open it after installing.
+  Settings > Applications; Android Bully tries to open it after installing.
 - Opens then closes at once: often a phone app that needs a touchscreen or Google services that Fire TV
   doesn't have. Not something an install can fix.
+
+## Phone
+Android phones and tablets. The install itself is the same as a TV's (the Android section's errors all
+apply); getting connected is different. Three ways:
+- Install by QR code (no setup): Android Bully offers the APK on the home network for 30 minutes at a
+  secret address; the phone scans the QR code, downloads it and installs it with the phone's own
+  "allow from this source" question. Works on any Android phone. Split apps (.apks/.xapk) can't go this
+  way. If the phone can't open the page: it must be on the same Wi-Fi (not mobile data, not a guest
+  network), and Windows Firewall must let Philibert answer on Private networks - when Windows asks,
+  choose Allow. A phone browser may warn "file might be harmful": Download anyway.
+- Wireless debugging (Android 11+): Settings > About phone > tap Build number 7 times (Samsung: About
+  phone > Software information > Build number; Xiaomi: tap the MIUI / HyperOS version). Then Developer
+  options > Wireless debugging ON, while on Wi-Fi. The first push pairs with a 6-digit code (Wireless
+  debugging > Pair device with pairing code: code + IP:port, the port after the colon). After that it
+  connects by itself.
+- USB cable: Developer options > USB debugging ON, plug into the computer, allow this computer on the
+  phone (tick Always allow). Charging-only cables don't carry data - try another cable.
+
+Phone problems and fixes:
+- Not found by Scan: Wireless debugging is off (it turns itself off when the phone restarts, changes
+  Wi-Fi, or after a while on some phones). Turn it on again and Scan. Or add the phone by its IP.
+- "Not paired" / can't connect on the Wireless debugging port: the port changes every time Wireless
+  debugging is switched on. Android Bully asks ADB for the new port by itself; if it still fails, pair
+  again (a new code).
+- Pairing fails: the code is only good while the pairing box is open on the phone, and the pairing
+  port is different from the connect port. Open "Pair device with pairing code" again and use the new
+  code and port right away.
+- Samsung (One UI 6+): Auto Blocker blocks apps from outside the stores and debugging. Settings >
+  Security and privacy > Auto Blocker OFF while installing.
+- Xiaomi / Redmi / POCO: also turn on "Install via USB" and "USB debugging (Security settings)" in
+  Developer options (they ask for a Mi account). Without them installs end in INSTALL_FAILED_USER_RESTRICTED
+  or INSTALL_FAILED_ABORTED.
+- INSTALL_FAILED_ABORTED / "User rejected": a question on the phone's screen was declined or timed out.
+  Watch the phone while installing and allow it.
+- INSTALL_FAILED_DEPRECATED_SDK_VERSION: Android 14+ blocks apps made for Android 5 or older. Best: a
+  newer version of the app. Or install it anyway (the retry_old_app fix).
+- Play Protect "unsafe app" / "Install anyway": the phone's own check of apps from outside the Play
+  Store; choose More details > Install anyway for an app the person trusts.
+- Work or school phones (a managed profile) can block installs from a computer entirely; the QR
+  install into the personal profile may still work.
 
 ## Roku
 How it works: a Roku isn't Android - it can't take an APK. It takes a "dev channel": a .zip of the
 channel's files sent to the Roku's own developer installer (a web page on port 80, user name rokudev,
 password chosen by the person). Only one dev channel at a time; a new one replaces the old. The Roku's
 control port (8060) says whether developer mode is on and opens the channel; its debug console (port
-8085) prints compile errors and crashes - TubeLoader reads it during the install and the first seconds
+8085) prints compile errors and crashes - Android Bully reads it during the install and the first seconds
 of the run.
 
 Turning developer mode on (the remote code):
 - Home 3 times, Up 2 times, Right, Left, Right, Left, Right. The Developer Settings screen opens.
 - Choose "Enable installer and restart", agree to the license, set a developer password. The Roku
-  restarts. Write the password down - TubeLoader asks for it (user name is always rokudev).
+  restarts. Write the password down - Android Bully asks for it (user name is always rokudev).
 - Forgot the password: do the remote code again; the same screen lets you set a new one.
 
-The zip (TubeLoader checks it before sending):
+The zip (Android Bully checks it before sending):
 - The manifest file must be at the TOP of the zip. The usual mistake is zipping the folder instead of
-  its contents; TubeLoader repacks a fixed copy automatically.
+  its contents; Android Bully repacks a fixed copy automatically.
 - The manifest needs title=, and should have major_version=, minor_version=, build_version=.
 - The code is in source/*.brs (a BrightScript channel) and, for a SceneGraph channel, components/*.xml.
 - Icons named in the manifest (mm_icon_focus_hd, splash_screen_hd, ...) as pkg:/images/... must be in
   the zip, or the Roku shows a blank tile.
-- 7-Zip's LZMA/BZip2 zips can't be read by the Roku; TubeLoader repacks them as normal zips.
+- 7-Zip's LZMA/BZip2 zips can't be read by the Roku; Android Bully repacks them as normal zips.
 - Mac "__MACOSX" folders and .DS_Store files are left out of the copy.
 
 Problems and fixes:
@@ -101,7 +141,7 @@ Problems and fixes:
 - Roku TVs (TCL, Hisense, onn. with Roku) work exactly like Roku sticks.
 
 ## Safe fixes
-The only things TubeLoader runs for Philibert, each after the person taps it:
+The only things Android Bully runs for Philibert, each after the person taps it:
 - reconnect - drop and remake the ADB connection.
 - restart_adb - restart ADB on the computer, then reconnect (clears a stuck ADB).
 - wake_tv - send the wake key to an Android TV that's connected but asleep.
@@ -110,7 +150,8 @@ The only things TubeLoader runs for Philibert, each after the person taps it:
 - retry_allow_downgrade - install over a newer version (keeps the app's data).
 - uninstall_then_install - remove the old copy, then install. DELETES that app's data on the TV; only
   for a signature mismatch. Asked twice.
-- pair - pair with the code shown on an Android 11+ TV (Wireless debugging).
+- pair - pair with the code shown on an Android 11+ phone or TV (Wireless debugging).
+- retry_old_app - install an app made for very old Android on Android 14+ (it blocks them otherwise).
 - roku_replace - send the channel again as a replacement.
 - roku_launch - open the dev channel on the Roku.
 For a problem in the app itself (an error in a Roku channel's code, a broken zip, an APK for another

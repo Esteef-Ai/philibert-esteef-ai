@@ -3,11 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Philibert TubeLoader</title>
+<title>Android Bully - APK Pusher</title>
 <link href="/live/fonts/fonts.css" rel="stylesheet">
 <link rel="icon" href="/live/philibert-p1.svg">
-<!-- TubeLoader (nd_tubeloader.py): find the TVs on the home network, put an app on one (APK through ADB,
-     Roku .zip through its developer installer), with Philibert assisting when the TV says no. -->
+<!-- Android Bully - APK Pusher (nd_tubeloader.py; it began as TubeLoader): find the phones and TVs on the
+     home network and put an app on one (APK through ADB over Wi-Fi or USB, or a QR code the phone scans;
+     Roku .zip through its developer installer), with Philibert assisting when it says no. -->
 <style>
   :root {
     --navy: #0f172a; --deep: #0a1120; --panel: #111d36; --raise: #162544; --line: #1e3054;
@@ -66,6 +67,11 @@
   .pill.pair, .pill.setup { color: #1a1204; background: var(--amber); }
   .pill.no, .pill.unknown { color: var(--dim); background: var(--raise); }
   .more { font-size: 12px; color: var(--cyan); background: none; border: 0; cursor: pointer; padding: 4px; }
+  .qr { background: #fff; border-radius: 12px; padding: 10px; display: inline-block; line-height: 0; }
+  .qr svg { width: 260px; height: 260px; }
+  .qrwrap { display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap; }
+  .url { font: 12px var(--mono); color: var(--cyan); word-break: break-all; margin: 6px 0; }
+  .dl { font-size: 13px; color: var(--txt); margin: 4px 0; }
   .addip { display: flex; gap: 6px; padding: 10px 14px 14px; border-top: 1px solid var(--line); }
   .addip input { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 7px 10px; }
   section.view { overflow: auto; padding: 22px 28px 40px; }
@@ -140,8 +146,8 @@
   <header>
     <div class="brand">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M3 6h18v12H3zM8 21h8M12 9v6M9 12l3 3 3-3M9 3l3 3 3-3"/></svg>
-      <div><b>TUBELOADER</b><span>BY PHILIBERT</span></div>
+        <path d="M7 3h10v18H7zM10.5 18h3M12 7v6M9.5 10.5 12 13l2.5-2.5M5 6 3 3M19 6l2-3"/></svg>
+      <div><b>ANDROID BULLY</b><span>APK PUSHER · BY PHILIBERT</span></div>
     </div>
     <div class="spacer"></div>
     <div class="chip" id="aiChip" title="Philibert assists when an install fails"><i></i><span>Philibert assist…</span></div>
@@ -150,7 +156,8 @@
   </header>
   <div class="main">
     <aside>
-      <div class="side-head"><h2>Your home network</h2><button class="btn" id="scan" type="button">SCAN</button></div>
+      <div class="side-head"><h2>Your home network</h2><button class="btn" id="usb" type="button" title="Phones on a USB cable">USB</button>
+        <button class="btn" id="scan" type="button">SCAN</button></div>
       <div class="bar"><i id="scanBar"></i></div>
       <div class="scanmsg" id="scanMsg">Press Scan to find the TVs and streaming sticks.</div>
       <div class="list" id="list"></div>
@@ -164,8 +171,9 @@
 (function () {
   "use strict";
   var $ = function (id) { return document.getElementById(id); };
-  var st = { status: null, devices: [], sel: null, file: null, job: null, since: 0, events: [], allShown: false, typing: {} };
-  var ICON = { firetv: "🔥", googletv: "📺", androidtv: "📺", shield: "🎮", roku: "🟣", appletv: "", samsung: "🖥️", lg: "🖥️",
+  var QRDEV = { ip: "qr", kind: "qr", name: "Install by QR code", kind_name: "Any Android phone - no setup", status: "ready", accepts: "apk" };
+  var st = { status: null, devices: [], sel: null, qr: null, file: null, job: null, since: 0, events: [], allShown: false, typing: {} };
+  var ICON = { phone: "📱", qr: "📷", firetv: "🔥", googletv: "📺", androidtv: "📺", shield: "🎮", roku: "🟣", appletv: "", samsung: "🖥️", lg: "🖥️",
                chromecast: "📡", other: "·" };
   var BOOM = '<svg viewBox="20 28 160 148" aria-hidden="true"><path d="M62 62 V46 Q62 34 74 34 H126 Q138 34 138 46 V62" fill="none" stroke="#00e5ff" stroke-width="10" stroke-linecap="round"/>' +
     '<rect x="26" y="60" width="148" height="100" rx="16" fill="#00e5ff"/><circle cx="70" cy="104" r="25" fill="#0b1222"/><circle cx="70" cy="104" r="17" fill="#00e5ff"/>' +
@@ -201,7 +209,7 @@
     });
   }
   $("adbGet").onclick = function () {
-    if (!confirm("TubeLoader uses ADB, Google's own Android tool, to talk to Android and Fire TVs.\n\nDownload it from Google now (about " +
+    if (!confirm("Android Bully uses ADB, Google's own Android tool, to talk to Android and Fire TVs.\n\nDownload it from Google now (about " +
                  ((st.status && st.status.adb_mb) || 13) + " MB)? It goes in Philibert's tools folder on this drive.")) return;
     api("adb_get").then(adbPoll);
   };
@@ -217,6 +225,16 @@
 
   // ---- devices --------------------------------------------------------------------------------------
   $("scan").onclick = function () { api("scan").then(scanPoll); };
+  $("usb").onclick = function () {
+    $("usb").disabled = true;
+    api("usb").then(function (r) {
+      $("usb").disabled = false;
+      if (!r.ok) return;
+      st.devices = st.devices.filter(function (d) { return !d.usb; }).concat(r.devices);
+      $("scanMsg").textContent = r.devices.length ? r.devices.length + " on a USB cable." : "Nothing on a USB cable (ADB needed - and USB debugging on the phone).";
+      drawList();
+    });
+  };
   function scanPoll() {
     api("scan_status").then(function (s) {
       $("scanBar").style.width = s.progress + "%";
@@ -238,7 +256,8 @@
     });
   };
   function drawList() {
-    var apps = st.devices.filter(function (d) { return d.accepts; }),
+    var phones = st.devices.filter(function (d) { return d.accepts && d.kind === "phone"; }),
+        apps = st.devices.filter(function (d) { return d.accepts && d.kind !== "phone"; }),
         tvs = st.devices.filter(function (d) { return !d.accepts && d.kind !== "other"; }),
         rest = st.devices.filter(function (d) { return d.kind === "other"; });
     function row(d) {
@@ -247,10 +266,12 @@
         '<span class="ico">' + (ICON[d.kind] || "·") + '</span><span class="grow"><b>' + esc(d.name) + "</b><small>" +
         esc(d.kind_name + (d.model ? " · " + d.model : "") + " · " + d.ip) + '</small></span><span class="pill ' + d.status + '">' + pill + "</span></button>";
     }
-    var h = "";
-    if (apps.length) h += '<div class="group">Takes your apps</div>' + apps.map(row).join("");
+    var h = '<div class="group">No setup</div>' + row(QRDEV).replace('<span class="pill ready">READY</span>', '<span class="pill ready">QR</span>');
+    if (phones.length) h += '<div class="group">Phones</div>' + phones.map(row).join("");
+    if (apps.length) h += '<div class="group">TVs and sticks that take apps</div>' + apps.map(row).join("");
     if (tvs.length) h += '<div class="group">Other TVs</div>' + tvs.map(row).join("");
-    if (!apps.length && !tvs.length) h += '<p class="scanmsg">No TVs found. Is the TV on, and on the same Wi-Fi? You can also type its IP below.</p>';
+    if (!phones.length && !apps.length && !tvs.length) h += '<p class="scanmsg">No phones or TVs found yet. A phone shows up when its Wireless debugging ' +
+      "is on (or on a USB cable - press USB); a TV when it's on. You can also type an IP below - or use Install by QR code.</p>";
     if (rest.length) h += '<div class="group">Everything else (' + rest.length + ')</div>' +
       (st.allShown ? rest.map(row).join("") : '<button class="more" id="showAll" type="button">Show them - a TV may be hiding here</button>');
     $("list").innerHTML = h;
@@ -258,7 +279,7 @@
     $("list").querySelectorAll(".dev").forEach(function (b) { b.onclick = function () { select(b.dataset.ip); }; });
   }
   function select(ip) {
-    st.sel = st.devices.filter(function (d) { return d.ip === ip; })[0] || null;
+    st.sel = ip === "qr" ? QRDEV : (st.devices.filter(function (d) { return d.ip === ip; })[0] || null);
     if (!st.job || st.jobDone) { st.job = null; st.events = []; }
     drawList(); draw();
   }
@@ -268,14 +289,17 @@
   function draw() {
     var d = st.sel, v = $("view");
     if (!d) {
-      v.innerHTML = '<h1>Put an app on your TV</h1><p class="lead">TubeLoader finds the TVs and streaming sticks on your home network and installs an app ' +
-        "from this computer - and when the TV says no, Philibert works out why with you, step by step.</p>" +
-        '<div class="three"><div class="card"><b>🔥 Fire TV · 📺 Google TV · Android TV</b><p>Any APK, sent over Wi-Fi with ADB. The TV needs debugging turned on once - TubeLoader shows how.</p></div>' +
+      v.innerHTML = '<h1>Push an app to a phone or TV</h1><p class="lead">Android Bully finds the phones, TVs and streaming sticks on your home network and installs an app ' +
+        "from this computer - and when the device says no, Philibert works out why with you, step by step.</p>" +
+        '<div class="three"><div class="card"><b>📷 Any Android phone</b><p>Install by QR code: the phone scans it and downloads the app from this computer. No setup at all.</p></div>' +
+        '<div class="card"><b>📱 Android phones</b><p>Pushed over Wi-Fi (Wireless debugging, paired once with a code) or a USB cable.</p></div>' +
+        '<div class="card"><b>🔥 Fire TV · 📺 Google TV · Android TV</b><p>Any APK, sent over Wi-Fi with ADB. The TV needs debugging turned on once - Android Bully shows how.</p></div>' +
         '<div class="card"><b>🟣 Roku</b><p>No APKs (Roku isn\'t Android), but a Roku channel (.zip) goes on in developer mode.</p></div>' +
         '<div class="card"><b> Apple TV · Samsung · LG</b><p>Found and explained: they run their own systems and can\'t take an APK.</p></div></div>' +
         '<p class="note" style="margin-top:16px">Press <b>Scan</b> on the left to start.</p>';
       return;
     }
+    if (d.kind === "qr") return drawQr();
     var h = "<h1>" + esc(d.name) + '</h1><p class="lead">' + esc(d.kind_name + (d.model ? " · " + d.model : "") + " · " + d.ip) + "</p>";
     h += '<div class="card"><h3>This device <span class="right"><button class="btn" id="health" type="button">HEALTH CHECK</button></span>' +
       '<span class="pill ' + d.status + '">' +
@@ -289,7 +313,7 @@
         '<ol class="steps"><li>Easiest: a Mac with Xcode - Window &gt; Devices and Simulators pairs with the Apple TV over Wi-Fi ' +
         "(on the Apple TV: Settings &gt; Remotes and Devices &gt; Remote App and Devices).</li><li>Without a Mac it's possible but fiddly: the app must " +
         "already be signed for this Apple TV, then a tool like pymobiledevice3 can install it.</li></ol>" +
-        '<p class="note">TubeLoader may add Apple TV pushing for signed tvOS apps later.</p></div>';
+        '<p class="note">Android Bully may add Apple TV pushing for signed tvOS apps later.</p></div>';
     }
     if (d.status === "setup" || d.status === "pair") h += '<div class="card" id="setupCard"><h3>Turn it on, once <span class="right">' +
       '<button class="btn" id="recheck" type="button">I DID IT - CHECK AGAIN</button></span></h3><ol class="steps" id="setupSteps"></ol></div>';
@@ -355,6 +379,53 @@
         return '<li><span class="m ' + (c.ok ? "y" : "n") + '">' + (c.ok ? "✓" : "✕") + "</span><div><b>" + esc(c.name) + "</b><small>" +
           esc(c.detail || "") + "</small>" + (!c.ok && c.fix ? "<em>" + esc(c.fix) + "</em>" : "") + "</div></li>";
       }).join("") + "</ul>";
+    });
+  }
+  function drawQr() {
+    var v = $("view"), f = st.file, q = st.qr;
+    var h = '<h1>Install by QR code</h1><p class="lead">For any Android phone, with no setup: the phone scans the code and downloads the app ' +
+      "straight from this computer, over your Wi-Fi. Android asks once to allow installs from the browser - the page on the phone explains.</p>";
+    h += '<div class="card"><h3>The app <span class="right"><button class="btn" id="pick" type="button">' + (f ? "CHOOSE ANOTHER" : "CHOOSE FILE") + "</button></span></h3>";
+    if (!f) h += '<p class="note">Pick an Android app (.apk) from this computer.</p><div class="go" style="margin-top:10px"><input id="path" placeholder="…or paste the file&#39;s full path" ' +
+      'aria-label="File path" style="flex:1;min-width:220px;background:var(--deep);border:1px solid var(--line);border-radius:7px;padding:8px 10px">' +
+      '<button class="btn" id="usePath" type="button">USE</button></div>';
+    else h += '<div class="facts">' + fact("File", f.name) + fact("Size", mb(f.size)) + fact("App", f.package || "-") + fact("Version", f.version_name || "-") + "</div>" +
+      (f.type !== "apk" ? '<p class="bad">' + (f.type === "bundle" ? "A split app (.apks / .xapk) can't be installed from a download - push it to a phone over Wireless debugging or USB." :
+        "That isn't an Android app (.apk).") + "</p>" : "");
+    h += "</div>";
+    if (q && q.active) {
+      var m = Math.floor(q.left / 60), sec = q.left % 60;
+      h += '<div class="card"><h3>Scan this with the phone <span class="right"><button class="btn danger" id="qrStop" type="button">STOP SHARING</button></span></h3>' +
+        '<div class="qrwrap"><div class="qr">' + (st.qrSvg || "") + '</div><div style="flex:1;min-width:220px"><p>Open the phone\'s camera and point it at the code, then tap the link.</p>' +
+        '<p class="url">' + esc(q.url) + '</p><p class="note">Works for ' + m + " min " + (sec < 10 ? "0" : "") + sec + " more, only on your home network. The phone must be on the same Wi-Fi.</p>" +
+        (q.downloads.length ? q.downloads.map(function (x) { return '<p class="dl">' + (x.done ? "✓ " : "↓ ") + esc(x.ip) + " - " + (x.done ? "downloaded - finish the install on the phone" : x.pct + "%") + "</p>"; }).join("")
+          : '<p class="dl" style="color:var(--dim)">Waiting for a phone to download it…</p>') +
+        '<p class="note">If the phone can\'t open the page: it must be on this Wi-Fi (not mobile data or a guest network), and Windows Firewall must let Philibert answer - if Windows asks, choose Allow on Private networks.</p></div></div></div>';
+    } else if (f && f.type === "apk") {
+      h += '<div class="go"><button class="btn primary big" id="qrGo" type="button">SHOW THE QR CODE</button></div>';
+    }
+    v.innerHTML = h;
+    if ($("pick")) $("pick").onclick = pick;
+    if ($("usePath")) $("usePath").onclick = function () {
+      var path = $("path").value.trim().replace(/^"|"$/g, "");
+      if (path) api("inspect", { path: path }).then(function (r) { if (r.ok) { st.file = r; draw(); } else alert(r.msg); });
+    };
+    if ($("qrGo")) $("qrGo").onclick = function () {
+      $("qrGo").disabled = true;
+      api("qr_start", { path: f.path }).then(function (r) {
+        if (!r.ok) { alert(r.msg); draw(); return; }
+        st.qr = r; st.qrSvg = r.svg; draw(); qrPoll();
+      });
+    };
+    if ($("qrStop")) $("qrStop").onclick = function () { api("qr_stop").then(function () { st.qr = null; draw(); }); };
+  }
+  function qrPoll() {
+    if (!st.qr || !st.qr.active) return;
+    api("qr_status").then(function (r) {
+      if (!st.qr) return;
+      st.qr = Object.assign(st.qr, r);
+      if (st.sel && st.sel.kind === "qr") drawQr();
+      if (r.active) setTimeout(qrPoll, 1500);
     });
   }
   function recheck() {
@@ -444,7 +515,7 @@
         '<button class="btn primary" id="yes" type="button">SEND</button><button class="btn" id="no" type="button">STOP</button></div></div>';
     }
     if (st.jobDone) {
-      h += st.jobState === "done" ? '<div class="banner good">✓ It\'s on the TV.<span class="sp"></span><button class="btn" id="again" type="button">PUSH ANOTHER</button></div>'
+      h += st.jobState === "done" ? '<div class="banner good">✓ It\'s on the ' + (st.sel && st.sel.kind === "phone" ? "phone" : st.sel && st.sel.kind === "roku" ? "Roku" : "TV") + '.<span class="sp"></span><button class="btn" id="again" type="button">PUSH ANOTHER</button></div>'
         : '<div class="banner badb">' + (st.jobState === "cancelled" ? "Stopped." : "It didn't make it this time - the steps above are the way forward.") +
           '<span class="sp"></span><button class="btn" id="again" type="button">START AGAIN</button></div>';
     }

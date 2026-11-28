@@ -18507,7 +18507,7 @@ class Handler(BaseHTTPRequestHandler):
             bare_path = "/live/yoteach.html"
         elif bare_path == "/guitartab":
             bare_path = "/live/guitartab.html"
-        elif bare_path == "/tubeloader":
+        elif bare_path in ("/tubeloader", "/androidbully"):      # Android Bully (it began as TubeLoader)
             bare_path = "/live/tubeloader.html"
         elif bare_path == "/yeschef":
             bare_path = "/live/yeschef.html"
