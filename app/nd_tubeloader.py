@@ -235,7 +235,7 @@ def _wake_arp(net, mine):
 
 
 # ---- mDNS / DNS-SD ------------------------------------------------------------------------------------
-MDNS_TYPES = ["_googlecast._tcp.local", "_androidtvremote2._tcp.local", "_adb-tls-connect._tcp.local",
+MDNS_TYPES = ["_apple-mobdev2._tcp.local", "_googlecast._tcp.local", "_androidtvremote2._tcp.local", "_adb-tls-connect._tcp.local",
               "_adb-tls-pairing._tcp.local", "_adb._tcp.local", "_amzn-wplay._tcp.local", "_airplay._tcp.local",
               "_companion-link._tcp.local", "_raop._tcp.local"]
 
@@ -483,7 +483,7 @@ def _hostname(ip):
 KINDS = {
     "firetv": "Fire TV", "googletv": "Google TV", "androidtv": "Android TV", "shield": "NVIDIA SHIELD",
     "roku": "Roku", "appletv": "Apple TV", "samsung": "Samsung TV", "lg": "LG TV", "chromecast": "Chromecast",
-    "phone": "Android phone", "other": "Other device",
+    "phone": "Android phone", "apple": "Apple device", "other": "Other device",
 }
 APK_KINDS = {"firetv", "googletv", "androidtv", "shield", "phone"}
 # what phones call themselves on the network (their DHCP names)
@@ -534,6 +534,8 @@ def classify(d):
         kind = "appletv"
     elif cast_md or "_googlecast._tcp" in svc:
         kind = "chromecast"
+    elif "_apple-mobdev2._tcp" in svc or "_companion-link._tcp" in svc:
+        kind = "apple"                                    # an iPhone, iPad or Mac
     elif "samsung" in blob:                              # (ports alone aren't proof: a Pi had 3001 open)
         kind = "samsung"
     elif re.search(r"\blg\b|webos|lg electronics", blob):
@@ -573,9 +575,20 @@ def classify(d):
         status, note = "no", "An older Chromecast (without Google TV) can't install apps."
     elif kind in ("samsung", "lg"):
         status, note = "no", "Samsung and LG TVs run their own systems (Tizen / webOS) - they can't take an APK."
+    elif kind == "apple":
+        status, note = "no", "An iPhone, iPad or Mac - they can't take an Android app."
+    elif vend == "(private address)" and not svc and not ports and not d.get("ssdp", {}).get("server"):
+        # A private (random) Wi-Fi address and nothing else to say: phones and tablets do this. A silent
+        # Pixel at .194 landed in "Everything else" and couldn't be pushed to (2026-11-27).
+        kind = "phone"
+        accepts = "apk"
+        name = re.sub(r"[-_]+", " ", host).strip() if host else "Phone or tablet"
+        status, note = "setup", ("Probably a phone or tablet (it uses a private Wi-Fi address). Turn on Wireless debugging "
+                                 "on it, then press Check again - or just press Push: Android Bully looks for it again.")
     else:
         status, note = "unknown", ""
-    d.update(kind=kind, kind_name=KINDS[kind], name=name or KINDS[kind], model=model, accepts=accepts,
+    d.update(kind=kind, kind_name=("Phone or tablet?" if kind == "phone" and status == "setup" and not tls
+                                   and not PHONE_HOST.search(host) else KINDS[kind]), name=name or KINDS[kind], model=model, accepts=accepts,
              status=status, note=note, tls_port=tls, pairing_port=pairing)
     return d
 
@@ -692,8 +705,9 @@ def probe_one(ip):
     if 8060 in d["ports"]:
         d["roku"] = roku_info(ip)
     d = classify(d)
-    if d["kind"] == "other":                      # typed in as a TV: let it try ADB
-        d.update(kind="androidtv", kind_name="Android TV (assumed)", accepts="apk",
+    if d["kind"] == "other":                      # typed in by hand: it's meant to take an app - let it try ADB
+        guess = "phone" if d.get("vendor") == "(private address)" else "androidtv"
+        d.update(kind=guess, kind_name="Phone or tablet?" if guess == "phone" else "Android TV (assumed)", accepts="apk",
                  status="ready" if 5555 in d["ports"] else "setup",
                  note="Treated as an Android TV. " + ("ADB answers." if 5555 in d["ports"] else "ADB doesn't answer yet."))
     d["media"] = True
@@ -1077,8 +1091,8 @@ SETUP_STEPS["phone"] = [
     "information > Build number; Xiaomi: tap MIUI / HyperOS version) - \"You are now a developer\".",
     "Settings > System > Developer options (Samsung: Settings > Developer options) > Wireless debugging ON "
     "(the phone must be on the same Wi-Fi). Then press Scan here.",
-    "Push: Android Bully asks for a pairing code - on the phone tap Wireless debugging > Pair device with pairing "
-    "code, and type the code and port it shows. That's once; after that it connects by itself.",
+    "Push: Android Bully shows a QR code - on the phone tap Wireless debugging > Pair device with QR code and scan "
+    "it (or Pair device with pairing code, and type the code and port). That's once; after that it connects by itself.",
     "Samsung: turn off Auto Blocker first (Settings > Security and privacy > Auto Blocker).",
     "Or plug the phone into this computer with a USB cable: Developer options > USB debugging ON, allow this "
     "computer on the phone, and press Scan.",
@@ -1298,6 +1312,21 @@ class Job:
             self.serial = f"{ip}:5555" if not self.dev.get("tls_port") or 5555 in self.dev.get("ports", []) else \
                 f"{ip}:{self.dev['tls_port']}"
         flags = []
+        if self.dev.get("kind") == "phone" and not self.dev.get("usb") and 5555 not in self.dev.get("ports", []):
+            # Wireless debugging: find it (it may have been turned on since the scan, on a new port)
+            port = self._fresh_port() or self.dev.get("tls_port")
+            while not port:
+                self.ev("fail", "The phone isn't offering Wireless debugging yet.", json.dumps(SETUP_STEPS["phone"][1:3]))
+                fix = self.assist()
+                if not fix:
+                    self.state = "cancelled" if self.cancelled else "failed"
+                    return
+                self.ev("step", "Looking for the phone's Wireless debugging…")
+                port = self._fresh_port()
+            self.dev["tls_port"] = port
+            self.dev["status"] = "pair"
+            self.serial = f"{ip}:{port}"
+            self.ev("ok", f"Found Wireless debugging on the phone (port {port}).")
         if not self.dev.get("usb") and self.dev.get("status") == "pair" and 5555 not in self.dev.get("ports", []):
             if not self.connect(quiet=True):              # paired before: it just connects
                 self.ev("info", f"This {self.thing} uses Wireless debugging: it pairs once with a code it shows.")
@@ -1325,10 +1354,20 @@ class Job:
         return "phone" if self.dev.get("kind") == "phone" else "TV"
 
     def _fresh_port(self):
-        """Wireless debugging moves to a new port each time it's turned on: ask ADB where it is now."""
+        """Wireless debugging moves to a new port each time it's turned on: where is it now? (ADB's own
+        look-up first, then Android Bully's.)"""
+        ip = self.dev.get("ip", "")
         rc, out = self.adb("mdns", "services", timeout=10)
-        m = re.search(r"_adb-tls-connect\S*\s+" + re.escape(self.dev.get("ip", "")) + r":(\d+)", out or "")
-        return m.group(1) if m else ""
+        m = re.search(r"_adb-tls-connect\S*\s+" + re.escape(ip) + r":(\d+)", out or "")
+        if m:
+            return m.group(1)
+        try:
+            mine = [x for x, _ in local_nets()]
+            svc = (mdns_browse(mine, 2.0).get(ip) or {}).get("services", {})
+            port = (svc.get("_adb-tls-connect._tcp") or {}).get("port")
+            return str(port) if port else ""
+        except Exception:
+            return ""
 
     def connect(self, quiet=False):
         if self.dev.get("usb"):
@@ -1591,17 +1630,57 @@ class Job:
             return self.pair()
         return True
 
+    def _watch_qr_pairing(self, name, password, stop):
+        """The phone scanned the pairing QR: it now offers _adb-tls-pairing under our name - pair with it."""
+        while not stop.is_set() and not self.cancelled:
+            rc, out = self.adb("mdns", "services", timeout=10)
+            m = re.search(re.escape(name) + r"\S*\s+_adb-tls-pairing\S*\s+(\d+\.\d+\.\d+\.\d+):(\d+)", out or "")
+            where = m.groups() if m else None
+            if not where:
+                try:
+                    found = mdns_browse([x for x, _ in local_nets()], 1.5)
+                    for ip, d in found.items():
+                        e = d.get("services", {}).get("_adb-tls-pairing._tcp") or {}
+                        if e.get("name", "").startswith(name) and e.get("port"):
+                            where = (ip, str(e["port"]))
+                except Exception:
+                    pass
+            if where and not stop.is_set():
+                ip, port = where
+                rc, o = self.adb("pair", f"{ip}:{port}", password, timeout=30)
+                if "Successfully paired" in o:
+                    self.give({"qr": True, "ip": ip, "out": o})
+                    return
+                self.ev("info", "The phone answered the QR code, but pairing didn't finish - try scanning again.", o)
+            stop.wait(1.5)
+
     def pair(self):
         pp = self.dev.get("pairing_port") or ""
-        a = self.ask("pair", port=pp, text=f"On the {self.thing}: Developer options > Wireless debugging > Pair device "
-                                           "with pairing code. Type the code and the port it shows (the number after the colon).")
+        import secrets
+        import nd_qr
+        name = "ADB_WIFI_" + secrets.token_hex(4)
+        password = "".join(secrets.choice("0123456789") for _ in range(8))
+        self.qr_pair_name = name                  # (what the phone will offer once it has scanned)
+        stop = threading.Event()
+        threading.Thread(target=self._watch_qr_pairing, args=(name, password, stop), daemon=True).start()
+        a = self.ask("pair", port=pp, qr=nd_qr.svg(f"WIFI:T:ADB;S:{name};P:{password};;", px=5),
+                     text=f"On the {self.thing}: Developer options > Wireless debugging > Pair device with QR code, and "
+                          "scan this. (Or choose Pair device with pairing code and type the code and port it shows.)")
+        stop.set()
         if not a:
             return False
+        if a.get("qr"):
+            self.ev("ok", f"Paired with the {self.thing} by QR code.", a.get("out", ""))
+            cport = self._fresh_port()
+            if cport:
+                self.dev["tls_port"] = cport
+                self.serial = f"{self.dev['ip']}:{cport}"
+            return True
         code, port = re.sub(r"\D", "", str(a.get("code", ""))), re.sub(r"\D", "", str(a.get("port", "") or pp))
         if not code or not port:
-            self.ev("fail", "That needs the 6-digit code and the port the TV shows.")
+            self.ev("fail", f"That needs the 6-digit code and the port the {self.thing} shows.")
             return True
-        self.ev("step", "Pairing with the TV…")
+        self.ev("step", f"Pairing with the {self.thing}…")
         rc, out = self.adb("pair", f"{self.dev['ip']}:{port}", code, timeout=30)
         if "Successfully paired" in out:
             self.ev("ok", "Paired.", out)
@@ -1812,7 +1891,8 @@ class QrShare:
         share = self
 
         class H(BaseHTTPRequestHandler):
-            protocol_version = "HTTP/1.1"
+            protocol_version = "HTTP/1.0"         # one request per connection: a phone's download manager
+                                                  # re-asks on its own connection (the page "hung", 2026-11-27)
 
             def log_message(self, *a):
                 pass
@@ -1820,10 +1900,23 @@ class QrShare:
             def do_GET(self):
                 share.serve(self)
 
+            def do_HEAD(self):
+                share.serve(self, head=True)
+
+        class Server(ThreadingHTTPServer):
+            # The port is ours alone. Python's server lets a second one bind a port in use, and on Windows
+            # the first then answers both - a test share's link went to a real share's 404 (2026-11-27).
+            allow_reuse_address = False
+
+            def server_bind(self):
+                if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                    self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+                super().server_bind()
+
         self.srv = None
         for port in (8770, 0):
             try:
-                self.srv = ThreadingHTTPServer((lan_ip, port), H)
+                self.srv = Server((lan_ip, port), H)
                 break
             except OSError:
                 continue
@@ -1839,17 +1932,20 @@ class QrShare:
         if s:
             threading.Thread(target=lambda: (s.shutdown(), s.server_close()), daemon=True).start()
 
-    def _send(self, h, code, body, ctype="text/html; charset=utf-8"):
+    def _send(self, h, code, body, ctype="text/html; charset=utf-8", head=False):
         h.send_response(code)
         h.send_header("Content-Type", ctype)
         h.send_header("Content-Length", str(len(body)))
         h.send_header("Cache-Control", "no-store")
         h.end_headers()
-        h.wfile.write(body)
+        if not head:
+            h.wfile.write(body)
 
-    def serve(self, h):
+    def serve(self, h, head=False):
         path = urllib.parse.urlparse(h.path).path
         base = f"/a/{self.token}/"
+        if path == "/favicon.ico":
+            return self._send(h, 204, b"", "image/x-icon", head)
         if not path.startswith(base):
             return self._send(h, 404, b"Not here.", "text/plain")
         if not self.live():
@@ -1866,6 +1962,8 @@ class QrShare:
             h.send_header("Content-Length", str(size))
             h.send_header("Content-Disposition", f'attachment; filename="{self.fname}"')
             h.end_headers()
+            if head:
+                return
             try:
                 with open(self.f["path"], "rb") as fh:
                     while True:
@@ -1895,8 +1993,13 @@ border-radius:12px;margin:22px 0;font-size:18px}}ol{{padding-left:20px}}li{{marg
 <body><main><div class="b">ANDROID BULLY · APK PUSHER</div><h1>{esc(f.get('package') or f.get('name'))}</h1>
 <div class="m">{esc(f.get('name'))}{' · version ' + esc(ver) if ver else ''} · {f.get('size', 0) / 1048576:.1f} MB
 {' · from ' + esc(self.computer) if self.computer else ''}</div>
-<a class="go" href="{self.fname}">Download and install</a>
-<ol><li>Tap <b>Download and install</b>. If the browser asks, choose <b>Download anyway</b>.</li>
+<a class="go" id="go" href="{self.fname}" download="{self.fname}">Download and install</a>
+<p class="n" id="after" style="display:none">Downloading… When it's done, open it from the notification (or Downloads)
+and tap Install. If Chrome says the file can't be downloaded securely or might be harmful, choose <b>Keep</b> /
+<b>Download anyway</b> - it comes from your own computer.</p>
+<script>document.getElementById("go").onclick=function(){{document.getElementById("after").style.display="block";}};</script>
+<ol><li>Tap <b>Download and install</b>. If Chrome warns that the file isn't secure or might be harmful, choose
+<b>Keep</b> / <b>Download anyway</b> (it's from your own computer, on your Wi-Fi).</li>
 <li>Open the downloaded file (from the notification, or the browser's Downloads).</li>
 <li>If the phone says it can't install unknown apps from this source: tap <b>Settings</b>, turn on
 <b>Allow from this source</b>, and go back.</li>

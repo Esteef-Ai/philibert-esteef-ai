@@ -307,6 +307,12 @@
       '<div class="facts">' + fact("Kind", d.kind_name) + fact("Address", d.ip) + (d.model ? fact("Model", d.model) : "") +
       fact("Takes", d.accepts === "apk" ? "Android apps (.apk)" : d.accepts === "zip" ? "Roku channels (.zip)" : "-") + "</div>" +
       (d.note ? '<p class="note">' + esc(d.note) + "</p>" : "") + '<div id="healthOut"></div></div>';
+    if (d.kind === "other") {
+      h += '<div class="card"><h3>What is it?</h3><p class="note" style="margin:0 0 10px">Android Bully couldn\'t tell what this is from the network. ' +
+        "If it's an Android phone, tablet or TV, say so and it can push to it.</p><div class=\"go\">" +
+        '<button class="btn primary" id="isPhone" type="button">IT\'S MY ANDROID PHONE / TABLET</button>' +
+        '<button class="btn" id="isTv" type="button">IT\'S AN ANDROID TV / STICK</button></div></div>';
+    }
     if (d.kind === "appletv") {
       h += '<div class="card"><h3>About Apple TV</h3><p>An APK can never run on Apple TV - it needs a <b>tvOS</b> version of the app, written for Apple TV, ' +
         "and signed with an <b>Apple developer account</b> (a free Apple ID lasts 7 days, the paid account a year).</p>" +
@@ -360,6 +366,14 @@
     });
     if ($("setupSteps")) api("steps", { kind: d.kind }).then(function (r) { $("setupSteps").innerHTML = r.steps.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join(""); });
     if ($("recheck")) $("recheck").onclick = recheck;
+    function claim(kind) {          /* the person knows what it is: a phone (or an Android TV) that can take apps */
+      Object.assign(d, { kind: kind, kind_name: kind === "phone" ? "Android phone (you said)" : "Android TV (you said)", accepts: "apk",
+        status: "setup", note: kind === "phone" ? "Turn on Wireless debugging on it, then press Push - Android Bully finds it and pairs (QR code or typed code)."
+          : "Turn on debugging on it (steps below), then press Push." });
+      drawList(); draw();
+    }
+    if ($("isPhone")) $("isPhone").onclick = function () { claim("phone"); };
+    if ($("isTv")) $("isTv").onclick = function () { claim("androidtv"); };
     if ($("health")) $("health").onclick = healthCheck;
     if ($("pick")) $("pick").onclick = pick;
     if ($("usePath")) $("usePath").onclick = function () {
@@ -506,9 +520,14 @@
     if (p) {
       if (p.kind === "fix") h += '<div class="ask"><p><b>Philibert suggests:</b> ' + esc(p.label) + "</p><div class=\"row\">" +
         '<button class="btn ' + (p.danger ? "danger" : "primary") + '" id="yes" type="button">DO IT</button><button class="btn" id="no" type="button">NO THANKS</button></div></div>';
-      else if (p.kind === "retry") h += '<div class="ask"><p>When you\'ve done that on the TV, try again.</p><div class="row">' +
+      else if (p.kind === "retry") h += '<div class="ask"><p>When you\'ve done that on the ' + (st.sel && st.sel.kind === "phone" ? "phone" : "TV") +
+        ', try again.</p><div class="row">' +
         '<button class="btn primary" id="yes" type="button">TRY AGAIN</button><button class="btn" id="no" type="button">STOP</button></div></div>';
-      else if (p.kind === "pair") h += '<div class="ask"><p>' + esc(p.text) + '</p><div class="row"><input id="code" inputmode="numeric" placeholder="6-digit code" aria-label="Pairing code">' +
+      else if (p.kind === "pair") h += '<div class="ask"><p>' + esc(p.text) + '</p>' +
+        (p.qr ? '<div class="qrwrap" style="margin-bottom:12px"><div class="qr" style="padding:8px">' + p.qr + '</div><div style="flex:1;min-width:200px">' +
+          '<p><b>Pair by QR code</b> - waiting for the phone to scan it…</p><p class="note">The phone must be on this Wi-Fi with Wireless debugging on. ' +
+          'Pairing happens by itself once it\'s scanned.</p><p class="note" style="margin-top:10px">Or type the code instead:</p></div></div>' : "") +
+        '<div class="row"><input id="code" inputmode="numeric" placeholder="6-digit code" aria-label="Pairing code">' +
         '<input id="port" inputmode="numeric" placeholder="port (e.g. 37099)" value="' + esc(p.port || "") + '" aria-label="Pairing port">' +
         '<button class="btn primary" id="yes" type="button">PAIR</button><button class="btn" id="no" type="button">STOP</button></div></div>';
       else if (p.kind === "password") h += '<div class="ask"><p>' + esc(p.text) + '</p><div class="row"><input id="pw" type="password" placeholder="developer password" aria-label="Roku developer password">' +
